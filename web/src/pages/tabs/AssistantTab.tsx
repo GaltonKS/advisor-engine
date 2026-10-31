@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ChartView } from "../../components/charts";
+import { Markdown } from "../../lib/markdown";
 import { Chip, ErrorNote, Loading, Panel } from "../../components/ui";
 import { ApiError, useApi } from "../../lib/api";
 import { shortHash } from "../../lib/format";
@@ -136,7 +137,7 @@ function Message({ m, onOpenStress }: { m: ChatMessage; onOpenStress: () => void
       {m.blocked ? (
         <div className="border border-bad/40 bg-bad/5 px-3 py-2 text-sm text-bad"><b>✗ Withheld.</b> {m.content}</div>
       ) : (
-        <div className="whitespace-pre-wrap font-serif text-[17px] leading-relaxed">{m.content}</div>
+        <Markdown text={m.content} />
       )}
       {(m.tool_calls ?? []).some((c) => c.name === "refer_to_stress_test" && !c.is_error) && (
         <button className="btn mt-3" onClick={onOpenStress}>Open in Stress test →</button>
