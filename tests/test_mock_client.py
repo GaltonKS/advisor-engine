@@ -123,6 +123,18 @@ def test_templates_handle_holdings_without_sector(csv, tmp_path):
             assert "no sector" in r.reply and "CCC" in r.reply, r.reply
 
 
+def test_overview_states_the_asset_class_mix(tmp_path):
+    data = tmp_path / "data"
+    data.mkdir()
+    path = data / "h.csv"
+    path.write_text("ticker,shares,price,sector,asset class\nAAA,100,50,Energy,Equity\n"
+                    "BBB,100,50,Bonds,Fixed Income\nCCC,500,1,Cash,Cash\n")
+    r = chat.run_turn("How risky is this portfolio?", [], MockClient(), default_holdings=str(path),
+                      data_dir=data, audit_path=tmp_path / "a.jsonl", max_retries=0)
+    assert not r.blocked, r.reply
+    assert "By asset class it is" in r.reply and "bonds" in r.reply and "cash" in r.reply
+
+
 def test_force_bad_number_is_blocked_and_logged(tmp_path):
     r = turn("How risky is this?", tmp_path, MockClient(force_bad_number=True))
     assert r.blocked and r.block_reason == "unmatched_numbers"

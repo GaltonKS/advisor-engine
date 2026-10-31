@@ -57,7 +57,9 @@ def get_returns(holdings: pd.DataFrame) -> pd.DataFrame:
     TODO: replace with real price data once licensing is confirmed, and update
     RETURNS_SOURCE to match. Contract: columns cover every `holdings["ticker"]`.
     """
-    return synthetic_returns(list(holdings["ticker"]), list(holdings["sector"]))
+    classes = list(holdings["asset_class"]) if "asset_class" in holdings else None
+    return synthetic_returns(list(holdings["ticker"]), list(holdings["sector"]),
+                             asset_classes=classes)
 
 
 def resolve_holdings_path(raw: str, data_dir: Path | None = None) -> Path:

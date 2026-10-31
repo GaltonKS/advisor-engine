@@ -254,6 +254,25 @@ def test_upload_without_sectors_then_fill_them_in(api):
     assert prof2["sector_coverage"]["unclassified_tickers"] == ["BBB"]
 
 
+def test_asset_classes_survive_editing_and_drive_custom_stress(api):
+    client, _ = api
+    c = client.post("/clients", json={"name": "X"}, headers=as_("alice")).json()
+    csv = b"Ticker,Shares,Share Price,Sector,Asset Class\nAAA,100,50,Energy,US Equity\nLQD,100,100,Bonds,Fixed Income ETF\n"
+    up = client.post(f"/clients/{c['id']}/portfolios", headers=as_("alice"),
+                     files={"file": ("h.csv", csv, "text/csv")}).json()
+    rows = client.get(f"/portfolios/{up['id']}/holdings", headers=as_("alice")).json()["holdings"]
+    assert {r["ticker"]: r["asset_class"] for r in rows} == {"AAA": "equity", "LQD": "fixed_income"}
+    v2 = client.post(f"/clients/{c['id']}/portfolios/holdings", headers=as_("alice"),
+                     json={"holdings": [{k: r[k] for k in ("ticker", "shares", "price", "sector", "asset_class")}
+                                        for r in rows]}).json()
+    prof = client.get(f"/portfolios/{v2['id']}/profile", headers=as_("alice")).json()["profile"]
+    assert set(prof["asset_class_exposure"]) == {"equity", "fixed_income"}
+    r = client.post(f"/portfolios/{v2['id']}/stress", headers=as_("alice"),
+                    json={"default_shock": -0.2, "asset_class_shocks": {"fixed_income": 0.01}})
+    assert r.status_code == 200, r.text
+    assert {p["ticker"]: p["shock"] for p in r.json()["positions"]} == {"AAA": -0.2, "LQD": 0.01}
+
+
 def test_invalid_edited_holdings_are_rejected(api):
     client, _ = api
     c, _ = setup_portfolio(client)

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Bar, Panel, StatCard } from "../../components/ui";
 import { useApi } from "../../lib/api";
-import { lossPct, num, pct } from "../../lib/format";
+import { assetClassLabel, lossPct, num, pct } from "../../lib/format";
 import type { QuestionnaireResult, SuitabilityCheck } from "../../lib/types";
 import type { Workspace } from "../ClientWorkspace";
 
@@ -53,6 +53,18 @@ export default function OverviewTab({ ws }: { ws: Workspace }) {
           </p>
         </Panel>
       </div>
+
+      {p.asset_class_exposure && Object.keys(p.asset_class_exposure).some((c) => c !== "equity") && (
+        <Panel title="Asset classes">
+          {Object.entries(p.asset_class_exposure).map(([c, w]) => (
+            <Bar key={c} label={assetClassLabel(c)} shown={pct(w)} fraction={w} />
+          ))}
+          <p className="mt-3 text-xs text-muted">
+            Bonds, preferred stock and cash are modelled with their own (illustrative) return behaviour, so they
+            lower the portfolio's risk rather than moving like stocks.
+          </p>
+        </Panel>
+      )}
 
       <Panel title="Downside" tag={`${dd.period_label} basis`}>
         <div className="grid gap-4 sm:grid-cols-3">

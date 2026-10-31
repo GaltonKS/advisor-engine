@@ -27,3 +27,9 @@ export const byKind = (kind: "number" | "fraction" | "count" | "loss", x: number
   kind === "fraction" || kind === "loss" ? pct(x) : kind === "count" ? x.toFixed(0) : num(x);
 
 export const shortHash = (sha?: string | null): string => (sha ? sha.slice(0, 8) : "—");
+
+/** Display names for the engine's asset classes (holdings.ASSET_CLASSES). */
+export const ASSET_CLASS_LABELS: Record<string, string> = {
+  equity: "Stocks", fixed_income: "Bonds", preferred: "Preferred stock", cash: "Cash", other: "Other",
+};
+export const assetClassLabel = (c: string): string => ASSET_CLASS_LABELS[c] ?? c;

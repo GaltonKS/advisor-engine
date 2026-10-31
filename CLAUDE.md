@@ -46,9 +46,9 @@ Requires Python >= 3.10. `tests/test_ui.py` is skipped if Streamlit isn't instal
 src/advisor_engine/
     __init__.py        __version__ (engine version recorded in every audit line)
     holdings.py        load/validate holdings CSV -> adds value and weight columns
-    synthetic.py       market + sector factor model returns (stand-in for real data)
+    synthetic.py       market + sector (+ rates) factor model by asset class (stand-in for real data)
     risk.py            all risk math; risk_profile() -> RiskProfile.to_dict()
-    stress.py          preset/custom sector-shock scenarios (illustrative, uncalibrated)
+    stress.py          preset/custom sector + asset-class shock scenarios (illustrative, uncalibrated)
     questionnaire.py   six-question client risk score (draft method) + drawdown check
     compare.py         before/after differences between two risk profiles
     demo.py            end-to-end run on data/sample/sample_holdings.csv
@@ -104,6 +104,19 @@ every turn --append_audit--> data/audit/audit.jsonl
   `sector_exposure`, and `sector_level` drops `sector_effective_bets` (with `withheld`)
   while any holding is unclassified. `sector_coverage` reports what is missing.
   `compare` skips a headline figure that either side withheld.
+- Asset class is optional too: `holdings.classify_asset_class` maps labels to
+  `ASSET_CLASSES` (blank -> equity, unrecognised -> "other", modelled as equity). The
+  synthetic model gives bonds and preferreds a shared rates factor and little market
+  exposure, and cash a near-constant return; equity draws are unchanged by the option.
+  Profiles report `asset_class_exposure` and each position's `asset_class`.
+- Standard sector spellings are mapped to one name by `holdings.SECTOR_ALIASES` (exact
+  matches only), so they line up with the stress presets.
+- `shrunk_covariance` applies Ledoit-Wolf to the correlations and rescales by sample
+  volatilities, so shrinkage never changes a holding's own volatility (shrinking the
+  covariance would give cash a volatility it doesn't have). Keep it that way.
+- Stress shocks resolve per holding: asset-class shock (fixed_income, preferred, cash)
+  if given, else cash holds at 0, else sector shock, else the default. Group `shock`
+  values are weighted averages.
 - Weights are passed in the same order as `returns.columns` / `holdings["ticker"]`.
 - With no `market` series, the equal-weighted universe stands in and `portfolio_beta`
   / `market_share_of_risk` are deliberately removed from the output (they would be

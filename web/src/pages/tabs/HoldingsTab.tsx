@@ -2,21 +2,23 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { ComparisonTable, ErrorNote, Field, Loading, Panel } from "../../components/ui";
 import { useApi } from "../../lib/api";
-import { pct, signed } from "../../lib/format";
+import { ASSET_CLASS_LABELS, pct, signed } from "../../lib/format";
 import type { CompareResult, HoldingRow, Portfolio } from "../../lib/types";
 import type { Workspace } from "../ClientWorkspace";
 
 // Rows are edited as text so a half-typed number doesn't fight the input; the API
 // validates them (long-only, positive prices, unique tickers) when the engine runs.
-interface EditRow { ticker: string; shares: string; price: string; sector: string }
+interface EditRow { ticker: string; shares: string; price: string; sector: string; asset_class: string }
 
 // "Unclassified" is the engine's label for no sector; edit it as a blank to fill in.
 const UNCLASSIFIED = "Unclassified";
 const toEdit = (r: HoldingRow): EditRow => ({ ticker: r.ticker, shares: String(r.shares), price: String(r.price),
-                                               sector: r.sector === UNCLASSIFIED ? "" : r.sector });
+                                               sector: r.sector === UNCLASSIFIED ? "" : r.sector,
+                                               asset_class: r.asset_class ?? "equity" });
 const toApi = (rows: EditRow[]) => rows
   .filter((r) => r.ticker.trim())
-  .map((r) => ({ ticker: r.ticker.trim(), shares: Number(r.shares), price: Number(r.price), sector: r.sector.trim() }));
+  .map((r) => ({ ticker: r.ticker.trim(), shares: Number(r.shares), price: Number(r.price), sector: r.sector.trim(),
+                 asset_class: r.asset_class }));
 
 export default function HoldingsTab({ ws }: { ws: Workspace }) {
   const api = useApi();
@@ -53,7 +55,7 @@ export default function HoldingsTab({ ws }: { ws: Workspace }) {
         <datalist id="sectors">{sectors.map((s) => <option key={s} value={s} />)}</datalist>
         <div className="overflow-x-auto">
           <table className="data">
-            <thead><tr><th>Ticker</th><th className="num">Shares</th><th className="num">Price</th><th>Sector</th><th /></tr></thead>
+            <thead><tr><th>Ticker</th><th className="num">Shares</th><th className="num">Price</th><th>Sector</th><th>Asset class</th><th /></tr></thead>
             <tbody>
               {rows.map((r, i) => (
                 <tr key={i}>
@@ -66,6 +68,10 @@ export default function HoldingsTab({ ws }: { ws: Workspace }) {
                   <td><input className={`input min-w-44 ${r.sector.trim() ? "" : "border-gold"}`} list="sectors" value={r.sector}
                              placeholder="Add sector" aria-label={`Sector ${i + 1}`}
                              onChange={(e) => set(i, "sector", e.target.value)} /></td>
+                  <td><select className="input !w-auto" value={r.asset_class} aria-label={`Asset class ${i + 1}`}
+                              onChange={(e) => set(i, "asset_class", e.target.value)}>
+                    {Object.entries(ASSET_CLASS_LABELS).map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+                  </select></td>
                   <td><button className="text-faint hover:text-bad" title="Remove" aria-label={`Remove ${r.ticker}`}
                               onClick={() => { setRows(rows.filter((_, j) => j !== i)); whatIf.reset(); }}>✕</button></td>
                 </tr>
@@ -74,7 +80,7 @@ export default function HoldingsTab({ ws }: { ws: Workspace }) {
           </table>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
-          <button className="btn" onClick={() => setRows([...rows, { ticker: "", shares: "", price: "", sector: "" }])}>+ Add position</button>
+          <button className="btn" onClick={() => setRows([...rows, { ticker: "", shares: "", price: "", sector: "", asset_class: "equity" }])}>+ Add position</button>
           <button className="btn" onClick={() => { setRows(source.data!.holdings.map(toEdit)); whatIf.reset(); }}>Reset</button>
           <button className="btn btn-dark ml-auto" onClick={() => whatIf.mutate()} disabled={whatIf.isPending}>
             {whatIf.isPending ? "Running…" : "Run what-if"}

@@ -52,6 +52,7 @@ export interface Client {
 export interface Position {
   ticker: string;
   sector: string;
+  asset_class?: string;
   weight: number;
   risk_share: number;
   risk_to_weight: number;
@@ -73,6 +74,7 @@ export interface RiskProfile {
     sector_level: { sector_effective_bets?: number; n_sectors: number; withheld?: string };
   };
   sector_exposure: Record<string, number>;
+  asset_class_exposure?: Record<string, number>;
   sector_coverage?: { unclassified_weight: number; n_unclassified: number; unclassified_tickers: string[] };
   drawdown: {
     historical_max_drawdown: number;
@@ -88,6 +90,7 @@ export interface HoldingRow {
   shares: number;
   price: number;
   sector: string;
+  asset_class?: string;
   value?: number;
   weight?: number;
 }
@@ -121,15 +124,17 @@ export interface Scenario {
   description: string;
   default: number;
   sectors: Record<string, number>;
+  asset_classes?: Record<string, number>;
 }
 
 export interface StressResult {
-  scenario: Scenario | { id: "custom"; label: string; sectors: Record<string, number>; default: number };
+  scenario: Scenario | { id: "custom"; label: string; sectors: Record<string, number>; default: number; asset_classes?: Record<string, number> };
   portfolio_return: number;
   portfolio_value: number;
   value_change: number;
   sectors: { sector: string; weight: number; shock: number; contribution: number }[];
-  positions: { ticker: string; sector: string; weight: number; shock: number; contribution: number; value_change: number }[];
+  asset_classes?: { asset_class: string; weight: number; shock: number; contribution: number }[];
+  positions: { ticker: string; sector: string; asset_class?: string; weight: number; shock: number; contribution: number; value_change: number }[];
   basis: string;
 }
 
