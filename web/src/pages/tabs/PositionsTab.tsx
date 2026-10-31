@@ -69,7 +69,7 @@ export default function PositionsTab({ ws }: { ws: Workspace }) {
           </p>
           <div className="mt-4 flex flex-col gap-2">
             <button className="btn btn-dark justify-center" onClick={() => ws.go("assistant", `Why is ${selected.ticker} a concern?`)}>
-              Ask the assistant about {selected.ticker}
+              Ask Galton AI about {selected.ticker}
             </button>
             <button className="btn justify-center" onClick={() => ws.go("holdings")}>
               Try changing it in a what-if

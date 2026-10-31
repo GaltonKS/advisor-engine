@@ -252,6 +252,11 @@ every turn --append_audit--> data/audit/audit.jsonl
 - `--color-navy-soft` `#e7eaf0` is a navy tint for highlighted backgrounds.
 - Navy is a brand colour, not a chart colour. Charts keep the gold ramp below. Adding
   navy to a chart means re-running the dataviz validator first.
+- The assistant is called **Galton AI** on screen (`ui.ASSISTANT_NAME`; "AI" stays in
+  the name so advisers and clients always know it's AI output). `GaltonName` draws it
+  in navy on paper and card grounds, and its workspace tab stays navy even when not
+  selected. On navy grounds (header badge, `.btn-dark`) use the on-navy tokens instead.
+  Code, routes and audit events still say `assistant`.
 - Status red and green keep their meaning on navy too (the dev sign-in badge uses a
   light red that passes on navy).
 

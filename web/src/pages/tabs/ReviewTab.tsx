@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ComparisonTable, Loading, Panel } from "../../components/ui";
+import { ASSISTANT_NAME, ComparisonTable, Loading, Panel } from "../../components/ui";
 import { useApi } from "../../lib/api";
 import { dateTime, lossPct, pct } from "../../lib/format";
 import type { AuditRow, CompareResult, Draft, QuestionnaireResult, SuitabilityCheck } from "../../lib/types";
@@ -72,7 +72,7 @@ export default function ReviewTab({ ws }: { ws: Workspace }) {
 
 export function describe(a: AuditRow): string {
   switch (a.event) {
-    case "turn": return a.blocked ? `Assistant reply withheld: “${a.user_message}”` : `Assistant: “${a.user_message}”`;
+    case "turn": return a.blocked ? `${ASSISTANT_NAME} reply withheld: “${a.user_message}”` : `${ASSISTANT_NAME}: “${a.user_message}”`;
     case "draft_approved": return "Client explanation approved";
     case "what_if": return "What-if run";
     case "compare": return "Versions compared";

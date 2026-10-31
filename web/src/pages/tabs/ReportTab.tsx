@@ -18,8 +18,8 @@ export default function ReportTab({ ws }: { ws: Workspace }) {
   if (!approved) {
     return (
       <Empty>
-        The client report uses an approved explanation. Draft one in the Assistant tab, edit it, and approve it.{" "}
-        <button className="underline" onClick={() => ws.go("assistant")}>Go to the assistant →</button>
+        The client report uses an approved explanation. Draft one in the Galton AI tab, edit it, and approve it.{" "}
+        <button className="underline" onClick={() => ws.go("assistant")}>Go to Galton AI →</button>
       </Empty>
     );
   }
