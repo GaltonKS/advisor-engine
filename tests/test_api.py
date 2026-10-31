@@ -393,6 +393,8 @@ def test_turn_reports_each_tool_used(api):
     assert [c["label"] for c in calls] == ["Risk profile", "What-if"]
     assert "comparison" in calls[1]["output"]
     assert "holdings_path" not in json.dumps(calls)  # no server paths leak
+
+
 class _ApiError(Exception):
     """Shaped like the Anthropic SDK's errors: a message plus an HTTP status."""
 
