@@ -40,7 +40,7 @@ log_ = logging.getLogger("advisor_engine.api")
 
 DRAFT_REQUEST = "Please write a client-ready explanation of this portfolio's risk, for my review."
 TOOL_LABELS = {"get_risk_profile": "Risk profile", "get_holdings": "Holdings",
-               "run_what_if": "What-if", "run_stress_test": "Stress test"}
+               "run_what_if": "What-if", "run_stress_test": "Stress test", "show_chart": "Chart"}
 MAX_UPLOAD_BYTES = 2 * 1024 * 1024
 
 

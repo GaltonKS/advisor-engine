@@ -43,7 +43,7 @@ def test_group_risk_sums_shares_and_sorts():
                  {"sector": "A", "weight": 0.2, "risk_share": 0.1}]
     out = group_risk(positions, "sector")
     assert list(out) == ["B", "A"]
-    assert out["A"] == pytest.approx({"weight": 0.7, "risk_share": 0.3})
+    assert out["A"] == pytest.approx({"weight": 0.7, "risk_share": 0.3, "risk_to_weight": 0.3 / 0.7})
 
 
 def test_profile_has_market_and_group_risk():
@@ -68,8 +68,8 @@ def test_injected_returns_leave_market_figures_out():
 
 def test_tool_schemas():
     assert [t["name"] for t in TOOLS] == ["get_risk_profile", "get_holdings", "run_what_if",
-                                          "run_stress_test"]
-    assert all(t["input_schema"]["required"] == ["holdings_path"] for t in TOOLS)
+                                          "run_stress_test", "show_chart"]
+    assert all(t["input_schema"]["required"][0] == "holdings_path" for t in TOOLS)
 
 
 def test_get_holdings():

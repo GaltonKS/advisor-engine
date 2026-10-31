@@ -33,3 +33,13 @@ export const ASSET_CLASS_LABELS: Record<string, string> = {
   equity: "Stocks", fixed_income: "Bonds", preferred: "Preferred stock", cash: "Cash", other: "Other",
 };
 export const assetClassLabel = (c: string): string => ASSET_CLASS_LABELS[c] ?? c;
+
+/** A loss size (positive, as the engine's comparison stores it) shown as a loss: −8.1%. */
+export const lossSigned = (size: number, digits = 1): string =>
+  size === 0 ? pct(0, digits) : `−${pct(Math.abs(size), digits)}`;
+
+/** The source line under every chart, in one format everywhere. */
+export const sourceLine = (s: { label: string; n_periods: number; period_label: string;
+  returns_source: string; engine_version: string; holdings_sha256: string | null }): string =>
+  `${s.label} · ${s.n_periods} ${s.period_label} ${s.returns_source} returns · engine v${s.engine_version}` +
+  (s.holdings_sha256 ? ` · holdings ${s.holdings_sha256.slice(0, 8)}` : "");

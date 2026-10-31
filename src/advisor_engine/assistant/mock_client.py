@@ -14,7 +14,10 @@ Tools: every turn starts with `get_risk_profile`. A what-if question that names 
 tickers ("without", "sell", "remove", "what if") then calls `run_what_if` removing them;
 a scenario question ("crash", "recession", "rates", "scenario", "sell-off") calls
 `run_stress_test` with the matching preset; "worth", "dollar" or "how many shares"
-calls `get_holdings`. The reply is rendered from the last tool's output.
+calls `get_holdings`. Then `show_chart` where one fits: what_if after a what-if,
+risk_by_sector for sector questions, risk_by_asset_class for asset class / bonds, and
+risk_vs_size for "chart", "show me", "what drives". The reply is rendered from the last
+non-chart tool's output and points to the chart.
 
 Template choice for a risk-profile reply looks at the latest user question, in this order: a holding's ticker or
 "why" -> position; "client"/"explain" -> client draft; "drawdown"/"loss" -> drawdown;
@@ -144,6 +147,26 @@ _SCENARIOS = (("recession", "recession"), ("rates", "rising_rates"), ("interest"
               ("selloff", "broad_selloff"), ("scenario", "broad_selloff"),
               ("stress test", "broad_selloff"))
 _HOLDINGS = re.compile(r"\b(worth|dollars?|how many shares|market value)\b|\$")
+
+
+_CHART_WORDS = re.compile(r"\b(chart|graph|visual\w*|plot|show me|driv\w*)\b")
+
+
+def chart_for(question: str, done: list[str], parsed: dict, path: str) -> dict | None:
+    """The show_chart call that suits the question, after the other tools have run."""
+    q = question.lower()
+    if "run_what_if" in done and isinstance(parsed.get("run_what_if"), dict):
+        changes = parsed["run_what_if"].get("changes", {})
+        return {"holdings_path": path, "kind": "what_if", **changes}
+    if len(done) > 1:  # a stress test or holdings lookup: no chart kind for those yet
+        return None
+    if "sector" in q:
+        return {"holdings_path": path, "kind": "risk_by_sector"}
+    if "asset class" in q or "bonds" in q:
+        return {"holdings_path": path, "kind": "risk_by_asset_class"}
+    if _CHART_WORDS.search(q):
+        return {"holdings_path": path, "kind": "risk_vs_size"}
+    return None
 
 
 def next_tool(question: str, profile: dict, path: str) -> tuple[str, dict] | None:
@@ -461,27 +484,39 @@ class MockClient:
         path = _holdings_path(system)
         if not results:
             return self._use("get_risk_profile", {"holdings_path": path})
-        last = results[-1]
-        name = _tool_names(after).get(last["tool_use_id"], "get_risk_profile")
-        try:
-            data = json.loads(last["content"])
-        except ValueError:
-            data = None
-        if name == "get_risk_profile" and isinstance(data, dict) and len(results) == 1:
-            follow = next_tool(question, data, path)
+        names = _tool_names(after)
+        done = [names.get(r["tool_use_id"], "get_risk_profile") for r in results]
+        parsed = {}
+        for n, r in zip(done, results):
+            try:
+                parsed[n] = json.loads(r["content"])
+            except ValueError:
+                parsed[n] = None
+        profile = parsed.get("get_risk_profile")
+        if done == ["get_risk_profile"] and isinstance(profile, dict):
+            follow = next_tool(question, profile, path)
             if follow:
                 return self._use(*follow)
-        if isinstance(data, dict) and name == "run_what_if":
+        if "show_chart" not in done and isinstance(profile, dict):
+            chart = chart_for(question, done, parsed, path)
+            if chart:
+                return self._use("show_chart", chart)
+
+        main = next((n for n in reversed(done) if n != "show_chart"), "get_risk_profile")
+        data = parsed.get(main)
+        if isinstance(data, dict) and main == "run_what_if":
             text = _what_if(data)
-        elif isinstance(data, dict) and name == "run_stress_test":
+        elif isinstance(data, dict) and main == "run_stress_test":
             text = _stress(data)
-        elif isinstance(data, dict) and name == "get_holdings":
+        elif isinstance(data, dict) and main == "get_holdings":
             text = _holdings(data)
         else:
-            profile = next((r["content"] for r in results if _tool_names(after).get(
-                r["tool_use_id"]) == "get_risk_profile"), last["content"])
-            text = render_reply(question, profile, system,
-                                force_bad_number=self.force_bad_number)
+            raw = next((r["content"] for n, r in zip(done, results) if n == "get_risk_profile"),
+                       results[-1]["content"])
+            text = render_reply(question, raw, system, force_bad_number=self.force_bad_number)
+        chart = parsed.get("show_chart")
+        if isinstance(chart, dict) and "chart" in chart:
+            text += f"\n\nThe chart below shows {chart['chart']['title'].lower()}."
         return SimpleNamespace(
             content=[SimpleNamespace(type="text", text=text)], stop_reason="end_turn"
         )

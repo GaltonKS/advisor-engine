@@ -71,6 +71,7 @@ export interface RiskProfile {
     n_positions: number;
     top_component_share: number;
     component_shares: number[];
+    risk_sources?: RiskSource[];
     market_adjusted: { residual_effective_bets: number; market_proxy: string; market_share_of_risk?: number;
                        portfolio_beta?: number; portfolio_corr_to_market?: number };
     // sector_effective_bets is absent (and `withheld` set) when some holdings have no sector.
@@ -196,3 +197,47 @@ export interface AuditRow {
   blocked: boolean | null;
   verified: boolean | null;
 }
+
+// --- chart specs (built by the engine's charts.py; drawn, never computed, here) ---------
+
+export interface ChartSource {
+  label: string;
+  n_periods: number;
+  period_label: string;
+  returns_source: string;
+  engine_version: string;
+  holdings_sha256: string | null;
+}
+
+interface ChartBase { title: string; subtitle: string; caveat: string; source: ChartSource }
+
+export interface RiskByGroupChart extends ChartBase {
+  kind: "risk_by_group";
+  group: "sector" | "asset_class";
+  rows: { label: string; weight: number; risk_share: number; risk_to_weight: number }[];
+  axis_max: number;
+  note: string;
+}
+
+export interface RiskVsSizeChart extends ChartBase {
+  kind: "risk_vs_size";
+  points: { ticker: string; weight: number; risk_share: number; risk_to_weight: number;
+            highlight: boolean; label: boolean }[];
+  x_max: number;
+  y_max: number;
+  highlight_rule: string;
+}
+
+export interface RiskSource { name: string; share: number }
+
+export interface WhatIfChart extends ChartBase {
+  kind: "what_if";
+  option_label: string;
+  mix: { label: string; sources: RiskSource[] }[];
+  measures: { key: string; label: string; hint: string; kind: "fraction" | "number" | "loss";
+              current: number; option: number }[];
+  added: string[];
+  removed: string[];
+}
+
+export type ChartSpec = RiskByGroupChart | RiskVsSizeChart | WhatIfChart;

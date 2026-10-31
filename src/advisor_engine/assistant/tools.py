@@ -7,6 +7,8 @@ way to compute. Tools:
 - run_what_if: the profile after removing, resizing or adding positions, with the
   engine's before/after comparison (compare.compare_profiles).
 - run_stress_test: a preset or custom shock scenario (stress.py).
+- show_chart: a chart spec built by the engine (charts.py) for the web app to draw.
+  The model picks the kind; it never supplies a figure or a label.
 Every file path goes through `resolve_holdings_path`.
 """
 
@@ -19,6 +21,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from .. import charts
 from ..compare import compare_profiles
 from ..holdings import COLUMNS, load_holdings, validate_holdings
 from ..risk import risk_profile
@@ -110,7 +113,33 @@ RUN_STRESS_TEST = {
     },
 }
 
-TOOLS = [GET_RISK_PROFILE, GET_HOLDINGS, RUN_WHAT_IF, RUN_STRESS_TEST]
+CHART_KINDS = ("risk_by_sector", "risk_by_asset_class", "risk_vs_size", "what_if")
+
+SHOW_CHART = {
+    "name": "show_chart",
+    "description": (
+        "Show the advisor a chart under your reply, drawn from engine output. Kinds: "
+        "risk_by_sector / risk_by_asset_class (weight vs share of risk per group, with "
+        "risk relative to weight); risk_vs_size (each holding's weight against its share "
+        "of risk); what_if (risk mix and volatility, independent bets and stress loss, "
+        "current vs a change; give the same remove / set_shares / add as run_what_if). "
+        "Use one when a picture makes the answer clearer, usually at most one per reply, "
+        "and refer to it in your text ('the chart below')."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "holdings_path": _PATH,
+            "kind": {"type": "string", "enum": list(CHART_KINDS)},
+            "remove": RUN_WHAT_IF["input_schema"]["properties"]["remove"],
+            "set_shares": RUN_WHAT_IF["input_schema"]["properties"]["set_shares"],
+            "add": RUN_WHAT_IF["input_schema"]["properties"]["add"],
+        },
+        "required": ["holdings_path", "kind"],
+    },
+}
+
+TOOLS = [GET_RISK_PROFILE, GET_HOLDINGS, RUN_WHAT_IF, RUN_STRESS_TEST, SHOW_CHART]
 
 # Labels where the returns came from, so the model can say so in its answer.
 RETURNS_SOURCE = "synthetic"
@@ -216,6 +245,37 @@ def apply_changes(holdings: pd.DataFrame, tool_input: dict) -> pd.DataFrame:
     return validate_holdings(df)
 
 
+def option_label(tool_input: dict) -> str:
+    """A plain name for a what-if option, built from its changes (never model text)."""
+    parts = []
+    if tool_input.get("remove"):
+        parts.append("without " + ", ".join(str(t).upper() for t in tool_input["remove"]))
+    if tool_input.get("set_shares"):
+        parts.append("resizing " + ", ".join(str(t).upper() for t in tool_input["set_shares"]))
+    if tool_input.get("add"):
+        parts.append("adding " + ", ".join(str(a.get("ticker", "")).upper()
+                                           for a in tool_input["add"]))
+    return "; ".join(parts) or "the change"
+
+
+def build_chart(holdings: pd.DataFrame, tool_input: dict, sha: str, returns_fn=None) -> dict:
+    kind = tool_input.get("kind")
+    if kind not in CHART_KINDS:
+        raise ValueError(f"Chart kind must be one of {list(CHART_KINDS)}.")
+    profile = engine_profile(holdings, returns_fn)
+    if kind == "risk_by_sector":
+        return charts.risk_by_group(profile, "sector", sha)
+    if kind == "risk_by_asset_class":
+        return charts.risk_by_group(profile, "asset_class", sha)
+    if kind == "risk_vs_size":
+        return charts.risk_vs_size(profile, sha)
+    if not any(tool_input.get(k) for k in ("remove", "set_shares", "add")):
+        raise ValueError("A what_if chart needs a change: remove, set_shares or add.")
+    after = engine_profile(apply_changes(holdings, tool_input), returns_fn)
+    return charts.what_if(profile, after, compare_profiles(profile, after),
+                          option_label(tool_input), sha)
+
+
 def execute_tool(
     name: str,
     tool_input: dict,
@@ -244,6 +304,8 @@ def execute_tool(
                        "changes": {k: tool_input[k] for k in ("remove", "set_shares", "add")
                                    if tool_input.get(k)},
                        "comparison": compare_profiles(before, after), "after": after}
+        elif name == "show_chart":
+            payload = {"chart": build_chart(holdings, tool_input, sha, returns_fn)}
         else:  # run_stress_test
             if tool_input.get("scenario_id"):
                 payload = run_scenario(holdings, tool_input["scenario_id"])

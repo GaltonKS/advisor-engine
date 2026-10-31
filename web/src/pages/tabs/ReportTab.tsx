@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Empty, Loading } from "../../components/ui";
 import { useMe } from "../../components/Layout";
 import { useApi } from "../../lib/api";
-import { date, dateTime, lossPct, num, pct, shortHash } from "../../lib/format";
+import { date, dateTime, lossPct, lossSigned, num, pct, shortHash } from "../../lib/format";
 import type { Draft } from "../../lib/types";
 import type { Workspace } from "../ClientWorkspace";
 
@@ -43,7 +43,7 @@ export default function ReportTab({ ws }: { ws: Workspace }) {
             <tr><td>Behaves like this many independent bets</td><td className="num">{num(p.concentration.effective_bets)}</td></tr>
             <tr><td>Share of risk from the largest common factor</td><td className="num">{pct(p.concentration.top_component_share)}</td></tr>
             <tr><td>Worst historical drop ({p.drawdown.period_label} data)</td><td className="num">{lossPct(p.drawdown.historical_max_drawdown)}</td></tr>
-            <tr><td>Loss in a severe 1-in-100 {p.drawdown.period_label} period</td><td className="num">{lossPct(p.drawdown.stress_loss_1_in_100)}</td></tr>
+            <tr><td>Loss in a severe 1-in-100 {p.drawdown.period_label} period</td><td className="num">{lossSigned(Math.abs(p.drawdown.stress_loss_1_in_100))}</td></tr>
             {qr && <tr><td>Client risk level (questionnaire)</td><td className="num">{qr.risk_level} / {qr.risk_level_max}</td></tr>}
           </tbody>
         </table>

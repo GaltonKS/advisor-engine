@@ -68,7 +68,31 @@ def effective_number_of_bets(weights: np.ndarray, cov: np.ndarray) -> dict:
         "n_positions": int(len(weights)),
         "top_component_share": float(p[0]),
         "component_shares": [float(x) for x in p[:5]],
+        "risk_sources": risk_sources(p),
     }
+
+
+# The four buckets risk is reported in: the three statistical factors carrying the most
+# of this portfolio's risk, then the rest together. Statistical factors are combinations
+# of holdings that move together; they are not named markets or styles, so the names say
+# only what the engine knows: their rank.
+RISK_SOURCE_NAMES = ("Largest common factor", "Second-largest factor", "Third-largest factor",
+                     "All smaller factors")
+
+
+def risk_sources(shares: np.ndarray) -> list[dict]:
+    """Shares of portfolio variance in four buckets, largest share first.
+
+    `shares` are the per-component variance shares from `effective_number_of_bets`
+    (summing to 1). They are sorted by share here: components are numbered by their
+    variance across all holdings, which need not match their share of this portfolio's
+    risk. Buckets that would be empty (three or fewer holdings) are left out, so the
+    list always sums to 1. Ranks are per portfolio: the "largest" factor of two
+    portfolios need not be the same combination of holdings.
+    """
+    s = sorted((float(x) for x in shares), reverse=True)
+    buckets = s[:3] + ([sum(s[3:])] if len(s) > 3 else [])
+    return [{"name": RISK_SOURCE_NAMES[i], "share": v} for i, v in enumerate(buckets)]
 
 
 def market_adjusted_concentration(
@@ -166,15 +190,18 @@ def group_risk(positions: list[dict], key: str) -> dict[str, dict]:
     """Weight and share of portfolio risk per group (sector or asset class).
 
     `risk_share` is the sum of the group's positions' risk shares (each a position's
-    fraction of portfolio variance), so groups sum to 1. A group with a risk share
-    above its weight adds more risk than its size suggests. Largest risk share first.
+    fraction of portfolio variance), so groups sum to 1. `risk_to_weight` is risk share
+    divided by weight: above 1, the group adds more risk than its size suggests.
+    Largest risk share first.
     """
     out: dict[str, dict] = {}
     for p in positions:
         g = out.setdefault(p.get(key, "equity"), {"weight": 0.0, "risk_share": 0.0})
         g["weight"] += p["weight"]
         g["risk_share"] += p["risk_share"]
-    return {k: {"weight": float(v["weight"]), "risk_share": float(v["risk_share"])}
+    return {k: {"weight": float(v["weight"]), "risk_share": float(v["risk_share"]),
+                # Above 1: the group adds more risk than its size suggests.
+                "risk_to_weight": float(v["risk_share"] / v["weight"]) if v["weight"] > 0 else 0.0}
             for k, v in sorted(out.items(), key=lambda kv: -kv[1]["risk_share"])}
 
 
