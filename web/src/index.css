@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
-/* KVS palette and type, from the client-analysis mockup. */
+/* GaltonKS palette and type: the client-analysis mockup's paper and gold, plus the
+   logo's navy as the highlight colour (see CLAUDE.md, "Brand"). */
 @theme {
   --color-paper: #f5efe4;
   --color-card: #fdfaf3;
@@ -12,6 +13,10 @@
   --color-gold: #b8952f;
   --color-gold-dark: #8a6d1f;
   --color-gold-soft: #f1e6c8;
+  --color-navy: #000815;      /* logo navy: highlights (active nav/tab, avatar, dark buttons) */
+  --color-navy-soft: #e7eaf0; /* navy tint for highlighted backgrounds */
+  --color-on-navy-muted: #b9bfca; /* secondary text on navy (10:1) */
+  --color-gold-bright: #e3ad33;   /* logo gold: on navy only (9:1); too light for paper */
   --color-good: #3f6b3a;
   --color-bad: #9a3324;
   --font-serif: Georgia, "Iowan Old Style", "Times New Roman", serif;
@@ -39,6 +44,18 @@ h1, h2, h3, h4 {
   color: var(--color-gold-dark);
 }
 
+/* Wordmark: wide-tracked caps, as in the logo. */
+.wordmark { font-family: var(--font-sans); font-weight: 500; letter-spacing: 0.22em; color: var(--color-navy); }
+.wordmark-sub { font-family: var(--font-sans); font-size: 9px; letter-spacing: 0.32em;
+                text-transform: uppercase; color: var(--color-muted); }
+.wordmark-ks { color: var(--color-gold-dark); }
+.logo-on-dark .wordmark { color: var(--color-card); }
+.logo-on-dark .wordmark-sub { color: var(--color-on-navy-muted); }
+.logo-on-dark .wordmark-ks { color: var(--color-gold-bright); }
+
+/* The navy header band (the dark logo's ground). Text on it uses the on-navy tokens. */
+.navy-band { background: var(--color-navy); color: var(--color-card); border-bottom: 2px solid var(--color-gold); }
+
 .figure {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -58,8 +75,8 @@ h1, h2, h3, h4 {
 .btn:disabled { opacity: 0.5; cursor: default; }
 .btn-primary { background: var(--color-gold); border-color: var(--color-gold); color: var(--color-ink); font-weight: 600; }
 .btn-primary:hover { background: #c9a540; }
-.btn-dark { background: var(--color-ink); border-color: var(--color-ink); color: #fdfaf3; }
-.btn-dark:hover { background: #3a332b; }
+.btn-dark { background: var(--color-navy); border-color: var(--color-navy); color: #fdfaf3; }
+.btn-dark:hover { background: #142238; }
 .btn-danger { background: var(--color-bad); border-color: var(--color-bad); color: #fdfaf3; font-weight: 600; }
 .btn-danger:hover { background: #7f2a1d; }
 

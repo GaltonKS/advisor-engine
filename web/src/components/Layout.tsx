@@ -3,15 +3,12 @@ import { Link, NavLink, Outlet } from "react-router-dom";
 import { useApi } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import type { Me } from "../lib/types";
+import { Logo } from "./Logo";
 
-export function Brand() {
+export function Brand({ onDark = true }: { onDark?: boolean }) {
   return (
-    <Link to="/" className="flex items-center gap-2.5">
-      <span className="border border-ink px-1 py-0.5 font-serif text-sm">KVS</span>
-      <span>
-        <span className="block font-serif text-base leading-tight">Knowledge Vault System</span>
-        <span className="eyebrow block !text-[10px] !text-muted">Registered advisers only</span>
-      </span>
+    <Link to="/" aria-label="GaltonKS Knowledge System, home">
+      <Logo onDark={onDark} />
     </Link>
   );
 }
@@ -27,23 +24,23 @@ export default function Layout() {
   const initials = (email ?? "?").slice(0, 2).toUpperCase();
   return (
     <div className="min-h-screen">
-      <header className="no-print border-b border-rule">
+      <header className="no-print navy-band">
         <div className="mx-auto flex max-w-[1240px] flex-wrap items-center gap-6 px-4 py-3">
           <Brand />
           <nav className="flex gap-5 text-sm">
-            <NavLink to="/" end className={({ isActive }) => (isActive ? "border-b-2 border-gold pb-0.5 font-semibold" : "text-muted")}>
+            <NavLink to="/" end className={({ isActive }) => (isActive ? "border-b-2 border-gold-bright pb-0.5 font-semibold text-card" : "text-on-navy-muted hover:text-card")}>
               Clients
             </NavLink>
           </nav>
           <div className="ml-auto flex items-center gap-3 text-xs">
             {me.data && (
-              <span className={`border px-2 py-1 ${me.data.llm === "mock" ? "border-rule text-muted" : "border-gold"}`}>
+              <span className={`border px-2 py-1 ${me.data.llm === "mock" ? "border-on-navy-muted/40 text-on-navy-muted" : "border-gold-bright text-gold-bright"}`}>
                 Assistant: {me.data.llm === "mock" ? "mock (scripted)" : "live"}
               </span>
             )}
-            {dev && <span className="border border-bad/40 px-2 py-1 text-bad">Dev sign-in</span>}
-            <span className="hidden border border-rule bg-card px-2 py-1 sm:inline">{email}</span>
-            <button className="flex h-8 w-8 items-center justify-center rounded-full bg-ink text-[11px] text-card" title="Sign out" onClick={() => signOut()}>
+            {dev && <span className="border border-[#e8a598]/60 px-2 py-1 text-[#f0b9ae]">Dev sign-in</span>}
+            <span className="hidden border border-on-navy-muted/40 px-2 py-1 text-card sm:inline">{email}</span>
+            <button className="flex h-8 w-8 items-center justify-center rounded-full bg-card text-[11px] font-semibold text-navy ring-1 ring-gold-bright ring-offset-2 ring-offset-navy" title="Sign out" onClick={() => signOut()}>
               {initials}
             </button>
           </div>

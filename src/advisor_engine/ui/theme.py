@@ -81,8 +81,8 @@ def html(markup: str) -> None:
 
 def brand() -> str:
     return (
-        '<div class="kvs-brand"><span class="kvs-mark">KVS</span><div>'
-        '<div class="kvs-name">Knowledge Vault System</div>'
+        '<div class="kvs-brand"><span class="kvs-mark">GKS</span><div>'
+        '<div class="kvs-name">GaltonKS Knowledge System</div>'
         '<div class="kvs-eyebrow">Registered advisers only</div></div></div>'
     )
 

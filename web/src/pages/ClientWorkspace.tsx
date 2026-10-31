@@ -140,7 +140,7 @@ export default function ClientWorkspace() {
           <nav className="no-print mt-6 flex flex-wrap gap-x-5 gap-y-2 border-b border-rule text-sm">
             {TABS.map(([id, label]) => (
               <button key={id} onClick={() => go(id)}
-                      className={`-mb-px pb-2 ${tab === id ? "border-b-2 border-gold font-semibold" : "text-muted hover:text-ink"}`}>
+                      className={`-mb-px pb-2 ${tab === id ? "border-b-2 border-gold font-semibold text-navy" : "text-muted hover:text-navy"}`}>
                 {label}
               </button>
             ))}
