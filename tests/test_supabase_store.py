@@ -90,6 +90,20 @@ def test_audit_log_is_append_only(supabase_db, alice_world, sql):
         raw(supabase_db, "alice", sql)
 
 
+def test_another_firm_cannot_rename_or_delete_a_client_without_a_filter(supabase_db, store,
+                                                                       alice_world):
+    as_(store, "bob").get_or_create_adviser(None, None)
+    raw(supabase_db, "bob", "update public.clients set name = 'x', deleted_at = now()")
+    row = raw(supabase_db, "alice", "select name, deleted_at from public.clients")[0]
+    assert row == ("Household A", None)
+
+
+def test_clients_cannot_be_hard_deleted(supabase_db, alice_world):
+    """Deleting a client is a soft delete; the row (and what refers to it) stays."""
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        raw(supabase_db, "alice", "delete from public.clients")
+
+
 def test_advisers_cannot_change_their_firm_role_or_status(supabase_db, alice_world):
     with pytest.raises(psycopg.errors.InsufficientPrivilege):
         raw(supabase_db, "alice", "update public.advisers set role = 'owner', status = 'active'")

@@ -118,10 +118,28 @@ class LocalStore:
         return self._update(firm_id, lambda s: s["clients"].setdefault(client["id"], client))
 
     def list_clients(self, firm_id: str) -> list[dict]:
-        return sorted(self._state(firm_id)["clients"].values(), key=lambda c: c["created_at"])
+        live = (c for c in self._state(firm_id)["clients"].values() if not c.get("deleted_at"))
+        return sorted(live, key=lambda c: c["created_at"])
 
     def get_client(self, firm_id: str, client_id: str) -> dict | None:
-        return self._state(firm_id)["clients"].get(client_id)
+        """The client, or None if it doesn't exist, is another firm's, or was deleted."""
+        client = self._state(firm_id)["clients"].get(client_id)
+        return None if client is None or client.get("deleted_at") else client
+
+    def rename_client(self, firm_id: str, client_id: str, name: str) -> dict:
+        def fn(state):
+            c = state["clients"][client_id]
+            c["name"] = name
+            return c
+        return self._update(firm_id, fn)
+
+    def delete_client(self, firm_id: str, client_id: str, adviser_id: str) -> None:
+        """Hide the client from the app. Its portfolios, drafts and conversations are kept
+        (as are audit records), so past analyses stay on record; nothing reads them once
+        the client is gone, because every portfolio route checks its client first."""
+        def fn(state):
+            state["clients"][client_id].update(deleted_at=_now(), deleted_by=adviser_id)
+        self._update(firm_id, fn)
 
     def save_questionnaire(self, firm_id: str, client_id: str, answers: dict) -> dict:
         def fn(state):
