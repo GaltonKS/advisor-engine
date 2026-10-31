@@ -396,8 +396,12 @@ with panel_col:
         c, d = st.columns(2)
         c.metric("After removing the market", f"{conc['market_adjusted']['residual_effective_bets']:.1f}",
                  help="Independent bets left once the overall market move is taken out.")
-        d.metric("At sector level", f"{conc['sector_level']['sector_effective_bets']:.1f}",
-                 help=f"Independent bets across {conc['sector_level']['n_sectors']} sectors.")
+        sl = conc["sector_level"]
+        if "sector_effective_bets" in sl:
+            d.metric("At sector level", f"{sl['sector_effective_bets']:.1f}",
+                     help=f"Independent bets across {sl['n_sectors']} sectors.")
+        else:
+            d.metric("At sector level", "Not available", help=sl.get("withheld"))
         if "market_share_of_risk" in conc["market_adjusted"]:
             st.metric("Share of risk from the market", pct(conc["market_adjusted"]["market_share_of_risk"]))
         if conc["market_adjusted"]["market_proxy"] == "equal_weight_universe":
@@ -446,8 +450,15 @@ with panel_col:
                          alt.Tooltip("weight:Q", title="Weight", format=".1%")],
             ).properties(height=max(160, 34 * len(sectors))),
             use_container_width=True)
-        st.caption(f"Across {conc['sector_level']['n_sectors']} sectors the portfolio behaves like "
-                   f"{conc['sector_level']['sector_effective_bets']:.1f} independent sector bets.")
+        sl = conc["sector_level"]
+        if "sector_effective_bets" in sl:
+            st.caption(f"Across {sl['n_sectors']} sectors the portfolio behaves like "
+                       f"{sl['sector_effective_bets']:.1f} independent sector bets.")
+        cov = data.get("sector_coverage") or {}
+        if cov.get("n_unclassified"):
+            st.caption(f"{pct(cov['unclassified_weight'])} of the portfolio "
+                       f"({', '.join(cov['unclassified_tickers'])}) has no sector, so sector-level "
+                       "figures are not computed. Add a sector column to the CSV to include them.")
 
     with t_dd:
         a, b = st.columns(2)

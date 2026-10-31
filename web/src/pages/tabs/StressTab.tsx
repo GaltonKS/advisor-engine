@@ -13,7 +13,8 @@ export default function StressTab({ ws }: { ws: Workspace }) {
     mutationFn: (body: { scenario_id?: string; sector_shocks?: Record<string, number>; default_shock?: number }) =>
       api<StressResult>(`/portfolios/${ws.portfolio.id}/stress`, { json: body }),
   });
-  const sectors = Object.keys(ws.profile.sector_exposure);
+  // Holdings with no sector take the "all other sectors" shock; "Unclassified" isn't a sector to shock.
+  const sectors = Object.keys(ws.profile.sector_exposure).filter((s) => s !== "Unclassified");
   // Custom shocks are typed as percentages and sent as fractions; the engine applies them.
   const [custom, setCustom] = useState<Record<string, string>>({});
   const [other, setOther] = useState("-10");

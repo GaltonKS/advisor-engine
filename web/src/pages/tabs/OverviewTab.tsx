@@ -47,7 +47,9 @@ export default function OverviewTab({ ws }: { ws: Workspace }) {
             <Bar key={s} label={s} shown={pct(w)} fraction={w} />
           ))}
           <p className="mt-3 text-xs text-muted">
-            Across {conc.sector_level.n_sectors} sectors the portfolio behaves like {num(conc.sector_level.sector_effective_bets)} independent sector bets.
+            {conc.sector_level.sector_effective_bets !== undefined
+              ? <>Across {conc.sector_level.n_sectors} sectors the portfolio behaves like {num(conc.sector_level.sector_effective_bets)} independent sector bets.</>
+              : <>Sector-level diversification is not computed until every holding has a sector.</>}
           </p>
         </Panel>
       </div>

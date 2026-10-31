@@ -1,7 +1,9 @@
 """Load and validate a holdings CSV.
 
-Required columns: ticker, shares, price, sector.
-Long-only for the MVP: negative shares are rejected.
+Required columns: ticker, shares, price. A sector column is optional: holdings
+without one (no column, or a blank cell) are labelled `UNCLASSIFIED`, and the engine
+withholds or caveats the figures that depend on sector rather than treating them as
+one sector. Long-only for the MVP: negative shares are rejected.
 
 Files saved from Excel or exported by brokers rarely match the sample exactly, so
 `read_holdings_csv` accepts a few layout differences that have only one reading:
@@ -21,7 +23,9 @@ from pathlib import Path
 
 import pandas as pd
 
-REQUIRED = ["ticker", "shares", "price", "sector"]
+REQUIRED = ["ticker", "shares", "price"]
+COLUMNS = [*REQUIRED, "sector"]
+UNCLASSIFIED = "Unclassified"
 
 # Header names that mean exactly one required column. Kept short on purpose: an alias
 # is a claim about what someone else's column means. No alias for sector.
@@ -113,7 +117,7 @@ def _parse_number(raw: object, delim: str) -> float:
 
 
 def read_holdings_csv(source: str | Path | bytes) -> pd.DataFrame:
-    """Parse a holdings CSV (path or raw bytes) into the four required columns.
+    """Parse a holdings CSV (path or raw bytes) into the four holdings columns.
 
     Values come back as found; `validate_holdings` checks them. Numbers in shares and
     price are converted here because their format depends on the file's separator.
@@ -128,7 +132,7 @@ def read_holdings_csv(source: str | Path | bytes) -> pd.DataFrame:
         raise ValueError(
             f"Holdings file is missing columns: {missing}. "
             f"Columns found: {cells or 'none'}. "
-            "Expected a header row with ticker, shares, price, sector."
+            "Expected a header row with ticker, shares, price (and optionally sector)."
         )
     header_line, delim = found
 
@@ -136,10 +140,12 @@ def read_holdings_csv(source: str | Path | bytes) -> pd.DataFrame:
                      keep_default_na=False, skipinitialspace=True)
     df.columns = [_norm_header(c) for c in df.columns]
     if df.columns.duplicated().any():
-        dups = sorted(set(df.columns[df.columns.duplicated()]) & set(REQUIRED))
+        dups = sorted(set(df.columns[df.columns.duplicated()]) & set(COLUMNS))
         if dups:
             raise ValueError(f"Holdings file has more than one column for: {dups}")
-    df = df[REQUIRED]
+    if "sector" not in df.columns:
+        df["sector"] = ""
+    df = df[COLUMNS]
     # Excel often leaves trailing blank rows; drop rows with nothing in them only.
     df = df[~df.apply(lambda r: all(str(v).strip() == "" for v in r), axis=1)]
 
@@ -165,9 +171,15 @@ def validate_holdings(df: pd.DataFrame) -> pd.DataFrame:
     if missing:
         raise ValueError(f"Holdings file is missing columns: {missing}")
 
-    df = df[REQUIRED].copy()
+    df = df.copy()
+    if "sector" not in df.columns:
+        df["sector"] = ""
+    df = df[COLUMNS]
     df["ticker"] = df["ticker"].astype(str).str.strip().str.upper()
-    df["sector"] = df["sector"].astype(str).str.strip()
+    sector = df["sector"].fillna("").astype(str).str.strip()
+    # One spelling for "no sector", whether blank or typed in any case.
+    df["sector"] = sector.where((sector != "") & (sector.str.lower() != UNCLASSIFIED.lower()),
+                                UNCLASSIFIED)
 
     if (df["ticker"] == "").any():
         raise ValueError("Every holding needs a ticker.")

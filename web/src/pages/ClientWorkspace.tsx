@@ -3,7 +3,7 @@ import { useRef } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Empty, ErrorNote, Loading } from "../components/ui";
 import { useApi } from "../lib/api";
-import { date, shortHash } from "../lib/format";
+import { date, pct, shortHash } from "../lib/format";
 import type { Client, Portfolio, RiskProfile } from "../lib/types";
 import AssistantTab from "./tabs/AssistantTab";
 import AuditTab from "./tabs/AuditTab";
@@ -38,6 +38,20 @@ const TABS = [
   ["audit", "Audit trail"],
 ] as const;
 export type TabId = (typeof TABS)[number][0];
+
+/** Holdings with no sector make the sector figures incomplete; point to the editor. */
+function SectorGapNote({ profile, go }: { profile: RiskProfile; go: (tab: TabId) => void }) {
+  const cov = profile.sector_coverage;
+  if (!cov?.n_unclassified) return null;
+  const what = cov.n_unclassified === 1 ? "1 holding" : `${cov.n_unclassified} holdings`;
+  return (
+    <div className="no-print mb-5 border border-gold/50 bg-gold/5 px-3 py-2 text-sm">
+      {what} ({pct(cov.unclassified_weight)} of the portfolio: {cov.unclassified_tickers.join(", ")}) {cov.n_unclassified === 1 ? "has" : "have"} no
+      sector, so sector figures are incomplete.{" "}
+      <button className="underline" onClick={() => go("holdings")}>Add sectors →</button>
+    </div>
+  );
+}
 
 export function versionName(p: Portfolio, all: Portfolio[]): string {
   const n = all.findIndex((x) => x.id === p.id) + 1;
@@ -119,7 +133,7 @@ export default function ClientWorkspace() {
       <ErrorNote error={addVersion.error} />
 
       {!portfolio ? (
-        <div className="mt-6"><Empty>Upload a holdings CSV (ticker, shares, price, sector) to analyse this client.{" "}
+        <div className="mt-6"><Empty>Upload a holdings CSV (ticker, shares, price, and optionally sector) to analyse this client.{" "}
           <a className="underline" href="/holdings-template.csv" download>Download a template</a></Empty></div>
       ) : (
         <>
@@ -134,6 +148,7 @@ export default function ClientWorkspace() {
           <div className="mt-6">
             {profile.isLoading && <Loading what="Running the engine" />}
             <ErrorNote error={profile.error} />
+            {profile.data && tab !== "holdings" && <SectorGapNote profile={profile.data} go={go} />}
             {profile.data && (
               <TabBody tab={tab} ws={{ client: c, portfolios, portfolio, profile: profile.data, go }} />
             )}

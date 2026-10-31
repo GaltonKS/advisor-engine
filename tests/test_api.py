@@ -235,6 +235,25 @@ def test_holdings_round_trip_and_edits_save_as_a_new_version(api):
     assert audit_records(store, "alice", p["firm_id"])[-1]["event"] == "portfolio_saved"
 
 
+def test_upload_without_sectors_then_fill_them_in(api):
+    client, _ = api
+    c = client.post("/clients", json={"name": "X"}, headers=as_("alice")).json()
+    up = client.post(f"/clients/{c['id']}/portfolios", headers=as_("alice"),
+                     files={"file": ("h.csv", b"Symbol,Quantity,Price\nAAA,100,50\nBBB,200,25\n",
+                                     "text/csv")})
+    assert up.status_code == 201, up.text
+    prof = client.get(f"/portfolios/{up.json()['id']}/profile", headers=as_("alice")).json()["profile"]
+    assert prof["sector_coverage"]["n_unclassified"] == 2
+    assert "withheld" in prof["concentration"]["sector_level"]
+    # The editor sends a blank sector for any still unfilled; the engine labels it.
+    rows = [{"ticker": "AAA", "shares": 100, "price": 50, "sector": "Technology"},
+            {"ticker": "BBB", "shares": 200, "price": 25, "sector": ""}]
+    v2 = client.post(f"/clients/{c['id']}/portfolios/holdings", headers=as_("alice"), json={"holdings": rows})
+    assert v2.status_code == 201, v2.text
+    prof2 = client.get(f"/portfolios/{v2.json()['id']}/profile", headers=as_("alice")).json()["profile"]
+    assert prof2["sector_coverage"]["unclassified_tickers"] == ["BBB"]
+
+
 def test_invalid_edited_holdings_are_rejected(api):
     client, _ = api
     c, _ = setup_portfolio(client)

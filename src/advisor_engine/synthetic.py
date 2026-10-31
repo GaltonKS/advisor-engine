@@ -17,6 +17,8 @@ import hashlib
 import numpy as np
 import pandas as pd
 
+from .holdings import UNCLASSIFIED
+
 
 def _rng(*parts: object) -> np.random.Generator:
     """A random stream fixed by `parts`. Uses SHA-256, not hash(), which varies by process."""
@@ -39,10 +41,14 @@ def synthetic_returns(
     `period_label` of `risk_profile`. Pass a different label there if the data differs.
     A ticker's series depends only on (ticker, sector, seed, n_periods and the vols),
     never on which other tickers are requested.
+
+    Holdings with no sector (`UNCLASSIFIED`) get no sector factor: they are not one
+    sector, so giving them a shared factor would invent correlation between them.
     """
     market = _rng("market", seed).normal(0.006, market_vol, n_periods)
     sector_f = {s: _rng("sector", s, seed).normal(0.0, sector_vol, n_periods)
-                for s in sorted(set(sectors))}
+                for s in sorted(set(sectors)) if s != UNCLASSIFIED}
+    sector_f[UNCLASSIFIED] = np.zeros(n_periods)
 
     cols = {}
     for t, s in zip(tickers, sectors):

@@ -26,7 +26,9 @@ HEADLINE = [
 
 def _get(d: dict, path: tuple):
     for k in path:
-        d = d[k]
+        d = d.get(k) if isinstance(d, dict) else None
+        if d is None:
+            return None
     return d
 
 
@@ -34,7 +36,12 @@ def compare_profiles(before: dict, after: dict) -> dict:
     """Headline, sector and position differences between two `RiskProfile.to_dict()`s."""
     headline = []
     for path, label, kind in HEADLINE:
-        b, a = float(_get(before, path)), float(_get(after, path))
+        b, a = _get(before, path), _get(after, path)
+        if b is None or a is None:
+            # The engine withheld this figure for one side (e.g. sector-level bets when
+            # some holdings have no sector), so there is no difference to report.
+            continue
+        b, a = float(b), float(a)
         if kind == "loss":
             b, a = abs(b), abs(a)
         headline.append({"key": path[-1], "label": label, "kind": kind,

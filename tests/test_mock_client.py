@@ -105,6 +105,24 @@ def test_templates_verify_on_varied_portfolios(tmp_path):
             assert not r.blocked, (path.name, q, r.reply)
 
 
+@pytest.mark.parametrize("csv", [
+    "ticker,shares,price,sector\nAAA,100,50,Technology\nBBB,100,50,Energy\nCCC,300,40,\n",
+    "ticker,shares,price\nAAA,100,50\nBBB,100,50\nCCC,300,40\n",
+], ids=["some_missing", "no_sector_column"])
+def test_templates_handle_holdings_without_sector(csv, tmp_path):
+    data = tmp_path / "data"
+    data.mkdir()
+    path = data / "h.csv"
+    path.write_text(csv)
+    for k, q in QUESTIONS.items():
+        r = chat.run_turn(q, [], MockClient(), default_holdings=str(path), data_dir=data,
+                          audit_path=tmp_path / "a.jsonl", max_retries=0)
+        assert not r.blocked, (k, r.reply)
+        assert "Unclassified is the largest" not in r.reply and "money is in Unclassified" not in r.reply
+        if k in ("overview", "sectors"):
+            assert "no sector" in r.reply and "CCC" in r.reply, r.reply
+
+
 def test_force_bad_number_is_blocked_and_logged(tmp_path):
     r = turn("How risky is this?", tmp_path, MockClient(force_bad_number=True))
     assert r.blocked and r.block_reason == "unmatched_numbers"
