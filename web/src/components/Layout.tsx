@@ -35,7 +35,7 @@ export default function Layout() {
           <div className="ml-auto flex items-center gap-3 text-xs">
             {me.data && (
               <span className={`border px-2 py-1 ${me.data.llm === "mock" ? "border-on-navy-muted/40 text-on-navy-muted" : "border-gold-bright text-gold-bright"}`}>
-                Assistant: {me.data.llm === "mock" ? "mock (scripted)" : "live"}
+                Galton AI: {me.data.llm === "mock" ? "mock (scripted)" : "live"}
               </span>
             )}
             {dev && <span className="border border-[#e8a598]/60 px-2 py-1 text-[#f0b9ae]">Dev sign-in</span>}

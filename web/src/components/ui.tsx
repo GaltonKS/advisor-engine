@@ -54,6 +54,14 @@ export function Bar({ label, shown, fraction, tone = "gold" }: {
   );
 }
 
+/** The assistant's name. One place, so every screen says the same thing. */
+export const ASSISTANT_NAME = "Galton AI";
+
+/** The assistant's name in the brand navy, for paper and card grounds (not on navy). */
+export function GaltonName({ className = "" }: { className?: string }) {
+  return <span className={`font-semibold text-navy ${className}`}>{ASSISTANT_NAME}</span>;
+}
+
 export function Chip({ children }: { children: ReactNode }) {
   return <span className="bg-gold-soft px-2 py-0.5 text-xs">{children}</span>;
 }

@@ -21,7 +21,7 @@ export interface Workspace {
   portfolios: Portfolio[];
   portfolio: Portfolio;
   profile: RiskProfile;
-  /** Switch tab, optionally sending a question to the assistant. */
+  /** Switch tab, optionally sending a question to Galton AI (the assistant). */
   go: (tab: TabId, ask?: string) => void;
 }
 
@@ -32,7 +32,7 @@ const TABS = [
   ["compare", "Compare"],
   ["stress", "Stress test"],
   ["profile", "Risk profile"],
-  ["assistant", "Assistant"],
+  ["assistant", "Galton AI"],
   ["report", "Client report"],
   ["review", "Review prep"],
   ["audit", "Audit trail"],
@@ -140,7 +140,9 @@ export default function ClientWorkspace() {
           <nav className="no-print mt-6 flex flex-wrap gap-x-5 gap-y-2 border-b border-rule text-sm">
             {TABS.map(([id, label]) => (
               <button key={id} onClick={() => go(id)}
-                      className={`-mb-px pb-2 ${tab === id ? "border-b-2 border-gold font-semibold text-navy" : "text-muted hover:text-navy"}`}>
+                      className={`-mb-px pb-2 ${tab === id ? "border-b-2 border-gold font-semibold text-navy"
+                        // Galton AI's tab keeps the navy even when not selected, so it stands out.
+                        : id === "assistant" ? "font-medium text-navy hover:border-b-2 hover:border-navy/30" : "text-muted hover:text-navy"}`}>
                 {label}
               </button>
             ))}

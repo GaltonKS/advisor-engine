@@ -1,7 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it } from "vitest";
-import { ComparisonTable, FilePicker } from "./ui";
+import { ComparisonTable, FilePicker, GaltonName } from "./ui";
+import { describe as describeAudit } from "../pages/tabs/ReviewTab";
 
 describe("ComparisonTable", () => {
   it("shows the engine's change figure rather than computing one", () => {
@@ -34,5 +35,17 @@ describe("FilePicker", () => {
   it("shows an error message when one is given", () => {
     render(<FilePicker label="Holdings CSV" file={null} onChange={() => {}} error="Choose a holdings CSV." />);
     expect(screen.getByRole("alert").textContent).toBe("Choose a holdings CSV.");
+  });
+});
+
+describe("Galton AI name", () => {
+  it("renders in the brand navy", () => {
+    render(<GaltonName />);
+    expect(screen.getByText("Galton AI").className).toContain("text-navy");
+  });
+
+  it("names Galton AI in the audit trail", () => {
+    const row = { event: "turn", blocked: false, user_message: "Why AVGO?" } as Parameters<typeof describeAudit>[0];
+    expect(describeAudit(row)).toBe("Galton AI: “Why AVGO?”");
   });
 });

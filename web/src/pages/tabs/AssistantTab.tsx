@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ChartView } from "../../components/charts";
 import { Markdown } from "../../lib/markdown";
-import { Chip, ErrorNote, Loading, Panel } from "../../components/ui";
+import { Chip, ErrorNote, GaltonName, Loading, Panel } from "../../components/ui";
 import { ApiError, useApi } from "../../lib/api";
 import { shortHash } from "../../lib/format";
 import type { ChartSpec, ChatMessage, Draft, RiskProfile } from "../../lib/types";
@@ -38,7 +38,7 @@ export default function AssistantTab({ ws }: { ws: Workspace }) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["drafts", pid] }),
   });
 
-  // A question handed over from another tab (e.g. "Ask the assistant about BBB").
+  // A question handed over from another tab (e.g. "Ask Galton AI about BBB").
   const handed = params.get("ask");
   useEffect(() => {
     if (handed && !ask.isPending) {
@@ -68,7 +68,7 @@ export default function AssistantTab({ ws }: { ws: Workspace }) {
         <div className="max-h-[78vh] min-h-[320px] space-y-5 overflow-y-auto border border-rule bg-card p-5">
           {messages.isLoading && <Loading />}
           {messages.data?.length === 0 && !ask.isPending && (
-            <p className="text-sm text-muted">Ask about this portfolio. Every figure in a reply is checked against the engine's output before you see it.</p>
+            <p className="text-sm text-muted">Ask <GaltonName /> about this portfolio. Every figure in a reply is checked against the engine's output before you see it.</p>
           )}
           {messages.data?.map((m, i) => (
             <Message key={i} m={m}
@@ -131,6 +131,7 @@ function Message({ m, onOpenStress }: { m: ChatMessage; onOpenStress: () => void
   const sources = ok.filter((c) => c.name !== "show_chart" && c.name !== "refer_to_stress_test");
   return (
     <div>
+      <div className="mb-1 text-sm"><GaltonName /></div>
       {used.length > 0 && (
         <div className="mb-2 flex items-center gap-2"><span className="eyebrow">Used</span>{used.map((u) => <Chip key={u}>{u}</Chip>)}</div>
       )}
