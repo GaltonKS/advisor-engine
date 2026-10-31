@@ -137,9 +137,13 @@ function Message({ m }: { m: ChatMessage }) {
         <div className="mt-2 border-t border-rule pt-2 text-xs text-muted">
           <div className="eyebrow mb-1">Sources</div>
           {sources.map((c, i) => {
-            const o = c.output as RiskProfile;
+            // A what-if carries the profile after the change; stress and holdings carry no profile.
+            const out = c.output as { after?: RiskProfile } & Partial<RiskProfile>;
+            const o = out.after ?? (out.n_periods !== undefined ? (out as RiskProfile) : undefined);
             return (
-              <div key={i}><span className="figure text-gold-dark">[{i + 1}]</span> {c.label} · {o.n_periods} {o.drawdown.period_label} {o.returns_source} returns · engine v{o.engine_version} · holdings {shortHash(c.holdings_sha256)}</div>
+              <div key={i}><span className="figure text-gold-dark">[{i + 1}]</span> {c.label}
+                {o && <> · {o.n_periods} {o.drawdown.period_label} {o.returns_source} returns · engine v{o.engine_version}</>}
+                {" "}· holdings {shortHash(c.holdings_sha256)}</div>
             );
           })}
         </div>

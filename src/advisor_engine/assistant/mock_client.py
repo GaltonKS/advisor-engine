@@ -10,7 +10,13 @@ never typed in, so the number check passes. Wording avoids internal field names 
 avoids direction words ("up", "gain", ...) near figures, which the check reads as a
 stated sign.
 
-Template choice looks at the latest user question, in this order: a holding's ticker or
+Tools: every turn starts with `get_risk_profile`. A what-if question that names held
+tickers ("without", "sell", "remove", "what if") then calls `run_what_if` removing them;
+a scenario question ("crash", "recession", "rates", "scenario", "sell-off") calls
+`run_stress_test` with the matching preset; "worth", "dollar" or "how many shares"
+calls `get_holdings`. The reply is rendered from the last tool's output.
+
+Template choice for a risk-profile reply looks at the latest user question, in this order: a holding's ticker or
 "why" -> position; "client"/"explain" -> client draft; "drawdown"/"loss" -> drawdown;
 "sector" -> sectors; "risk"/overview words -> overview; otherwise a fallback.
 """
@@ -109,14 +115,48 @@ def _objective(system: str) -> str:
     return m.group(1) if m else ""
 
 
-def _find_position(question: str, positions: list[dict]) -> dict | None:
+def _find_positions(question: str, positions: list[dict]) -> list[dict]:
+    found = []
     for p in positions:
         t = p["ticker"]
         if len(t) < 2:  # a single letter matches ordinary words
             continue
         pat = rf"\b{re.escape(t)}\b"
         if re.search(pat, question, 0 if len(t) < 3 else re.IGNORECASE):
-            return p
+            found.append(p)
+    return found
+
+
+def _find_position(question: str, positions: list[dict]) -> dict | None:
+    found = _find_positions(question, positions)
+    return found[0] if found else None
+
+
+def _tool_names(after: list[dict]) -> dict[str, str]:
+    """tool_use id -> tool name, for the tool calls made this turn."""
+    return {b["id"]: b["name"] for m in after if m["role"] == "assistant"
+            and isinstance(m["content"], list) for b in m["content"] if b.get("type") == "tool_use"}
+
+
+_WHAT_IF = re.compile(r"\b(what if|without|remove|removing|sell|sold|selling|drop|dropped)\b")
+_SCENARIOS = (("recession", "recession"), ("rates", "rising_rates"), ("interest", "rising_rates"),
+              ("tech", "tech_selloff"), ("crash", "broad_selloff"), ("sell-off", "broad_selloff"),
+              ("selloff", "broad_selloff"), ("scenario", "broad_selloff"),
+              ("stress test", "broad_selloff"))
+_HOLDINGS = re.compile(r"\b(worth|dollars?|how many shares|market value)\b|\$")
+
+
+def next_tool(question: str, profile: dict, path: str) -> tuple[str, dict] | None:
+    """The second tool call a question needs after the risk profile, if any."""
+    q = question.lower()
+    named = _find_positions(question, profile.get("positions", []))
+    if named and _WHAT_IF.search(q):
+        return "run_what_if", {"holdings_path": path, "remove": [p["ticker"] for p in named]}
+    for word, scenario in _SCENARIOS:
+        if word in q and "stress loss" not in q:
+            return "run_stress_test", {"holdings_path": path, "scenario_id": scenario}
+    if _HOLDINGS.search(q):
+        return "get_holdings", {"holdings_path": path}
     return None
 
 
@@ -230,6 +270,71 @@ def _sectors(d: dict, concise: bool) -> str:
     return f"{first}\n\n{lines}{more}\n\nI can break any sector down by position.{tail}"
 
 
+def _market(d: dict, concise: bool) -> str:
+    ma = d["concentration"]["market_adjusted"]
+    if "portfolio_corr_to_market" not in ma:
+        return ("The engine has no market series for this portfolio, so it can't measure how "
+                "closely it moves with the market. " + _data_note(d))
+    top = sorted(d["positions"], key=lambda p: p.get("corr_to_market", 0), reverse=True)[:3]
+    lines = "\n".join(f"- {p['ticker']}: correlation {_num(p['corr_to_market'], 2)}, "
+                      f"sensitivity {_num(p['beta'], 2)}" for p in top)
+    out = (f"The portfolio's correlation with the market ({ma['market_proxy']}) is "
+           f"{_num(ma['portfolio_corr_to_market'], 2)}, and its sensitivity to market moves "
+           f"(beta) is {_num(ma['portfolio_beta'], 2)}. The market accounts for "
+           f"{_pct(ma['market_share_of_risk'])} of its overall risk.\n\n"
+           f"The holdings that move most closely with the market:\n{lines}")
+    if not concise:
+        out += "\n\n" + _data_note(d)
+    return out
+
+
+def _what_if(d: dict) -> str:
+    c = d["comparison"]
+    rows = {r["key"]: r for r in c["headline"]}
+    removed = ", ".join(c["removed"]) or "the change"
+    bets = rows["effective_bets"]
+    out = [f"With {removed} taken out, the portfolio behaves like about {_num(bets['after'])} "
+           f"independent bets, against {_num(bets['before'])} now (a change of "
+           f"{'+' if bets['change'] >= 0 else '-'}{_num(abs(bets['change']))})."]
+    detail = []
+    for key in ("period_volatility", "stress_loss_1_in_100", "historical_max_drawdown"):
+        r = rows.get(key)
+        if r:
+            detail.append(f"- {r['label']}: {_pct(r['before'])} now, {_pct(r['after'])} after")
+    label = c["period_label"]
+    out.append(f"\nOn a {label} basis:\n" + "\n".join(detail))
+    top = d["after"]["positions"][0]
+    out.append(f"\nAfter the change, {top['ticker']} would be the biggest source of risk, at "
+               f"{_pct(top['risk_share'])} of the portfolio's overall risk.")
+    out.append("\nThis shows the effect of the change you asked about; it isn't a "
+               "recommendation to make it. " + _data_note(d["after"]))
+    return "\n".join(out)
+
+
+def _stress(d: dict) -> str:
+    sc = d["scenario"]
+    out = [f"In the {sc['label'].lower()} scenario the portfolio would move "
+           f"{'-' if d['portfolio_return'] < 0 else ''}{_pct(abs(d['portfolio_return']))}, "
+           f"a change in value of {'-' if d['value_change'] < 0 else ''}"
+           f"${abs(d['value_change']):,.2f} on holdings worth ${d['portfolio_value']:,.2f}."]
+    if sc.get("description"):
+        out.append(f"The scenario assumes: {sc['description']}")
+    worst = d["positions"][:3]
+    out.append("\nThe largest effects by position:\n" + "\n".join(
+        f"- {p['ticker']}: {'-' if p['contribution'] < 0 else ''}{_pct(abs(p['contribution']), 2)} "
+        f"of the portfolio" for p in worst))
+    out.append("\nThe shocks are illustrative, not calibrated to a historical period.")
+    return "\n".join(out)
+
+
+def _holdings(d: dict) -> str:
+    rows = sorted(d["holdings"], key=lambda r: r["value"], reverse=True)[:5]
+    lines = "\n".join(f"- {r['ticker']}: {r['shares']:g} shares at ${r['price']:,.2f}, "
+                      f"${r['value']:,.2f} ({_pct(r['weight'])})" for r in rows)
+    return (f"The holdings are worth ${d['total_value']:,.2f} in total, at the prices in the "
+            f"file. The largest positions by value:\n{lines}")
+
+
 def _drawdown(d: dict, concise: bool) -> str:
     dd = d["drawdown"]
     label = dd["period_label"]
@@ -291,6 +396,8 @@ def _choose(question: str, positions: list[dict]) -> str:
         return "position"
     if "client" in q or "explain" in q:
         return "client"
+    if re.search(r"\b(market|beta|correlat\w*)\b", q):
+        return "market"
     if "drawdown" in q or "loss" in q:
         return "drawdown"
     if "sector" in q:
@@ -319,6 +426,8 @@ def render_reply(
         text = _client_draft(d, concise)
     elif kind == "drawdown":
         text = _drawdown(d, concise)
+    elif kind == "market":
+        text = _market(d, concise)
     elif kind == "sectors":
         text = _sectors(d, concise)
     elif kind == "overview":
@@ -349,17 +458,35 @@ class MockClient:
         self.calls.append({"model": model, "system": system, "messages": list(messages)})
         question, after = _current_turn(list(messages))
         results = _tool_results(after)
+        path = _holdings_path(system)
         if not results:
-            block = SimpleNamespace(
-                type="tool_use",
-                id=f"mock_tu_{len(self.calls)}",
-                name="get_risk_profile",
-                input={"holdings_path": _holdings_path(system)},
-            )
-            return SimpleNamespace(content=[block], stop_reason="tool_use")
-        text = render_reply(
-            question, results[-1]["content"], system, force_bad_number=self.force_bad_number
-        )
+            return self._use("get_risk_profile", {"holdings_path": path})
+        last = results[-1]
+        name = _tool_names(after).get(last["tool_use_id"], "get_risk_profile")
+        try:
+            data = json.loads(last["content"])
+        except ValueError:
+            data = None
+        if name == "get_risk_profile" and isinstance(data, dict) and len(results) == 1:
+            follow = next_tool(question, data, path)
+            if follow:
+                return self._use(*follow)
+        if isinstance(data, dict) and name == "run_what_if":
+            text = _what_if(data)
+        elif isinstance(data, dict) and name == "run_stress_test":
+            text = _stress(data)
+        elif isinstance(data, dict) and name == "get_holdings":
+            text = _holdings(data)
+        else:
+            profile = next((r["content"] for r in results if _tool_names(after).get(
+                r["tool_use_id"]) == "get_risk_profile"), last["content"])
+            text = render_reply(question, profile, system,
+                                force_bad_number=self.force_bad_number)
         return SimpleNamespace(
             content=[SimpleNamespace(type="text", text=text)], stop_reason="end_turn"
         )
+
+    def _use(self, name: str, tool_input: dict):
+        block = SimpleNamespace(type="tool_use", id=f"mock_tu_{len(self.calls)}", name=name,
+                                input=tool_input)
+        return SimpleNamespace(content=[block], stop_reason="tool_use")

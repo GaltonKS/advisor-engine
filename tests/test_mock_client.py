@@ -135,6 +135,20 @@ def test_overview_states_the_asset_class_mix(tmp_path):
     assert "By asset class it is" in r.reply and "bonds" in r.reply and "cash" in r.reply
 
 
+@pytest.mark.parametrize("question,tools,phrase", [
+    ("How correlated is this portfolio with the market?", ["get_risk_profile"], "correlation with the market"),
+    ("What if we sold AAA and BBB?", ["get_risk_profile", "run_what_if"], "taken out"),
+    ("What happens in a recession?", ["get_risk_profile", "run_stress_test"], "recession scenario"),
+    ("How much is the portfolio worth?", ["get_risk_profile", "get_holdings"], "worth"),
+    ("What is the stress loss in a severe period?", ["get_risk_profile"], "1-in-100"),
+])
+def test_new_tools_in_mock_mode_pass_verification(question, tools, phrase, tmp_path):
+    r = turn(question, tmp_path)
+    assert not r.blocked, r.reply
+    assert [c["name"] for c in r.tool_calls] == tools
+    assert phrase in r.reply and r.verification["checked"] > 0
+
+
 def test_force_bad_number_is_blocked_and_logged(tmp_path):
     r = turn("How risky is this?", tmp_path, MockClient(force_bad_number=True))
     assert r.blocked and r.block_reason == "unmatched_numbers"

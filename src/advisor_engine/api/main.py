@@ -27,10 +27,9 @@ from .. import questionnaire as qn
 from ..assistant.chat import run_turn
 from ..assistant.mock_client import MockClient
 from ..assistant.numcheck import verify
-from ..assistant.tools import RETURNS_SOURCE, execute_tool, get_returns
+from ..assistant.tools import engine_profile, execute_tool
 from ..compare import compare_profiles
 from ..holdings import COLUMNS, load_holdings, validate_holdings
-from ..risk import risk_profile
 from ..stress import run_scenario, scenario_list, stress_test
 from .auth import User, current_user
 from .settings import Settings, load_settings
@@ -40,7 +39,8 @@ from .supabase_store import SupabaseStorage, SupabaseStore
 log_ = logging.getLogger("advisor_engine.api")
 
 DRAFT_REQUEST = "Please write a client-ready explanation of this portfolio's risk, for my review."
-TOOL_LABELS = {"get_risk_profile": "Risk profile"}
+TOOL_LABELS = {"get_risk_profile": "Risk profile", "get_holdings": "Holdings",
+               "run_what_if": "What-if", "run_stress_test": "Stress test"}
 MAX_UPLOAD_BYTES = 2 * 1024 * 1024
 
 
@@ -93,8 +93,7 @@ def _frame(rows: list[HoldingRow]) -> pd.DataFrame:
 def _engine_profile(holdings: pd.DataFrame) -> dict:
     """The same payload get_risk_profile returns, for holdings that aren't a stored file."""
     try:
-        return {"returns_source": RETURNS_SOURCE,
-                **risk_profile(holdings, get_returns(holdings)).to_dict()}
+        return engine_profile(holdings)
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
 
