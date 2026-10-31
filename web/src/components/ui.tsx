@@ -1,6 +1,6 @@
 // Shared building blocks. They lay out values they are given; none computes a figure.
 
-import type { ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import { ApiError } from "../lib/api";
 import { byKind, signed } from "../lib/format";
 import type { ComparisonRow } from "../lib/types";
@@ -101,5 +101,73 @@ export function Field({ label, children }: { label: string; children: ReactNode 
       <span className="mb-1 block font-semibold">{label}</span>
       {children}
     </label>
+  );
+}
+
+/** A file picker that reads as a step to complete: an empty dashed box saying no file
+ *  is chosen yet, then the chosen file's name with a way to change or remove it. */
+export function FilePicker({ label, file, onChange, accept, hint, error, required = false }: {
+  label: string; file: File | null; onChange: (f: File | null) => void;
+  accept?: string; hint?: ReactNode; error?: string | null; required?: boolean;
+}) {
+  const id = useId();
+  const input = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+
+  function pick(f: File | null) {
+    onChange(f);
+    // Clear the native value so choosing the same file again still fires onChange.
+    if (input.current) input.current.value = "";
+  }
+
+  const border = error ? "border-bad bg-bad/5" : file ? "border-gold border-solid bg-gold-soft/40"
+    : dragging ? "border-gold bg-gold-soft/40" : "border-ink/40 hover:border-gold hover:bg-gold-soft/30";
+
+  return (
+    <div className="text-sm">
+      <label htmlFor={id} className="mb-1 block font-semibold">
+        {label}{required && <span className="ml-1 font-normal text-bad">(required)</span>}
+      </label>
+      <input ref={input} id={id} type="file" accept={accept} className="peer sr-only"
+             aria-invalid={error ? true : undefined}
+             onChange={(e) => pick(e.target.files?.[0] ?? null)} />
+      <div
+        className={`flex items-center gap-3 border-2 border-dashed px-3 py-3 transition-colors
+                    peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-gold ${border}`}
+        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => { e.preventDefault(); setDragging(false); pick(e.dataTransfer.files?.[0] ?? null); }}
+      >
+        <span aria-hidden className={`flex h-9 w-9 shrink-0 items-center justify-center text-lg
+                                      ${file ? "bg-gold text-ink" : "bg-track text-muted"}`}>
+          {file ? "✓" : "↑"}
+        </span>
+        <div className="min-w-0 flex-1">
+          {file ? (
+            <>
+              <div className="eyebrow">File chosen</div>
+              <div className="break-all font-semibold" data-testid="chosen-file">{file.name}</div>
+              <div className="mt-1 flex gap-3 text-xs">
+                <label htmlFor={id} className="cursor-pointer underline hover:text-gold-dark">Change</label>
+                <button type="button" className="underline hover:text-bad" aria-label={`Remove ${file.name}`}
+                        onClick={() => pick(null)}>
+                  Remove
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="font-semibold">No file chosen</div>
+              <div className="text-xs text-muted">Choose a file, or drag one here</div>
+            </>
+          )}
+        </div>
+        {!file && (
+          <label htmlFor={id} className="btn shrink-0 cursor-pointer !px-3 !py-1.5 text-xs">Choose file</label>
+        )}
+      </div>
+      {error && <div role="alert" className="mt-1 text-xs text-bad">{error}</div>}
+      {hint && <div className="mt-1 text-xs text-faint">{hint}</div>}
+    </div>
   );
 }
