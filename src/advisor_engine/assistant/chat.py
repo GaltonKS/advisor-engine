@@ -124,8 +124,8 @@ def run_turn(
     system = prompts.build_system_prompt(firm_profile)
     if default_holdings:
         system += (
-            f"\nUnless the user names another file, call get_risk_profile with "
-            f"holdings_path {default_holdings!r}.\n"
+            f"\nThe portfolio under discussion is holdings_path {default_holdings!r}. Use it "
+            f"for every tool call unless the user names another file.\n"
         )
 
     history = list(history or [])

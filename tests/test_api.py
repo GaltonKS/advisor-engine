@@ -383,6 +383,18 @@ def test_server_errors_reach_the_browser_with_cors_headers(tmp_path):
     assert "database unavailable" not in r.text  # internals stay in the server log
 
 
+def test_turn_reports_each_tool_used(api):
+    client, _ = api
+    _, p = setup_portfolio(client)
+    r = client.post(f"/portfolios/{p['id']}/turns", headers=as_("alice"),
+                    json={"message": "What if we sold AAA?"})
+    assert r.status_code == 200, r.text
+    calls = r.json()["tool_calls"]
+    assert [c["label"] for c in calls] == ["Risk profile", "What-if"]
+    assert "comparison" in calls[1]["output"]
+    assert "holdings_path" not in json.dumps(calls)  # no server paths leak
+
+
 def test_allowed_origins_ignore_trailing_slashes_and_spaces(monkeypatch):
     for k in ("ADVISOR_AUTH", "SUPABASE_URL", "SUPABASE_DB_URL", "RENDER"):
         monkeypatch.delenv(k, raising=False)

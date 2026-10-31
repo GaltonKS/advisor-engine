@@ -41,6 +41,16 @@ CASH_NOISE = 0.0003  # tiny, so the series is not constant (covariance needs var
 RATES_VOL = 0.012
 
 
+def synthetic_market(n_periods: int = 120, seed: int = 0, market_vol: float = 0.045) -> pd.Series:
+    """The stock-market factor every synthetic equity loads on, as a return series.
+
+    In the synthetic world this is the market index: pass it to `risk_profile` as
+    `market` so market sensitivity is measured against the factor that drives the
+    returns. Same draws as inside `synthetic_returns`, so the two always agree.
+    """
+    return pd.Series(_rng("market", seed).normal(0.006, market_vol, n_periods))
+
+
 def synthetic_returns(
     tickers: list[str],
     sectors: list[str],
@@ -69,7 +79,7 @@ def synthetic_returns(
     sector, so giving them a shared factor would invent correlation between them.
     """
     classes = asset_classes or ["equity"] * len(tickers)
-    market = _rng("market", seed).normal(0.006, market_vol, n_periods)
+    market = synthetic_market(n_periods, seed, market_vol).to_numpy()
     rates = _rng("rates", seed).normal(0.0035, RATES_VOL, n_periods)
     sector_f = {s: _rng("sector", s, seed).normal(0.0, sector_vol, n_periods)
                 for s in sorted(set(sectors)) if s != UNCLASSIFIED}

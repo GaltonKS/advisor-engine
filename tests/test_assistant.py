@@ -328,7 +328,7 @@ def test_default_audit_path_is_under_gitignored_data_dir():
 
 def test_system_prompt_style_rules():
     p = prompts.SYSTEM_PROMPT
-    assert "1-2 sentence" in p and "more detail" in p
+    assert "1-2 sentence" in p and "Answer the question fully" in p
     assert "Never mention internal field names" in p
     assert "how much risk it adds relative to its size" in p
     assert "how closely it moves with the rest" in p

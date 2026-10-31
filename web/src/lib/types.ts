@@ -58,6 +58,8 @@ export interface Position {
   risk_to_weight: number;
   volatility: number;
   avg_corr_to_rest: number;
+  beta?: number; // with a market series only
+  corr_to_market?: number;
 }
 
 export interface RiskProfile {
@@ -69,12 +71,15 @@ export interface RiskProfile {
     n_positions: number;
     top_component_share: number;
     component_shares: number[];
-    market_adjusted: { residual_effective_bets: number; market_proxy: string; market_share_of_risk?: number };
+    market_adjusted: { residual_effective_bets: number; market_proxy: string; market_share_of_risk?: number;
+                       portfolio_beta?: number; portfolio_corr_to_market?: number };
     // sector_effective_bets is absent (and `withheld` set) when some holdings have no sector.
     sector_level: { sector_effective_bets?: number; n_sectors: number; withheld?: string };
   };
   sector_exposure: Record<string, number>;
   asset_class_exposure?: Record<string, number>;
+  sector_risk?: Record<string, { weight: number; risk_share: number }>;
+  asset_class_risk?: Record<string, { weight: number; risk_share: number }>;
   sector_coverage?: { unclassified_weight: number; n_unclassified: number; unclassified_tickers: string[] };
   drawdown: {
     historical_max_drawdown: number;

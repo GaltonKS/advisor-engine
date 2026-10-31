@@ -75,6 +75,7 @@ def market_adjusted_concentration(
     returns: pd.DataFrame,
     weights: np.ndarray,
     market: pd.Series | None = None,
+    market_name: str = "provided",
 ) -> dict:
     """Split portfolio risk into a market component and a residual component.
 
@@ -100,7 +101,7 @@ def market_adjusted_concentration(
         m = market.reindex(returns.index)
         if m.isna().any():
             raise ValueError("Market series does not cover every return period.")
-        proxy = "provided"
+        proxy = market_name
 
     R = returns.to_numpy()
     mv = m.to_numpy()
@@ -129,6 +130,52 @@ def market_adjusted_concentration(
         "residual_effective_bets": effective_number_of_bets(weights, cov_res)["effective_bets"],
         "market_proxy": proxy,
     }
+
+
+def market_sensitivity(returns: pd.DataFrame, weights: np.ndarray, market: pd.Series) -> dict:
+    """How each holding, and the portfolio, moves with a market series.
+
+    - beta: OLS slope on the market (cov / var); 1 means it moves one-for-one.
+    - corr_to_market: Pearson correlation with the market, from -1 to 1.
+    Portfolio figures use the constant-weight portfolio return series. Only meaningful
+    against a real market series (or, with synthetic data, the synthetic market factor).
+    """
+    m = market.reindex(returns.index).to_numpy()
+    R = returns.to_numpy()
+    port = R @ weights
+    m_dev = m - m.mean()
+    var_m = float(m_dev @ m_dev)
+
+    def stats(x: np.ndarray) -> tuple[float, float]:
+        x_dev = x - x.mean()
+        cov = float(x_dev @ m_dev)
+        sx = float(np.sqrt(x_dev @ x_dev))
+        corr = cov / (sx * np.sqrt(var_m)) if sx > 0 else 0.0
+        return cov / var_m, corr
+
+    per = {t: stats(R[:, i]) for i, t in enumerate(returns.columns)}
+    pb, pc = stats(port)
+    return {
+        "portfolio_beta": pb,
+        "portfolio_corr_to_market": pc,
+        "positions": {t: {"beta": b, "corr_to_market": c} for t, (b, c) in per.items()},
+    }
+
+
+def group_risk(positions: list[dict], key: str) -> dict[str, dict]:
+    """Weight and share of portfolio risk per group (sector or asset class).
+
+    `risk_share` is the sum of the group's positions' risk shares (each a position's
+    fraction of portfolio variance), so groups sum to 1. A group with a risk share
+    above its weight adds more risk than its size suggests. Largest risk share first.
+    """
+    out: dict[str, dict] = {}
+    for p in positions:
+        g = out.setdefault(p.get(key, "equity"), {"weight": 0.0, "risk_share": 0.0})
+        g["weight"] += p["weight"]
+        g["risk_share"] += p["risk_share"]
+    return {k: {"weight": float(v["weight"]), "risk_share": float(v["risk_share"])}
+            for k, v in sorted(out.items(), key=lambda kv: -kv[1]["risk_share"])}
 
 
 def sector_level_concentration(holdings: pd.DataFrame, returns: pd.DataFrame) -> dict:
@@ -284,6 +331,8 @@ class RiskProfile:
     positions: list = field(default_factory=list)
     sector_coverage: dict = field(default_factory=dict)
     asset_class_exposure: dict = field(default_factory=dict)
+    sector_risk: dict = field(default_factory=dict)
+    asset_class_risk: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -294,6 +343,7 @@ def risk_profile(
     returns: pd.DataFrame,
     market: pd.Series | None = None,
     period_label: str = "monthly",
+    market_name: str = "provided",
 ) -> RiskProfile:
     """Build the risk profile for a validated holdings frame and a returns frame.
 
@@ -301,6 +351,9 @@ def risk_profile(
     broad-index return series used for the market-adjusted concentration; when
     omitted, an equal-weighted mean of the holdings is used instead.
     `period_label` is the length of one return period, reported with the drawdown figures.
+    `market_name` labels the supplied market series in the output (`market_proxy`).
+    With a market series, each position also gets `beta` and `corr_to_market`, and the
+    market-adjusted block gets `portfolio_corr_to_market`.
     """
     tickers = list(holdings["ticker"])
     missing = [t for t in tickers if t not in returns.columns]
@@ -322,7 +375,7 @@ def risk_profile(
 
     # Existing concentration keys are kept as-is; the new views nest alongside them.
     concentration = effective_number_of_bets(weights, cov)
-    adjusted = market_adjusted_concentration(r, weights, market)
+    adjusted = market_adjusted_concentration(r, weights, market, market_name)
     if adjusted["market_proxy"] == "equal_weight_universe":
         # With the equal-weight stand-in the "market" is made of the holdings themselves,
         # so beta and market share of risk are artifacts of the construction and would
@@ -330,6 +383,13 @@ def risk_profile(
         del adjusted["portfolio_beta"], adjusted["market_share_of_risk"]
     concentration["market_adjusted"] = adjusted
     concentration["sector_level"] = sector_level_concentration(holdings, r)
+
+    positions = position_risk(holdings, cov)
+    if market is not None:
+        sens = market_sensitivity(r, weights, market)
+        adjusted["portfolio_corr_to_market"] = sens["portfolio_corr_to_market"]
+        for p in positions:
+            p.update(sens["positions"][p["ticker"]])
 
     # Five biggest positions by weight (not by risk; see `positions` for risk ranking).
     top = holdings.nlargest(5, "weight")[["ticker", "weight", "sector"]]
@@ -341,7 +401,9 @@ def risk_profile(
         sector_exposure=sector_exposure(holdings),
         drawdown=drawdown_sensitivity(weights, cov, port_ret, period_label=period_label),
         largest_positions=top.to_dict("records"),
-        positions=position_risk(holdings, cov),
+        positions=positions,
         sector_coverage=sector_coverage(holdings),
         asset_class_exposure=asset_class_exposure(holdings),
+        sector_risk=group_risk(positions, "sector"),
+        asset_class_risk=group_risk(positions, "asset_class"),
     )
