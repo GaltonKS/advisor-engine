@@ -138,7 +138,8 @@ def test_overview_states_the_asset_class_mix(tmp_path):
 @pytest.mark.parametrize("question,tools,phrase", [
     ("How correlated is this portfolio with the market?", ["get_risk_profile"], "correlation with the market"),
     ("What if we sold AAA and BBB?", ["get_risk_profile", "run_what_if", "show_chart"], "taken out"),
-    ("What happens in a recession?", ["get_risk_profile", "run_stress_test"], "recession scenario"),
+    ("What happens in a recession?", ["get_risk_profile", "run_stress_test", "refer_to_stress_test"],
+     "recession scenario"),
     ("How much is the portfolio worth?", ["get_risk_profile", "get_holdings"], "worth"),
     ("What is the stress loss in a severe period?", ["get_risk_profile"], "1-in-100"),
 ])
@@ -161,6 +162,13 @@ def test_mock_shows_a_chart_and_points_to_it(question, kind, tmp_path):
     chart = json.loads(r.tool_calls[-1]["output"])["chart"]
     assert r.tool_calls[-1]["name"] == "show_chart" and chart["kind"] == kind
     assert "The chart below shows" in r.reply
+
+
+def test_hypothetical_event_is_referred_to_the_stress_tab(tmp_path):
+    r = turn("What if China invades Taiwan?", tmp_path)
+    assert not r.blocked, r.reply
+    assert [c["name"] for c in r.tool_calls] == ["get_risk_profile", "refer_to_stress_test"]
+    assert "doesn't forecast" in r.reply and "Stress test tab" in r.reply
 
 
 def test_force_bad_number_is_blocked_and_logged(tmp_path):

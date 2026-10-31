@@ -24,7 +24,9 @@ from pydantic import BaseModel, Field
 
 from .. import __version__
 from .. import questionnaire as qn
+from ..assistant.chat import _make_client as make_llm_client
 from ..assistant.chat import run_turn
+from ..assistant.scenario import MockSuggester, suggest_shocks
 from ..assistant.mock_client import MockClient
 from ..assistant.numcheck import verify
 from ..assistant.tools import engine_profile, execute_tool
@@ -40,7 +42,8 @@ log_ = logging.getLogger("advisor_engine.api")
 
 DRAFT_REQUEST = "Please write a client-ready explanation of this portfolio's risk, for my review."
 TOOL_LABELS = {"get_risk_profile": "Risk profile", "get_holdings": "Holdings",
-               "run_what_if": "What-if", "run_stress_test": "Stress test", "show_chart": "Chart"}
+               "run_what_if": "What-if", "run_stress_test": "Stress test", "show_chart": "Chart",
+               "refer_to_stress_test": "Stress test referral"}
 MAX_UPLOAD_BYTES = 2 * 1024 * 1024
 
 
@@ -77,6 +80,34 @@ class StressIn(BaseModel):
     sector_shocks: dict[str, float] = Field(default_factory=dict)
     default_shock: float = 0.0
     asset_class_shocks: dict[str, float] = Field(default_factory=dict)  # fixed_income, preferred, cash
+    # A custom scenario's own words, and the AI suggestion it started from (if any), so
+    # the result can say where its assumptions came from and the audit log records both.
+    description: str = Field(default="", max_length=1000)
+    suggested: dict | None = None
+
+
+class SuggestIn(BaseModel):
+    description: str = Field(min_length=1, max_length=1000)
+
+
+def _assumptions(body: StressIn) -> dict:
+    """Where a stress run's assumptions came from: a preset, the adviser, or an AI
+    suggestion (kept as suggested, or edited by the adviser before running)."""
+    if body.scenario_id:
+        return {"source": "preset"}
+    if not body.suggested:
+        return {"source": "adviser", "description": body.description}
+
+    def norm(d: dict | None) -> dict:
+        return {k: round(float(v), 4) for k, v in (d or {}).items()}
+
+    s = body.suggested
+    same = (norm(s.get("sector_shocks")) == norm(body.sector_shocks)
+            and norm(s.get("asset_class_shocks")) == norm(body.asset_class_shocks)
+            and round(float(s.get("default_shock", 0.0)), 4) == round(body.default_shock, 4))
+    return {"source": "ai_suggested" if same else "ai_suggested_edited",
+            "description": body.description or s.get("description", ""),
+            "label": s.get("label", ""), "model": s.get("model", "")}
 
 
 class QuestionnaireIn(BaseModel):
@@ -310,7 +341,8 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
             if body.scenario_id:
                 result = run_scenario(df, body.scenario_id)
             else:
-                result = {"scenario": {"id": "custom", "label": "Custom scenario",
+                label = (body.suggested or {}).get("label") or "Custom scenario"
+                result = {"scenario": {"id": "custom", "label": label,
                                        "sectors": body.sector_shocks,
                                        "default": body.default_shock,
                                        "asset_classes": body.asset_class_shocks},
@@ -318,9 +350,31 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
                                         body.asset_class_shocks)}
         except ValueError as e:
             raise HTTPException(422, str(e)) from e
+        result["assumptions"] = _assumptions(body)
         log(c, "stress", client_id=p["client_id"], portfolio_id=portfolio_id,
             holdings_sha256=p["sha256"], inputs=body.model_dump(), result=result)
         return result
+
+    @app.post("/portfolios/{portfolio_id}/stress/suggest")
+    def suggest(portfolio_id: str, body: SuggestIn, c: Ctx = Depends(ctx)) -> dict:
+        """AI-suggested shocks for a described scenario. Assumptions only: the adviser
+        reviews them, and the engine computes the result when they run the scenario."""
+        p = own_portfolio(c, portfolio_id)
+        df = frame_of(c, portfolio_id)
+        if not c.db.bump_turns(c.adv["id"], settings.daily_turn_limit):
+            raise HTTPException(429, "Daily assistant limit reached; try again tomorrow.")
+        try:
+            client = MockSuggester() if settings.llm == "mock" else make_llm_client()
+            suggestion = suggest_shocks(body.description, df, client)
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from e
+        except Exception as e:  # model API error, missing package, ...
+            log_.exception("Scenario suggestion failed for portfolio %s", portfolio_id)
+            raise HTTPException(502, assistant_error_message(e)) from e
+        log(c, "scenario_suggested", client_id=p["client_id"], portfolio_id=portfolio_id,
+            holdings_sha256=p["sha256"], model=suggestion["model"],
+            inputs={"description": body.description}, result=suggestion)
+        return suggestion
 
     @app.get("/questionnaire")
     def questionnaire(c: Ctx = Depends(ctx)) -> dict:

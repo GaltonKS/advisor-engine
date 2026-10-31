@@ -68,8 +68,9 @@ def test_injected_returns_leave_market_figures_out():
 
 def test_tool_schemas():
     assert [t["name"] for t in TOOLS] == ["get_risk_profile", "get_holdings", "run_what_if",
-                                          "run_stress_test", "show_chart"]
-    assert all(t["input_schema"]["required"][0] == "holdings_path" for t in TOOLS)
+                                          "run_stress_test", "show_chart", "refer_to_stress_test"]
+    # Every engine tool reads a holdings file; the referral is only a pointer.
+    assert all(t["input_schema"]["required"][0] == "holdings_path" for t in TOOLS[:-1])
 
 
 def test_get_holdings():
