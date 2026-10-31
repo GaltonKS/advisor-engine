@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Empty, ErrorNote, Field, Loading, Panel } from "../components/ui";
+import { Empty, ErrorNote, Field, FilePicker, Loading, Panel } from "../components/ui";
 import { useApi } from "../lib/api";
 import { date } from "../lib/format";
 import type { Client, Portfolio } from "../lib/types";
@@ -102,6 +102,7 @@ export default function Clients() {
   const [name, setName] = useState("");
   const [objective, setObjective] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [fileMissing, setFileMissing] = useState(false);
 
   const create = useMutation({
     mutationFn: async () => {
@@ -121,6 +122,7 @@ export default function Clients() {
 
   function submit(e: FormEvent) {
     e.preventDefault();
+    if (!file) { setFileMissing(true); return; }
     create.mutate();
   }
 
@@ -148,10 +150,11 @@ export default function Clients() {
             <input className="input" maxLength={500} value={objective} onChange={(e) => setObjective(e.target.value)}
                    placeholder="e.g. retirement income, 15+ year horizon" />
           </Field>
-          <Field label="Holdings CSV (optional)">
-            <input className="text-sm" type="file" accept=".csv,text/csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-            <span className="mt-1 block text-xs text-faint">Columns: ticker, shares, price, sector. Up to 2 MB.</span>
-          </Field>
+          <FilePicker label="Holdings CSV" required accept=".csv,text/csv" file={file}
+                      onChange={(f) => { setFile(f); if (f) setFileMissing(false); }}
+                      error={fileMissing ? "Choose a holdings CSV to create the client." : null}
+                      hint={<>Columns: ticker, shares, price, sector. Up to 2 MB.{" "}
+                        <a className="underline" href="/holdings-template.csv" download>Download a template</a></>} />
           <ErrorNote error={create.error} />
           <button className="btn btn-primary w-full justify-center" disabled={create.isPending}>
             {create.isPending ? "Creating…" : "+ Create client"}
