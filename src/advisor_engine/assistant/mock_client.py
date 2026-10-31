@@ -135,6 +135,20 @@ def _coverage_note(d: dict) -> str:
             "figures are incomplete; sectors can be added in the Holdings tab.")
 
 
+_CLASS_NAMES = {"equity": "stocks", "fixed_income": "bonds", "preferred": "preferred stock",
+                "cash": "cash", "other": "other holdings"}
+
+
+def _asset_mix_note(d: dict) -> str:
+    """The asset class split, or "" when everything is equity (nothing to add)."""
+    mix = d.get("asset_class_exposure") or {}
+    if set(mix) <= {"equity"}:
+        return ""
+    parts = [f"{_pct(w)} {_CLASS_NAMES.get(c, c)}" for c, w in mix.items()]
+    listed = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
+    return f"By asset class it is {listed}."
+
+
 def _classified_sectors(d: dict) -> list[tuple[str, float]]:
     return [(s, w) for s, w in d["sector_exposure"].items() if s != _UNCLASSIFIED]
 
@@ -160,6 +174,8 @@ def _overview(d: dict, concise: bool, objective: str) -> str:
     ]
     if objective:
         out.append(f"I'm reading this with the firm's {objective} objective in mind.")
+    if _asset_mix_note(d):
+        out.append(_asset_mix_note(d))
     if _coverage_note(d):
         out.append(_coverage_note(d))
     if not concise:

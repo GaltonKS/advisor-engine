@@ -2,7 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Bar, ErrorNote, Field, Loading, Panel, StatCard } from "../../components/ui";
 import { useApi } from "../../lib/api";
-import { lossPct, money, pct, signed } from "../../lib/format";
+import { assetClassLabel, lossPct, money, pct, signed } from "../../lib/format";
 import type { Scenario, StressResult } from "../../lib/types";
 import type { Workspace } from "../ClientWorkspace";
 
@@ -10,7 +10,8 @@ export default function StressTab({ ws }: { ws: Workspace }) {
   const api = useApi();
   const scenarios = useQuery({ queryKey: ["scenarios"], queryFn: () => api<Scenario[]>("/stress/scenarios") });
   const run = useMutation({
-    mutationFn: (body: { scenario_id?: string; sector_shocks?: Record<string, number>; default_shock?: number }) =>
+    mutationFn: (body: { scenario_id?: string; sector_shocks?: Record<string, number>; default_shock?: number;
+                         asset_class_shocks?: Record<string, number> }) =>
       api<StressResult>(`/portfolios/${ws.portfolio.id}/stress`, { json: body }),
   });
   // Holdings with no sector take the "all other sectors" shock; "Unclassified" isn't a sector to shock.
@@ -18,11 +19,17 @@ export default function StressTab({ ws }: { ws: Workspace }) {
   // Custom shocks are typed as percentages and sent as fractions; the engine applies them.
   const [custom, setCustom] = useState<Record<string, string>>({});
   const [other, setOther] = useState("-10");
+  // Bonds and preferreds held in this portfolio can be given their own move; cash holds
+  // its value unless given one. Blank means "use the sector / all other value".
+  const classes = Object.keys(ws.profile.asset_class_exposure ?? {}).filter((c) => ["fixed_income", "preferred", "cash"].includes(c));
+  const [classCustom, setClassCustom] = useState<Record<string, string>>({});
 
   const runCustom = () => run.mutate({
     sector_shocks: Object.fromEntries(Object.entries(custom).filter(([, v]) => v.trim() !== "")
       .map(([k, v]) => [k, Number(v) / 100])),
     default_shock: Number(other) / 100,
+    asset_class_shocks: Object.fromEntries(Object.entries(classCustom).filter(([, v]) => v.trim() !== "")
+      .map(([k, v]) => [k, Number(v) / 100])),
   });
 
   if (scenarios.isLoading) return <Loading />;
@@ -40,12 +47,18 @@ export default function StressTab({ ws }: { ws: Workspace }) {
 
       <details className="border border-rule bg-card p-4">
         <summary className="cursor-pointer font-serif text-lg">Custom scenario</summary>
-        <p className="mt-2 text-xs text-muted">Enter a move for each sector in percent (negative for a fall). Blank sectors use the "all other" value.</p>
+        <p className="mt-2 text-xs text-muted">Enter a move for each sector in percent (negative for a fall). Blank sectors use the "all other" value. A move for bonds, preferred stock or cash applies to every holding of that kind, whatever its sector; cash holds its value unless you give it a move.</p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {sectors.map((s) => (
             <Field key={s} label={s}>
               <input className="input" inputMode="decimal" placeholder="%" value={custom[s] ?? ""}
                      onChange={(e) => setCustom({ ...custom, [s]: e.target.value })} />
+            </Field>
+          ))}
+          {classes.map((c) => (
+            <Field key={c} label={`${assetClassLabel(c)} (all)`}>
+              <input className="input" inputMode="decimal" placeholder={c === "cash" ? "0 (holds value)" : "%"}
+                     value={classCustom[c] ?? ""} onChange={(e) => setClassCustom({ ...classCustom, [c]: e.target.value })} />
             </Field>
           ))}
           <Field label="All other holdings">
@@ -84,6 +97,19 @@ function Result({ r }: { r: StressResult }) {
             </tbody>
           </table>
         </Panel>
+        {r.asset_classes && r.asset_classes.some((a) => a.asset_class !== "equity") && (
+          <Panel title="By asset class">
+            <table className="data">
+              <thead><tr><th>Asset class</th><th className="num">Weight</th><th className="num">Shock</th><th className="num">Effect on portfolio</th></tr></thead>
+              <tbody>
+                {r.asset_classes.map((a) => (
+                  <tr key={a.asset_class}><td>{assetClassLabel(a.asset_class)}</td><td className="num">{pct(a.weight)}</td>
+                    <td className="num">{signed(pct(a.shock), a.shock)}</td><td className="num">{signed(pct(a.contribution, 2), a.contribution)}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </Panel>
+        )}
         <Panel title="Largest losses by position">
           {r.positions.slice(0, 8).map((p) => (
             <Bar key={p.ticker} tone="bad" label={`${p.ticker} · ${p.sector}`}
@@ -92,7 +118,7 @@ function Result({ r }: { r: StressResult }) {
           ))}
         </Panel>
       </div>
-      <p className="text-xs text-muted">{r.basis} Every holding in a sector moves by the same amount.</p>
+      <p className="text-xs text-muted">{r.basis} Every holding in a sector moves by the same amount, except bonds, preferred stock and cash, which move by their asset class's shock. A sector's shock shown here is the weighted average of its holdings' shocks.</p>
     </div>
   );
 }

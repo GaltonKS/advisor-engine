@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { byKind, lossPct, pct, signed } from "./format";
+import { assetClassLabel, byKind, lossPct, pct, signed } from "./format";
 
 describe("format", () => {
   it("formats fractions as percentages", () => {
@@ -10,6 +10,10 @@ describe("format", () => {
     expect(signed(pct(0.012), 0.012)).toBe("+1.2%");
     expect(signed(pct(-0.003), -0.003)).toBe("−0.3%");
     expect(signed(pct(0), 0)).toBe("0.0%");
+  });
+  it("names asset classes", () => {
+    expect(assetClassLabel("fixed_income")).toBe("Bonds");
+    expect(assetClassLabel("unknown_label")).toBe("unknown_label");
   });
   it("formats comparison values by kind", () => {
     expect(byKind("loss", 0.093)).toBe("9.3%");

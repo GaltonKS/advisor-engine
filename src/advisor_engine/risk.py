@@ -17,11 +17,28 @@ from .holdings import UNCLASSIFIED
 
 
 def shrunk_covariance(returns: pd.DataFrame) -> tuple[np.ndarray, float]:
-    """Ledoit-Wolf shrunk covariance. Returns (covariance, shrinkage intensity)."""
-    # Shrinking toward a structured target stabilises the estimate when the
-    # number of periods is small relative to the number of holdings.
-    lw = LedoitWolf().fit(returns.values)
-    return lw.covariance_, float(lw.shrinkage_)
+    """Covariance with Ledoit-Wolf shrinkage applied to the correlations.
+
+    Returns (covariance, shrinkage intensity). Each series is standardised, Ledoit-Wolf
+    shrinks the resulting correlation matrix toward the identity, and the result is
+    rescaled by the sample volatilities: cov = D R_shrunk D.
+
+    Shrinking stabilises the estimate when the number of periods is small relative to
+    the number of holdings. Shrinking the covariance itself (target: average variance
+    times the identity) would also pull every volatility toward the average, so a
+    near-riskless holding such as cash would pick up a volatility it doesn't have.
+    Here only correlations are shrunk; each holding keeps its own sample volatility.
+    """
+    x = returns.to_numpy(dtype=float)
+    vol = x.std(axis=0)
+    # A constant series has no volatility to standardise by; it is then uncorrelated
+    # with everything and contributes no variance.
+    safe = np.where(vol > 0, vol, 1.0)
+    lw = LedoitWolf().fit((x - x.mean(axis=0)) / safe)
+    std_cov = lw.covariance_
+    d = np.sqrt(np.diag(std_cov))
+    corr = std_cov / np.outer(d, d)
+    return corr * np.outer(vol, vol), float(lw.shrinkage_)
 
 
 def effective_number_of_bets(weights: np.ndarray, cov: np.ndarray) -> dict:
@@ -177,6 +194,7 @@ def position_risk(holdings: pd.DataFrame, cov: np.ndarray, corr_floor: float = 1
             {
                 "ticker": row["ticker"],
                 "sector": row["sector"],
+                "asset_class": row.get("asset_class", "equity"),
                 "weight": float(w[i]),
                 "risk_share": float(risk_share[i]),
                 "risk_to_weight": float(risk_share[i] / w[i]) if w[i] > 0 else 0.0,
@@ -195,6 +213,17 @@ def sector_exposure(holdings: pd.DataFrame) -> dict[str, float]:
     if UNCLASSIFIED in s.index:
         out[UNCLASSIFIED] = float(s[UNCLASSIFIED])
     return out
+
+
+def asset_class_exposure(holdings: pd.DataFrame) -> dict[str, float]:
+    """Portfolio weight by asset class (see holdings.ASSET_CLASSES), largest first.
+
+    A holdings frame without the column is all equity, as the return model treats it.
+    """
+    classes = holdings["asset_class"] if "asset_class" in holdings else pd.Series(
+        "equity", index=holdings.index)
+    s = holdings["weight"].groupby(classes).sum().sort_values(ascending=False)
+    return {k: float(v) for k, v in s.items()}
 
 
 def sector_coverage(holdings: pd.DataFrame) -> dict:
@@ -254,6 +283,7 @@ class RiskProfile:
     largest_positions: list = field(default_factory=list)
     positions: list = field(default_factory=list)
     sector_coverage: dict = field(default_factory=dict)
+    asset_class_exposure: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -313,4 +343,5 @@ def risk_profile(
         largest_positions=top.to_dict("records"),
         positions=position_risk(holdings, cov),
         sector_coverage=sector_coverage(holdings),
+        asset_class_exposure=asset_class_exposure(holdings),
     )

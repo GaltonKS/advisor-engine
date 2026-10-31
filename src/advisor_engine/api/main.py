@@ -64,6 +64,7 @@ class HoldingRow(BaseModel):
     shares: float
     price: float
     sector: str = Field(default="", max_length=60)  # blank -> Unclassified
+    asset_class: str = Field(default="", max_length=60)  # blank -> equity
 
 
 class HoldingsIn(BaseModel):
@@ -75,6 +76,7 @@ class StressIn(BaseModel):
     scenario_id: str | None = None  # a preset, or else the custom shocks below
     sector_shocks: dict[str, float] = Field(default_factory=dict)
     default_shock: float = 0.0
+    asset_class_shocks: dict[str, float] = Field(default_factory=dict)  # fixed_income, preferred, cash
 
 
 class QuestionnaireIn(BaseModel):
@@ -295,8 +297,10 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
             else:
                 result = {"scenario": {"id": "custom", "label": "Custom scenario",
                                        "sectors": body.sector_shocks,
-                                       "default": body.default_shock},
-                          **stress_test(df, body.sector_shocks, body.default_shock)}
+                                       "default": body.default_shock,
+                                       "asset_classes": body.asset_class_shocks},
+                          **stress_test(df, body.sector_shocks, body.default_shock,
+                                        body.asset_class_shocks)}
         except ValueError as e:
             raise HTTPException(422, str(e)) from e
         log(c, "stress", client_id=p["client_id"], portfolio_id=portfolio_id,
