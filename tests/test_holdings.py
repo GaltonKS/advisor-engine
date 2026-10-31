@@ -66,7 +66,7 @@ def test_missing_header_names_what_was_found():
 
 
 def test_non_numeric_value_names_the_line():
-    data = b"ticker,shares,price,sector\nAAA,1200,185,Tech\nTOTAL,,,\n"
+    data = b"ticker,shares,price,sector\nAAA,1200,185,Tech\nCCC,,185,Tech\n"
     with pytest.raises(ValueError, match=r"Line 3: shares value '' is empty"):
         load_holdings(data)
 
@@ -155,3 +155,43 @@ def test_compare_skips_a_withheld_figure():
     gap = _profile(load_holdings(b"ticker,shares,price,sector\nAAA,1,2,Tech\nBBB,1,2,\n"))
     keys = [r["key"] for r in compare_profiles(full, gap)["headline"]]
     assert "sector_effective_bets" not in keys and "effective_bets" in keys
+
+
+# --- full portfolio exports (many columns, totals rows) ---------------------------
+
+EXPORT_HEADER = ("Ticker,Name,Asset Class,Sector,Shares,Avg Cost,Share Price,Dividend Yield (%),"
+                 "Cost Basis,Market Value,Gain/Loss ($),Gain/Loss (%),Weight (%),"
+                 "Est. Annual Income ($)\n")
+EXPORT_ROWS = ('AAA,A Co,Equity,Tech,1200,"$150.00","$185.00",0.44%,"$180,000.00",'
+               '"$222,000.00","$42,000.00",23.3%,69.7%,$50.00\n'
+               'BBB,B Co,Equity,Tech,800,$400.00,$420.50,3.2%,"$320,000.00","$336,400.00",'
+               '"$16,400.00",5.1%,30.3%,$148.80\n')
+
+
+def test_portfolio_export_uses_share_price_not_cost():
+    _check(load_holdings((EXPORT_HEADER + EXPORT_ROWS).encode()))
+
+
+@pytest.mark.parametrize("header", ["Share Price ($)", "Price per share", "Current Price ($)"])
+def test_price_header_variants(header):
+    data = f"Ticker,Shares,{header},Sector\nAAA,1200,185,Tech\nBBB,800,420.5,Tech\n"
+    _check(load_holdings(data.encode()))
+
+
+@pytest.mark.parametrize("header", ["Avg Cost", "Cost Basis", "Market Value"])
+def test_cost_or_value_columns_are_never_read_as_price(header):
+    data = f"Ticker,Shares,{header},Sector\nAAA,1200,185,Tech\n".encode()
+    with pytest.raises(ValueError, match=r"missing columns: \['price'\]"):
+        load_holdings(data)
+
+
+def test_totals_rows_are_skipped():
+    totals = (',,,,,,,,"$500,000.00","$558,400.00",,,100%,\n'
+              'Total:,,,,,,,,,"$558,400.00",,,,\n')
+    _check(load_holdings((EXPORT_HEADER + EXPORT_ROWS + totals).encode()))
+
+
+def test_a_holding_with_blank_shares_is_still_an_error():
+    data = (EXPORT_HEADER + EXPORT_ROWS + 'CCC,C Co,Equity,Tech,,,,,,"$1,000.00",,,,\n').encode()
+    with pytest.raises(ValueError, match=r"Line 4: shares value '' is empty"):
+        load_holdings(data)

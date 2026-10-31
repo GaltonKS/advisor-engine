@@ -28,16 +28,25 @@ COLUMNS = [*REQUIRED, "sector"]
 UNCLASSIFIED = "Unclassified"
 
 # Header names that mean exactly one required column. Kept short on purpose: an alias
-# is a claim about what someone else's column means. No alias for sector.
+# is a claim about what someone else's column means. No alias for sector. A trailing
+# "($)" is dropped before lookup, so "Share Price ($)" matches "share price".
+# Deliberately absent: cost columns ("avg cost", "cost basis") are what was paid, not
+# the current price, and "market value" is a position total, not a per-share price.
 ALIASES = {
     "symbol": "ticker",
     "quantity": "shares",
     "qty": "shares",
+    "share price": "price",
+    "price per share": "price",
     "last price": "price",
     "current price": "price",
     "market price": "price",
-    "price ($)": "price",
 }
+
+# Ticker cells that mark a broker export's summary line rather than a holding. Such a
+# row is skipped only when its shares and price are also blank.
+_SUMMARY_LABELS = {"", "total", "totals", "grand total", "subtotal", "account total",
+                   "portfolio total"}
 
 _DELIMITERS = (",", ";", "\t", "|")
 _HEADER_SEARCH_LINES = 20
@@ -46,6 +55,7 @@ _HEADER_SEARCH_LINES = 20
 def _norm_header(name: object) -> str:
     s = str(name).replace("﻿", "").strip().strip('"').strip()
     s = re.sub(r"\s+", " ", s).lower()
+    s = re.sub(r"\s*\(\$\)$", "", s)
     return ALIASES.get(s, s)
 
 
@@ -146,8 +156,11 @@ def read_holdings_csv(source: str | Path | bytes) -> pd.DataFrame:
     if "sector" not in df.columns:
         df["sector"] = ""
     df = df[COLUMNS]
-    # Excel often leaves trailing blank rows; drop rows with nothing in them only.
-    df = df[~df.apply(lambda r: all(str(v).strip() == "" for v in r), axis=1)]
+    # Excel often leaves trailing blank rows, and broker exports add a totals line
+    # (no ticker or "Total", with only the value columns filled). Drop those only.
+    blank = lambda v: str(v).strip() == ""  # noqa: E731
+    summary = df["ticker"].map(lambda t: str(t).strip().rstrip(":").lower() in _SUMMARY_LABELS)
+    df = df[~(summary & df["shares"].map(blank) & df["price"].map(blank))]
 
     for col in ("shares", "price"):
         parsed = []
