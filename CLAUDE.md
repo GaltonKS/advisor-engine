@@ -54,7 +54,8 @@ src/advisor_engine/
     demo.py            end-to-end run on data/sample/sample_holdings.csv
     assistant/
         _paths.py      REPO_ROOT, DATA_DIR, DEFAULT_HOLDINGS, AUDIT_PATH
-        tools.py       tool schemas (TOOLS), execute_tool(), get_returns(), path guard
+        tools.py       tool schemas (TOOLS: risk profile, holdings, what-if, stress), execute_tool(),
+                       engine_profile(), get_returns() / get_market_returns(), path guard
         prompts.py     SYSTEM_PROMPT, FIRM_PROFILE, build_system_prompt()
         chat.py        run_turn(): tool loop, number check, retry, audit; llm_mode()
         numcheck.py    verify(reply, tool_outputs): every figure must match tool output
@@ -132,8 +133,17 @@ every turn --append_audit--> data/audit/audit.jsonl
 - `execute_tool` never raises: errors come back as `ToolResult(..., is_error=True)`.
 - Holdings paths must resolve inside `data/`, must be `.csv`, and may not be under
   `data/audit/`. Keep all file access going through `resolve_holdings_path`.
-- `get_returns` in `tools.py` is **the one place real market data plugs in**. When it
-  changes, update `RETURNS_SOURCE` to match.
+- `get_returns` and `get_market_returns` in `tools.py` are **the only places real market
+  data plugs in**. When they change, update `RETURNS_SOURCE` / `MARKET_SOURCE` to match.
+  The synthetic market factor stands in as the market today, so profiles from
+  `engine_profile` carry beta and correlation to the market (per position and
+  portfolio). The API uses `engine_profile` too, so tool and screen figures agree.
+- The model's tools: `get_risk_profile`, `get_holdings`, `run_what_if` (changes applied
+  by `apply_changes`, differences from `compare.compare_profiles`) and `run_stress_test`.
+  What-if additions must use figures the adviser supplied (the prompt says so).
+- Profiles also carry `sector_risk` / `asset_class_risk` (weight and summed risk share
+  per group). The prompt's glossary says what each field means; keep it in step with
+  new fields, since a real figure quoted with the wrong meaning passes the number check.
 - The firm disclaimer is appended verbatim by code in `chat.py`, never given to the
   model and never run through the number check.
 - Mode: `ADVISOR_LLM=mock|anthropic`. Unset means mock without `ANTHROPIC_API_KEY`,
@@ -217,8 +227,8 @@ every turn --append_audit--> data/audit/audit.jsonl
 
 ### Real market data
 - Replace the body of `tools.get_returns` (contract: columns cover every holdings
-  ticker) and set `RETURNS_SOURCE`. Pass a broad index as `market` to `risk_profile`
-  to get meaningful beta / market share of risk.
+  ticker) and set `RETURNS_SOURCE`. Replace `tools.get_market_returns` with a broad
+  index on the same periods and set `MARKET_SOURCE`.
 - Do not commit licensed price or fundamentals data. Everything in `data/` except
   `data/sample/` is gitignored for that reason.
 
