@@ -290,6 +290,67 @@ def test_model_from_env(monkeypatch, tmp_path):
     assert client.calls[0]["model"] == "env-model"
 
 
+# --- prompt caching and token usage -------------------------------------------------
+
+class UsageClient(FakeClient):
+    """FakeClient whose responses report token usage, like the real API."""
+
+    def __init__(self, script, usages):
+        super().__init__(script)
+        self.usages = list(usages)
+
+    def create(self, **kw):
+        resp = super().create(**kw)
+        resp.usage = SimpleNamespace(**self.usages.pop(0))
+        return resp
+
+
+def test_every_call_asks_for_prompt_caching(tmp_path):
+    client = FakeClient([[tool_block()], [text_block(good_reply())]])
+    run(client, tmp_path)
+    assert len(client.calls) == 2
+    assert all(c["cache_control"] == {"type": "ephemeral"} for c in client.calls)
+
+
+def test_cached_prefix_is_identical_across_turns(tmp_path):
+    # Caching only pays if tools and system prompt are byte-identical call to call.
+    client = FakeClient([[tool_block()], [text_block(good_reply())]])
+    first = run(client, tmp_path, default_holdings=SAMPLE)
+    chat.run_turn("And the second largest?", first.history, client, model="test-model",
+                  default_holdings=SAMPLE, audit_path=tmp_path / "audit.jsonl")
+    assert len({json.dumps(c["tools"]) for c in client.calls}) == 1
+    assert len({c["system"] for c in client.calls}) == 1
+
+
+def test_token_usage_is_summed_over_the_turn_and_audited(tmp_path):
+    client = UsageClient(
+        [[tool_block()], [text_block(good_reply())]],
+        [{"input_tokens": 3500, "output_tokens": 120, "cache_read_input_tokens": 0,
+          "cache_creation_input_tokens": 3400},
+         {"input_tokens": 1800, "output_tokens": 300, "cache_read_input_tokens": 3400,
+          "cache_creation_input_tokens": 1750}])
+    run(client, tmp_path)
+    (rec,) = audit_lines(tmp_path)
+    assert rec["usage"] == {"api_calls": 2, "input_tokens": 5300, "output_tokens": 420,
+                            "cache_read_input_tokens": 3400,
+                            "cache_creation_input_tokens": 5150}
+
+
+def test_missing_cache_fields_count_as_zero(tmp_path):
+    client = UsageClient([[text_block("Hello.")]],
+                         [{"input_tokens": 10, "output_tokens": 5,
+                           "cache_read_input_tokens": None}])
+    run(client, tmp_path)
+    assert audit_lines(tmp_path)[0]["usage"] == {
+        "api_calls": 1, "input_tokens": 10, "output_tokens": 5,
+        "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}
+
+
+def test_clients_without_usage_record_none_not_zeros(tmp_path):
+    run(FakeClient([[text_block("Hello.")]]), tmp_path)
+    assert audit_lines(tmp_path)[0]["usage"] is None
+
+
 # --- firm profile -----------------------------------------------------------------
 
 def test_firm_profile_defaults_to_none_and_leaves_prompt_alone():

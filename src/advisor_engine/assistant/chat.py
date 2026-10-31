@@ -21,6 +21,17 @@ MAX_TOOL_ROUNDS = 5
 MAX_RETRIES = 1
 MAX_TOKENS = 2048
 
+# Top-level automatic prompt caching: the API caches the request up to its last block, so
+# the next call in the tool loop (and the next turn, within the 5-minute TTL) reads the
+# tools, system prompt and history from cache at about a tenth of the input price. It
+# changes billing only, not the reply. It relies on the prefix staying byte-identical:
+# keep TOOLS in a fixed order and nothing per-request (dates, ids) in the system prompt.
+CACHE_CONTROL = {"type": "ephemeral"}
+
+# Token counts summed over a turn's API calls, recorded in the audit log.
+USAGE_FIELDS = ("input_tokens", "output_tokens", "cache_read_input_tokens",
+                "cache_creation_input_tokens")
+
 
 @dataclass
 class TurnResult:
@@ -76,6 +87,19 @@ def _blocks(content) -> list[dict]:
         elif b.type == "tool_use":
             out.append({"type": "tool_use", "id": b.id, "name": b.name, "input": dict(b.input)})
     return out
+
+
+def _add_usage(total: dict | None, resp) -> dict | None:
+    """Add `resp.usage` to the turn's running totals. Clients that report no usage (the
+    mock, test fakes) leave it None, so the audit log never shows made-up zeros."""
+    usage = getattr(resp, "usage", None)
+    if usage is None:
+        return total
+    total = total or {"api_calls": 0, **{k: 0 for k in USAGE_FIELDS}}
+    total["api_calls"] += 1
+    for k in USAGE_FIELDS:
+        total[k] += int(getattr(usage, k, None) or 0)
+    return total
 
 
 def _tool_outputs(messages: list[dict]) -> list[str]:
@@ -161,11 +185,14 @@ def run_turn(
     rounds = 0
     holdings_sha = None
     text, verification, block_reason = "", {"ok": True, "unmatched": [], "checked": 0}, None
+    usage = None
 
     while True:
         resp = client.messages.create(
-            model=model, max_tokens=MAX_TOKENS, system=system, tools=TOOLS, messages=list(messages)
+            model=model, max_tokens=MAX_TOKENS, system=system, tools=TOOLS, messages=list(messages),
+            cache_control=CACHE_CONTROL,
         )
+        usage = _add_usage(usage, resp)
         blocks = _blocks(resp.content)
         messages.append({"role": "assistant", "content": blocks})
         uses = [b for b in blocks if b["type"] == "tool_use"]
@@ -228,6 +255,7 @@ def run_turn(
         "verification": verification,
         "blocked": blocked,
         "block_reason": block_reason,
+        "usage": usage,
     }
     if audit_sink:
         audit_sink(build_record(record))
