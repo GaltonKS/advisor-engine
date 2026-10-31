@@ -146,6 +146,14 @@ _SCENARIOS = (("recession", "recession"), ("rates", "rising_rates"), ("interest"
               ("tech", "tech_selloff"), ("crash", "broad_selloff"), ("sell-off", "broad_selloff"),
               ("selloff", "broad_selloff"), ("scenario", "broad_selloff"),
               ("stress test", "broad_selloff"))
+# Hypothetical events the engine can't forecast: the mock refers these to the Stress
+# test tab (after running a matching preset, if one fits).
+_HYPOTHETICAL = re.compile(
+    r"\b(war|invade\w*|invasion|blockade\w*|election|pandemic|tariffs?|regulation|crash\w*|"
+    r"recession|rates? (?:rise|rises|jump|jumps|hike|hikes)|interest rates?|inflation|"
+    r"sell-?off|scenario)\b")
+_REFERRAL = ("To explore this scenario with your own assumptions, open it in the Stress test "
+             "tab: an AI suggests shocks for you to review, and the engine computes the result.")
 _HOLDINGS = re.compile(r"\b(worth|dollars?|how many shares|market value)\b|\$")
 
 
@@ -501,8 +509,14 @@ class MockClient:
             chart = chart_for(question, done, parsed, path)
             if chart:
                 return self._use("show_chart", chart)
+        hypothetical = (_HYPOTHETICAL.search(question.lower()) and "run_what_if" not in done)
+        if hypothetical and "refer_to_stress_test" not in done:
+            stress = parsed.get("run_stress_test")
+            preset = stress["scenario"]["id"] if isinstance(stress, dict) else "none"
+            return self._use("refer_to_stress_test", {"closest_preset": preset})
 
-        main = next((n for n in reversed(done) if n != "show_chart"), "get_risk_profile")
+        main = next((n for n in reversed(done) if n not in ("show_chart", "refer_to_stress_test")),
+                    "get_risk_profile")
         data = parsed.get(main)
         if isinstance(data, dict) and main == "run_what_if":
             text = _what_if(data)
@@ -510,10 +524,15 @@ class MockClient:
             text = _stress(data)
         elif isinstance(data, dict) and main == "get_holdings":
             text = _holdings(data)
+        elif "refer_to_stress_test" in done:
+            text = ("The engine doesn't forecast events like this, so I can't tell you what it "
+                    "would do to the portfolio from the risk profile alone.")
         else:
             raw = next((r["content"] for n, r in zip(done, results) if n == "get_risk_profile"),
                        results[-1]["content"])
             text = render_reply(question, raw, system, force_bad_number=self.force_bad_number)
+        if "refer_to_stress_test" in done:
+            text += "\n\n" + _REFERRAL
         chart = parsed.get("show_chart")
         if isinstance(chart, dict) and "chart" in chart:
             text += f"\n\nThe chart below shows {chart['chart']['title'].lower()}."

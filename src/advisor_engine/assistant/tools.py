@@ -8,6 +8,8 @@ way to compute. Tools:
   engine's before/after comparison (compare.compare_profiles).
 - run_stress_test: a preset or custom shock scenario (stress.py).
 - show_chart: a chart spec built by the engine (charts.py) for the web app to draw.
+- refer_to_stress_test: a pointer that lets the web app open the question in the Stress
+  test tab (hypothetical events); it runs nothing and returns no figures.
   The model picks the kind; it never supplies a figure or a label.
 Every file path goes through `resolve_holdings_path`.
 """
@@ -139,7 +141,25 @@ SHOW_CHART = {
     },
 }
 
-TOOLS = [GET_RISK_PROFILE, GET_HOLDINGS, RUN_WHAT_IF, RUN_STRESS_TEST, SHOW_CHART]
+REFER_TO_STRESS_TEST = {
+    "name": "refer_to_stress_test",
+    "description": (
+        "For a hypothetical event the engine can't forecast (a war, an election, a rate "
+        "move, a market crash, a new regulation): give the advisor a button that opens "
+        "their question in the Stress test tab, where an AI suggests shocks for them to "
+        "review and the engine computes the result. Name the closest preset if one fits. "
+        "Not for changes to the holdings (use run_what_if) or for questions the profile "
+        "already answers."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {"closest_preset": {"type": "string", "enum": [*SCENARIOS, "none"]}},
+        "required": ["closest_preset"],
+    },
+}
+
+TOOLS = [GET_RISK_PROFILE, GET_HOLDINGS, RUN_WHAT_IF, RUN_STRESS_TEST, SHOW_CHART,
+         REFER_TO_STRESS_TEST]
 
 # Labels where the returns came from, so the model can say so in its answer.
 RETURNS_SOURCE = "synthetic"
@@ -287,6 +307,17 @@ def execute_tool(
     if name not in {t["name"] for t in TOOLS}:
         return ToolResult(f"Unknown tool: {name}", is_error=True)
     tool_input = tool_input or {}
+    if name == "refer_to_stress_test":
+        # A pointer for the web app, not an engine run: no file, and no figures.
+        preset = tool_input.get("closest_preset")
+        sc = SCENARIOS.get(preset) if preset else None
+        return ToolResult(json.dumps({
+            "referral": "stress_test",
+            "closest_preset": preset if sc else None,
+            "closest_preset_label": sc["label"] if sc else None,
+            "note": "The advisor can explore this scenario in the Stress test tab: an AI "
+                    "suggests shocks to review, and the engine computes the result.",
+        }))
     try:
         path = resolve_holdings_path(str(tool_input.get("holdings_path", "")), data_dir)
         sha = hashlib.sha256(path.read_bytes()).hexdigest()

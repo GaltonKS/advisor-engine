@@ -62,6 +62,7 @@ src/advisor_engine/
         numcheck.py    verify(reply, tool_outputs): every figure must match tool output
         audit.py       append_audit(): one JSON line per turn, API keys redacted
         mock_client.py offline stand-in for the Anthropic client (templated replies)
+        scenario.py    AI-suggested stress shocks for a described scenario (+ MockSuggester)
         cli.py         terminal REPL (`python -m advisor_engine.assistant`)
     ui/app.py          Streamlit demo; lays out engine output, computes nothing
     ui/theme.py        KVS stylesheet + escaped HTML builders (cards, bars, audit panel)
@@ -141,12 +142,28 @@ every turn --append_audit--> data/audit/audit.jsonl
   `engine_profile` carry beta and correlation to the market (per position and
   portfolio). The API uses `engine_profile` too, so tool and screen figures agree.
 - The model's tools: `get_risk_profile`, `get_holdings`, `run_what_if` (changes applied
-  by `apply_changes`, differences from `compare.compare_profiles`), `run_stress_test` and
-  `show_chart` (specs from `charts.py`; see "Charts").
+  by `apply_changes`, differences from `compare.compare_profiles`), `run_stress_test`,
+  `show_chart` (specs from `charts.py`; see "Charts") and `refer_to_stress_test`.
   What-if additions must use figures the adviser supplied (the prompt says so).
 - Profiles also carry `sector_risk` / `asset_class_risk` (weight and summed risk share
   per group). The prompt's glossary says what each field means; keep it in step with
   new fields, since a real figure quoted with the wrong meaning passes the number check.
+- Hypothetical events (wars, elections, rate moves, crashes) are not forecasts the
+  engine makes. The Assistant says so, may run a fitting preset with `run_stress_test`,
+  and calls `refer_to_stress_test`, which runs nothing and returns no figures; the web
+  app turns it into an "Open in Stress test" button carrying the question over.
+- AI-suggested scenarios (`scenario.py`, `POST /portfolios/{id}/stress/suggest`): the AI
+  suggests **assumptions only** (a shock per sector / asset class and a default, via
+  structured output limited to the portfolio's own sectors and the shockable classes).
+  The adviser edits them in the Stress test tab; the engine computes every result.
+  The AI's explanation may quote only its own shocks: it is number-checked against
+  them and withheld otherwise. Results carry `assumptions.source` (preset / adviser /
+  ai_suggested / ai_suggested_edited) and the screen labels assumptions and results
+  separately. Never let the AI produce a portfolio result, loss or value.
+- Live suggestions follow the same gate as the Assistant (`Settings.llm`, so Supabase
+  sign-in only) and the same daily limit; dev auth and tests use `MockSuggester`. The
+  request uses `output_config.format` (current models reject forced `tool_choice`) and
+  server-side refusal fallbacks (`fallbacks="default"`).
 - The firm disclaimer is appended verbatim by code in `chat.py`, never given to the
   model and never run through the number check.
 - Mode: `ADVISOR_LLM=mock|anthropic`. Unset means mock without `ANTHROPIC_API_KEY`,

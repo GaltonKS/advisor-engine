@@ -429,6 +429,44 @@ def test_assistant_errors_are_plain_and_keep_details_server_side(api, monkeypatc
     assert expected in detail and str(error) not in detail and "req_" not in detail
 
 
+def test_ai_suggested_scenario_then_engine_run_is_labelled_and_audited(api):
+    client, store = api
+    _, p = setup_portfolio(client)
+    sug = client.post(f"/portfolios/{p['id']}/stress/suggest", headers=as_("alice"),
+                      json={"description": "A deep recession"})
+    assert sug.status_code == 200, sug.text
+    s = sug.json()
+    assert s["source"] == "mock" and s["label"] == "Recession"
+    body = {"sector_shocks": s["sector_shocks"], "default_shock": s["default_shock"],
+            "asset_class_shocks": s["asset_class_shocks"], "description": "A deep recession",
+            "suggested": s}
+    r = client.post(f"/portfolios/{p['id']}/stress", headers=as_("alice"), json=body).json()
+    assert r["assumptions"]["source"] == "ai_suggested" and r["scenario"]["label"] == "Recession"
+    edited = {**body, "default_shock": -0.5}
+    r2 = client.post(f"/portfolios/{p['id']}/stress", headers=as_("alice"), json=edited).json()
+    assert r2["assumptions"]["source"] == "ai_suggested_edited"
+    assert r2["portfolio_return"] != r["portfolio_return"]  # the engine ran the edited shocks
+    events = [a["event"] for a in audit_records(store, "alice", p["firm_id"])]
+    assert "scenario_suggested" in events and events.count("stress") == 2
+
+
+def test_stress_assumption_sources_for_preset_and_adviser(api):
+    client, _ = api
+    _, p = setup_portfolio(client)
+    pre = client.post(f"/portfolios/{p['id']}/stress", headers=as_("alice"), json={"scenario_id": "recession"}).json()
+    own = client.post(f"/portfolios/{p['id']}/stress", headers=as_("alice"), json={"default_shock": -0.1}).json()
+    assert pre["assumptions"]["source"] == "preset" and own["assumptions"]["source"] == "adviser"
+
+
+def test_scenario_suggestion_is_firm_scoped_and_validated(api):
+    client, _ = api
+    _, p = setup_portfolio(client)
+    assert client.post(f"/portfolios/{p['id']}/stress/suggest", headers=as_("bob"),
+                       json={"description": "crash"}).status_code == 404
+    assert client.post(f"/portfolios/{p['id']}/stress/suggest", headers=as_("alice"),
+                       json={"description": ""}).status_code == 422
+
+
 def test_allowed_origins_ignore_trailing_slashes_and_spaces(monkeypatch):
     for k in ("ADVISOR_AUTH", "SUPABASE_URL", "SUPABASE_DB_URL", "RENDER"):
         monkeypatch.delenv(k, raising=False)

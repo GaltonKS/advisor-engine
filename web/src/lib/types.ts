@@ -142,6 +142,23 @@ export interface StressResult {
   asset_classes?: { asset_class: string; weight: number; shock: number; contribution: number }[];
   positions: { ticker: string; sector: string; asset_class?: string; weight: number; shock: number; contribution: number; value_change: number }[];
   basis: string;
+  /** Where the assumptions came from; results are always engine output. */
+  assumptions?: { source: "preset" | "adviser" | "ai_suggested" | "ai_suggested_edited";
+                  description?: string; label?: string; model?: string };
+}
+
+/** AI-suggested shocks for a described scenario: assumptions to review, never results. */
+export interface ScenarioSuggestion {
+  description: string;
+  label: string;
+  sector_shocks: Record<string, number>;
+  asset_class_shocks: Record<string, number>;
+  default_shock: number;
+  reasons: { kind: "sector" | "asset_class" | "default"; target: string; shock: number; reason: string }[];
+  rationale: string;
+  explanation_withheld: boolean;
+  model: string;
+  source: "ai" | "mock";
 }
 
 export interface Question {

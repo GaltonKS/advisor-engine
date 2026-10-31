@@ -69,7 +69,10 @@ export default function AssistantTab({ ws }: { ws: Workspace }) {
           {messages.data?.length === 0 && !ask.isPending && (
             <p className="text-sm text-muted">Ask about this portfolio. Every figure in a reply is checked against the engine's output before you see it.</p>
           )}
-          {messages.data?.map((m, i) => <Message key={i} m={m} />)}
+          {messages.data?.map((m, i) => (
+            <Message key={i} m={m}
+                     onOpenStress={() => ws.go("stress", messages.data?.[i - 1]?.role === "user" ? messages.data[i - 1].content : "")} />
+          ))}
           {ask.isPending && <div className="text-sm text-faint">Checking with the engine…</div>}
           <div ref={bottom} />
         </div>
@@ -115,7 +118,7 @@ export default function AssistantTab({ ws }: { ws: Workspace }) {
   );
 }
 
-function Message({ m }: { m: ChatMessage }) {
+function Message({ m, onOpenStress }: { m: ChatMessage; onOpenStress: () => void }) {
   if (m.role === "user") {
     return <div className="ml-auto max-w-[85%] bg-ink px-4 py-3 text-sm text-card">{m.content}</div>;
   }
@@ -123,7 +126,8 @@ function Message({ m }: { m: ChatMessage }) {
   const ok = (m.tool_calls ?? []).filter((c) => !c.is_error && typeof c.output === "object");
   // Charts carry their own source line; the Sources list covers the other tools.
   const charts = ok.filter((c) => c.name === "show_chart").map((c) => (c.output as unknown as { chart: ChartSpec }).chart);
-  const sources = ok.filter((c) => c.name !== "show_chart");
+  // The referral is a pointer to the Stress test tab, not an engine run, so it isn't a source.
+  const sources = ok.filter((c) => c.name !== "show_chart" && c.name !== "refer_to_stress_test");
   return (
     <div>
       {used.length > 0 && (
@@ -133,6 +137,9 @@ function Message({ m }: { m: ChatMessage }) {
         <div className="border border-bad/40 bg-bad/5 px-3 py-2 text-sm text-bad"><b>✗ Withheld.</b> {m.content}</div>
       ) : (
         <div className="whitespace-pre-wrap font-serif text-[17px] leading-relaxed">{m.content}</div>
+      )}
+      {(m.tool_calls ?? []).some((c) => c.name === "refer_to_stress_test" && !c.is_error) && (
+        <button className="btn mt-3" onClick={onOpenStress}>Open in Stress test →</button>
       )}
       {!m.blocked && charts.map((c, i) => <ChartView key={i} spec={c} />)}
       {!m.blocked && m.verification && (
