@@ -53,6 +53,10 @@ class ClientIn(BaseModel):
     tone: str = Field(default="", max_length=100)
 
 
+class ClientRenameIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+
+
 class TurnIn(BaseModel):
     message: str = Field(default="", max_length=4000)
     draft: bool = False  # ask for a client-ready draft instead of answering `message`
@@ -216,7 +220,8 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
 
     def own_portfolio(c: Ctx, portfolio_id: str) -> dict:
         p = c.db.get_portfolio(c.adv["firm_id"], portfolio_id)
-        if p is None:
+        # A deleted client's portfolios stay on record but are no longer usable.
+        if p is None or c.db.get_client(c.adv["firm_id"], p["client_id"]) is None:
             raise HTTPException(404, "Portfolio not found.")
         return p
 
@@ -266,6 +271,25 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
         return {**client, "portfolios": c.db.list_portfolios(c.adv["firm_id"], client_id),
                 # Scored on read, so a method change never leaves a stale stored score.
                 "questionnaire_result": qn.score(answers) if answers else None}
+
+    @app.patch("/clients/{client_id}")
+    def rename_client(client_id: str, body: ClientRenameIn, c: Ctx = Depends(ctx)) -> dict:
+        old = own_client(c, client_id)["name"]
+        name = body.name.strip()
+        if not name:
+            raise HTTPException(422, "The client name can't be blank.")
+        client = c.db.rename_client(c.adv["firm_id"], client_id, name)
+        if old != name:
+            log(c, "client_renamed", client_id=client_id, inputs={"from": old, "to": name})
+        return client
+
+    @app.delete("/clients/{client_id}", status_code=204)
+    def delete_client(client_id: str, c: Ctx = Depends(ctx)) -> None:
+        """Remove a client from the firm's list. A soft delete: their portfolios, drafts
+        and the audit trail are kept on record, but the app no longer shows or uses them."""
+        client = own_client(c, client_id)
+        c.db.delete_client(c.adv["firm_id"], client_id, c.adv["id"])
+        log(c, "client_deleted", client_id=client_id, inputs={"name": client["name"]})
 
     @app.post("/clients/{client_id}/portfolios", status_code=201)
     async def upload_portfolio(client_id: str, file: UploadFile = File(...),
@@ -460,6 +484,9 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
         fid = c.adv["firm_id"]
         draft = c.db.get_draft(fid, draft_id)
         if draft is None:
+            raise HTTPException(404, "Draft not found.")
+        p = c.db.get_portfolio(fid, draft["portfolio_id"])
+        if p is None or c.db.get_client(fid, p["client_id"]) is None:  # client deleted
             raise HTTPException(404, "Draft not found.")
         if draft["approved"]:
             raise HTTPException(409, "This draft is already approved.")

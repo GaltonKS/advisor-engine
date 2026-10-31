@@ -193,6 +193,11 @@ every turn --append_audit--> data/audit/audit.jsonl
 - Live model calls require `auth == "supabase"` (`Settings.llm`). Don't add another path to
   the real client.
 - Responses never include server file paths (see `_tool_view`).
+- Clients can be renamed (`PATCH /clients/{id}`) and deleted (`DELETE /clients/{id}`).
+  Deleting is a soft delete (`deleted_at`): `get_client` / `list_clients` skip the row and
+  `own_portfolio` 404s once its client is gone, but portfolios, drafts and audit records
+  stay on record. Never hard-delete; `authenticated` has no DELETE grant on `clients`.
+  Both actions are audited (`client_renamed`, `client_deleted`).
 - Routes use only the session from `store.as_user(...)` (the `Ctx` dependency). With
   Supabase that session runs every query as `authenticated` with the caller's claims, so
   row-level security applies to the API itself. Audit records go through

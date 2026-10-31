@@ -60,6 +60,8 @@ h1, h2, h3, h4 {
 .btn-primary:hover { background: #c9a540; }
 .btn-dark { background: var(--color-ink); border-color: var(--color-ink); color: #fdfaf3; }
 .btn-dark:hover { background: #3a332b; }
+.btn-danger { background: var(--color-bad); border-color: var(--color-bad); color: #fdfaf3; font-weight: 600; }
+.btn-danger:hover { background: #7f2a1d; }
 
 .input {
   border: 1px solid var(--color-rule);

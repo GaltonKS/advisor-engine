@@ -472,3 +472,56 @@ def test_allowed_origins_ignore_trailing_slashes_and_spaces(monkeypatch):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("ALLOWED_ORIGINS", " https://galtonks.onrender.com/ , http://localhost:5173")
     assert load_settings().allowed_origins == ["https://galtonks.onrender.com", "http://localhost:5173"]
+
+
+# --- renaming and deleting clients ---------------------------------------------------------
+
+def test_rename_client_is_saved_and_audited(api):
+    client, store = api
+    c, _ = setup_portfolio(client)
+    r = client.patch(f"/clients/{c['id']}", json={"name": "  Boswell Family  "}, headers=as_("alice"))
+    assert r.status_code == 200, r.text
+    assert r.json()["name"] == "Boswell Family"
+    assert [x["name"] for x in client.get("/clients", headers=as_("alice")).json()] == ["Boswell Family"]
+    assert client.patch(f"/clients/{c['id']}", json={"name": "   "},
+                        headers=as_("alice")).status_code == 422
+    firm = client.get("/me", headers=as_("alice")).json()["adviser"]["firm_id"]
+    renamed = [r for r in audit_records(store, "alice", firm) if r["event"] == "client_renamed"]
+    assert renamed[-1]["inputs"] == {"from": "Sample Household A", "to": "Boswell Family"}
+
+
+def test_delete_client_hides_it_and_its_portfolios_but_keeps_the_record(api):
+    client, store = api
+    alice = as_("alice")
+    c, p = setup_portfolio(client)
+    draft = client.post(f"/portfolios/{p['id']}/turns", json={"draft": True}, headers=alice).json()
+    keep, _ = setup_portfolio(client)
+
+    assert client.delete(f"/clients/{c['id']}", headers=alice).status_code == 204
+    assert [x["id"] for x in client.get("/clients", headers=alice).json()] == [keep["id"]]
+    assert client.get(f"/clients/{c['id']}", headers=alice).status_code == 404
+    assert client.patch(f"/clients/{c['id']}", json={"name": "x"}, headers=alice).status_code == 404
+    assert client.delete(f"/clients/{c['id']}", headers=alice).status_code == 404
+    assert client.get(f"/portfolios/{p['id']}/profile", headers=alice).status_code == 404
+    assert client.post(f"/portfolios/{p['id']}/turns", json={"message": "risk?"},
+                       headers=alice).status_code == 404
+    assert client.post(f"/drafts/{draft['draft_id']}/approve", json={"text": draft["content"]},
+                       headers=alice).status_code == 404
+
+    firm = client.get("/me", headers=alice).json()["adviser"]["firm_id"]
+    records = audit_records(store, "alice", firm)
+    assert any(r["event"] == "turn" and r.get("client_id") == c["id"] for r in records)
+    deleted = [r for r in records if r["event"] == "client_deleted"]
+    assert deleted[-1]["client_id"] == c["id"]
+    assert deleted[-1]["inputs"] == {"name": "Sample Household A"}
+    # Soft delete: the portfolio row is still on record.
+    assert session(store, "alice").get_portfolio(firm, p["id"]) is not None
+
+
+def test_another_firm_cannot_rename_or_delete_a_client(api):
+    client, _ = api
+    c, _ = setup_portfolio(client, "alice")
+    bob = as_("bob")
+    assert client.patch(f"/clients/{c['id']}", json={"name": "Mine now"}, headers=bob).status_code == 404
+    assert client.delete(f"/clients/{c['id']}", headers=bob).status_code == 404
+    assert client.get(f"/clients/{c['id']}", headers=as_("alice")).json()["name"] == "Sample Household A"

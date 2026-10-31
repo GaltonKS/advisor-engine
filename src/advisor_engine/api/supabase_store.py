@@ -142,14 +142,24 @@ class SupabaseSession:
              fields.get("tone", "")], one=True)
 
     def list_clients(self, firm_id: str) -> list[dict]:
-        return self._run("select * from public.clients where firm_id = %s order by created_at",
-                         [firm_id])
+        return self._run("select * from public.clients where firm_id = %s and deleted_at is null "
+                         "order by created_at", [firm_id])
 
     def get_client(self, firm_id: str, client_id: str) -> dict | None:
         if not (cid := _uuid(client_id)):
             return None
-        return self._run("select * from public.clients where firm_id = %s and id = %s",
-                         [firm_id, cid], one=True)
+        return self._run("select * from public.clients where firm_id = %s and id = %s "
+                         "and deleted_at is null", [firm_id, cid], one=True)
+
+    def rename_client(self, firm_id: str, client_id: str, name: str) -> dict:
+        return self._run("update public.clients set name = %s where firm_id = %s and id = %s "
+                         "and deleted_at is null returning *", [name, firm_id, client_id], one=True)
+
+    def delete_client(self, firm_id: str, client_id: str, adviser_id: str) -> None:
+        """Soft delete: portfolios, drafts and audit rows stay on record (see migration)."""
+        self._run("update public.clients set deleted_at = now(), deleted_by = %s "
+                  "where firm_id = %s and id = %s and deleted_at is null",
+                  [adviser_id, firm_id, client_id])
 
     def save_questionnaire(self, firm_id: str, client_id: str, answers: dict) -> dict:
         return self._run(
