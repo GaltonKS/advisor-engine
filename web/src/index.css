@@ -107,3 +107,18 @@ table.data td.num, table.data th.num { text-align: right; font-family: var(--fon
   color: var(--viz-ink);
 }
 .viz-root .viz-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* Assistant replies and approved explanations (lib/markdown.tsx). Serif body for
+   reading, clear section titles, and lists with room between points. */
+.md { font-family: var(--font-serif); font-size: 17px; line-height: 1.6; color: var(--color-ink); max-width: 72ch; }
+.md > * + * { margin-top: 0.75rem; }
+.md .md-h { font-family: var(--font-sans); font-size: 13px; font-weight: 600; letter-spacing: 0.06em;
+            text-transform: uppercase; color: var(--color-gold-dark); margin-top: 1.25rem; }
+.md .md-h:first-child { margin-top: 0; }
+.md .md-ul { list-style: disc; padding-left: 1.25rem; }
+.md .md-ol { list-style: decimal; padding-left: 1.5rem; }
+.md li + li { margin-top: 0.4rem; }
+.md li::marker { color: var(--color-gold-dark); }
+.md strong { font-weight: 600; }
+.md .md-table { font-family: var(--font-sans); font-size: 14px; }
+.md .md-table td { font-variant-numeric: tabular-nums; }

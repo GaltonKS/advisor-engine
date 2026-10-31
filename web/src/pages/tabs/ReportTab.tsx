@@ -3,6 +3,7 @@ import { Empty, Loading } from "../../components/ui";
 import { useMe } from "../../components/Layout";
 import { useApi } from "../../lib/api";
 import { date, dateTime, lossPct, lossSigned, num, pct, shortHash } from "../../lib/format";
+import { Markdown } from "../../lib/markdown";
 import type { Draft } from "../../lib/types";
 import type { Workspace } from "../ClientWorkspace";
 
@@ -34,7 +35,7 @@ export default function ReportTab({ ws }: { ws: Workspace }) {
         <h1 className="mt-1 text-4xl">{ws.client.name}</h1>
         {ws.client.objective && <p className="text-muted">{ws.client.objective}</p>}
 
-        <div className="my-6 whitespace-pre-wrap font-serif text-[17px] leading-relaxed">{approved.approved_text}</div>
+        <Markdown text={approved.approved_text ?? ""} className="my-6" />
 
         <h3 className="mt-8 border-b border-rule pb-1 text-xl">Key figures</h3>
         <table className="data mt-2">

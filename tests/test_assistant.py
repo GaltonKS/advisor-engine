@@ -226,6 +226,11 @@ def test_retry_message_says_why_each_figure_failed():
     assert "47.3% is not in any tool result" in msg
 
 
+def test_prompt_formatting_rules_keep_detail():
+    p = prompts.SYSTEM_PROMPT
+    assert "short bold title on its own line" in p and "split long bullets rather than dropping detail" in p
+
+
 def test_prompt_asks_for_two_significant_digits():
     assert "at least two significant digits" in prompts.SYSTEM_PROMPT
 
