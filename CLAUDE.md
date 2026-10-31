@@ -166,6 +166,12 @@ every turn --append_audit--> data/audit/audit.jsonl
   sign-in only) and the same daily limit; dev auth and tests use `MockSuggester`. The
   request uses `output_config.format` (current models reject forced `tool_choice`) and
   server-side refusal fallbacks (`fallbacks="default"`).
+- `run_turn` asks for automatic prompt caching (`chat.CACHE_CONTROL`), so each tool-loop
+  call and each follow-up within the TTL reads tools, system prompt and history from
+  cache. Keep that prefix byte-stable: `TOOLS` in a fixed order, nothing per-request
+  (dates, ids) in the system prompt. Each audit record carries `usage` (API calls and
+  input / output / cache-read / cache-write tokens summed over the turn), or `null` for
+  clients that report none (mock, test fakes).
 - The firm disclaimer is appended verbatim by code in `chat.py`, never given to the
   model and never run through the number check.
 - Mode: `ADVISOR_LLM=mock|anthropic`. Unset means mock without `ANTHROPIC_API_KEY`,
