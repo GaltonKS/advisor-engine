@@ -119,7 +119,8 @@ export default function ClientWorkspace() {
       <ErrorNote error={addVersion.error} />
 
       {!portfolio ? (
-        <div className="mt-6"><Empty>Upload a holdings CSV (ticker, shares, price, sector) to analyse this client.</Empty></div>
+        <div className="mt-6"><Empty>Upload a holdings CSV (ticker, shares, price, sector) to analyse this client.{" "}
+          <a className="underline" href="/holdings-template.csv" download>Download a template</a></Empty></div>
       ) : (
         <>
           <nav className="no-print mt-6 flex flex-wrap gap-x-5 gap-y-2 border-b border-rule text-sm">

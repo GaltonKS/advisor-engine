@@ -11,7 +11,6 @@ Same guarantees as the Streamlit demo, now per signed-in adviser and per firm:
 from __future__ import annotations
 
 import hashlib
-import io
 import json
 import logging
 import re
@@ -231,7 +230,7 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
         if not name.lower().endswith(".csv"):
             raise HTTPException(422, "The file must be a .csv.")
         try:
-            validate_holdings(pd.read_csv(io.BytesIO(data)))
+            load_holdings(data)
         except Exception as e:  # any load failure means the file is not usable
             raise HTTPException(422, f"{name} was rejected: {e}") from e
         return c.db.add_portfolio(c.adv["firm_id"], client_id, c.adv["id"], name, data,
