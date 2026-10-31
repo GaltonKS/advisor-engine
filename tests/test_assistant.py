@@ -215,6 +215,21 @@ def test_retry_recovers_and_drops_the_bad_attempt_from_history(tmp_path):
     assert rec["retries"][0]["unmatched"] == ["99.9"]
 
 
+def test_retry_message_says_why_each_figure_failed():
+    from advisor_engine.assistant.numcheck import verify
+    tool = json.dumps({"change": -0.0064, "loss": -0.12})
+    v = verify("Volatility changes by -0.006, a 12% gain, and 47.3% elsewhere.", [tool])
+    msg = chat._retry_message(v)
+    assert msg.startswith("Your answer contained figures")  # the mock relies on this prefix
+    assert "-0.006 is rounded too far" in msg and "two significant digits" in msg
+    assert "12% has the wrong direction" in msg
+    assert "47.3% is not in any tool result" in msg
+
+
+def test_prompt_asks_for_two_significant_digits():
+    assert "at least two significant digits" in prompts.SYSTEM_PROMPT
+
+
 def test_retry_that_fails_again_is_blocked(tmp_path):
     client = FakeClient([[tool_block()], [text_block("Bets: 99.9")], [text_block("Bets: 88.8")]])
     r = run(client, tmp_path)
