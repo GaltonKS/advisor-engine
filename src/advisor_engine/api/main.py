@@ -11,7 +11,6 @@ Same guarantees as the Streamlit demo, now per signed-in adviser and per firm:
 from __future__ import annotations
 
 import hashlib
-import io
 import json
 import logging
 import re
@@ -30,7 +29,7 @@ from ..assistant.mock_client import MockClient
 from ..assistant.numcheck import verify
 from ..assistant.tools import RETURNS_SOURCE, execute_tool, get_returns
 from ..compare import compare_profiles
-from ..holdings import REQUIRED, load_holdings, validate_holdings
+from ..holdings import COLUMNS, load_holdings, validate_holdings
 from ..risk import risk_profile
 from ..stress import run_scenario, scenario_list, stress_test
 from .auth import User, current_user
@@ -64,7 +63,7 @@ class HoldingRow(BaseModel):
     ticker: str = Field(min_length=1, max_length=20)
     shares: float
     price: float
-    sector: str = Field(min_length=1, max_length=60)
+    sector: str = Field(default="", max_length=60)  # blank -> Unclassified
 
 
 class HoldingsIn(BaseModel):
@@ -231,7 +230,7 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
         if not name.lower().endswith(".csv"):
             raise HTTPException(422, "The file must be a .csv.")
         try:
-            validate_holdings(pd.read_csv(io.BytesIO(data)))
+            load_holdings(data)
         except Exception as e:  # any load failure means the file is not usable
             raise HTTPException(422, f"{name} was rejected: {e}") from e
         return c.db.add_portfolio(c.adv["firm_id"], client_id, c.adv["id"], name, data,
@@ -253,7 +252,7 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
     def save_holdings(client_id: str, body: HoldingsIn, c: Ctx = Depends(ctx)) -> dict:
         """Save edited holdings as a new portfolio version; the original is never changed."""
         own_client(c, client_id)
-        data = _frame(body.holdings)[REQUIRED].to_csv(index=False).encode()
+        data = _frame(body.holdings)[COLUMNS].to_csv(index=False).encode()
         p = c.db.add_portfolio(c.adv["firm_id"], client_id, c.adv["id"], "edited-holdings.csv",
                                data, hashlib.sha256(data).hexdigest(),
                                label=body.label.strip(), source="editor")

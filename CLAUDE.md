@@ -95,6 +95,15 @@ every turn --append_audit--> data/audit/audit.jsonl
 - `risk_profile` requires >= 24 return periods and return history for every ticker;
   raise `ValueError` with a clear message for bad input.
 - Holdings are long-only: negative shares and non-positive prices are rejected.
+- `holdings.read_holdings_csv` is the one CSV parser (uploads and stored files both use
+  it via `load_holdings`). It accepts layouts with a single reading (header case, BOM,
+  `;`/tab/`|` separators, title rows, a short alias list, `$` and thousands separators)
+  and rejects ambiguous numbers rather than guessing.
+- Sector is optional. Missing or blank sectors become `holdings.UNCLASSIFIED`, which is
+  never treated as a sector: no shared synthetic sector factor, listed last in
+  `sector_exposure`, and `sector_level` drops `sector_effective_bets` (with `withheld`)
+  while any holding is unclassified. `sector_coverage` reports what is missing.
+  `compare` skips a headline figure that either side withheld.
 - Weights are passed in the same order as `returns.columns` / `holdings["ticker"]`.
 - With no `market` series, the equal-weighted universe stands in and `portfolio_beta`
   / `market_share_of_risk` are deliberately removed from the output (they would be

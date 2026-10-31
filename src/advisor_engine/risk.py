@@ -13,6 +13,7 @@ import pandas as pd
 from sklearn.covariance import LedoitWolf
 
 from . import __version__
+from .holdings import UNCLASSIFIED
 
 
 def shrunk_covariance(returns: pd.DataFrame) -> tuple[np.ndarray, float]:
@@ -119,9 +120,17 @@ def sector_level_concentration(holdings: pd.DataFrame, returns: pd.DataFrame) ->
     Each sector's return series is the within-sector-weighted average of its
     holdings' returns (a one-holding sector is just that holding). The sector
     weights are the summed position weights.
+
+    If any holding has no sector, the figure is withheld (`sector_effective_bets` and
+    `top_component_share` are removed and `withheld` says why). Unclassified holdings
+    are not one sector, and leaving them out would describe a different portfolio.
+    `n_sectors` counts classified sectors only.
     """
     w = holdings["weight"].to_numpy()
-    sectors = sorted(holdings["sector"].unique())
+    sectors = sorted(s for s in holdings["sector"].unique() if s != UNCLASSIFIED)
+    if (holdings["sector"] == UNCLASSIFIED).any():
+        return {"n_sectors": len(sectors),
+                "withheld": "Some holdings have no sector, so sector-level bets are not computed."}
     series = {}
     sector_w = []
     for s in sectors:
@@ -180,9 +189,22 @@ def position_risk(holdings: pd.DataFrame, cov: np.ndarray, corr_floor: float = 1
 
 
 def sector_exposure(holdings: pd.DataFrame) -> dict[str, float]:
-    """Portfolio weight by sector, largest first."""
+    """Portfolio weight by sector, largest first; holdings with no sector come last."""
     s = holdings.groupby("sector")["weight"].sum().sort_values(ascending=False)
-    return {k: float(v) for k, v in s.items()}
+    out = {k: float(v) for k, v in s.items() if k != UNCLASSIFIED}
+    if UNCLASSIFIED in s.index:
+        out[UNCLASSIFIED] = float(s[UNCLASSIFIED])
+    return out
+
+
+def sector_coverage(holdings: pd.DataFrame) -> dict:
+    """How much of the portfolio has no sector, so callers can say what is incomplete."""
+    mask = holdings["sector"] == UNCLASSIFIED
+    return {
+        "unclassified_weight": float(holdings.loc[mask, "weight"].sum()),
+        "n_unclassified": int(mask.sum()),
+        "unclassified_tickers": list(holdings.loc[mask, "ticker"]),
+    }
 
 
 def max_drawdown(portfolio_returns: pd.Series) -> float:
@@ -231,6 +253,7 @@ class RiskProfile:
     drawdown: dict
     largest_positions: list = field(default_factory=list)
     positions: list = field(default_factory=list)
+    sector_coverage: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -289,4 +312,5 @@ def risk_profile(
         drawdown=drawdown_sensitivity(weights, cov, port_ret, period_label=period_label),
         largest_positions=top.to_dict("records"),
         positions=position_risk(holdings, cov),
+        sector_coverage=sector_coverage(holdings),
     )

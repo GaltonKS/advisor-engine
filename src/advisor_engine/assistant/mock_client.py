@@ -122,6 +122,23 @@ def _find_position(question: str, positions: list[dict]) -> dict | None:
 
 # --- reply templates -----------------------------------------------------------------
 
+_UNCLASSIFIED = "Unclassified"  # holdings.UNCLASSIFIED; kept local, this module is display-only
+
+
+def _coverage_note(d: dict) -> str:
+    """A sentence on holdings with no sector, or "" when every holding has one."""
+    cov = d.get("sector_coverage") or {}
+    if not cov.get("n_unclassified"):
+        return ""
+    return (f"{_pct(cov['unclassified_weight'])} of the portfolio "
+            f"({', '.join(cov['unclassified_tickers'])}) has no sector on file, so sector "
+            "figures are incomplete; sectors can be added in the Holdings tab.")
+
+
+def _classified_sectors(d: dict) -> list[tuple[str, float]]:
+    return [(s, w) for s, w in d["sector_exposure"].items() if s != _UNCLASSIFIED]
+
+
 def _data_note(d: dict) -> str:
     return f"The returns behind this are {d['returns_source']}, so treat the picture as illustrative."
 
@@ -143,6 +160,8 @@ def _overview(d: dict, concise: bool, objective: str) -> str:
     ]
     if objective:
         out.append(f"I'm reading this with the firm's {objective} objective in mind.")
+    if _coverage_note(d):
+        out.append(_coverage_note(d))
     if not concise:
         out.append(_data_note(d))
     out.append("I can go into more detail by position, by sector, or on drawdown and stress loss.")
@@ -174,17 +193,24 @@ def _position(d: dict, question: str, concise: bool) -> str:
 
 
 def _sectors(d: dict, concise: bool) -> str:
-    items = list(d["sector_exposure"].items())
+    items = _classified_sectors(d)
+    note = _coverage_note(d)
+    tail = "" if concise else " " + _data_note(d)
+    if not items:
+        return (f"None of the holdings has a sector on file, so I can't describe sector "
+                f"exposure yet. {note}{tail}")
     shown = items[:5]
     lines = "\n".join(f"- {s}: {_pct(w)}" for s, w in shown)
     sl = d["concentration"]["sector_level"]
-    first = (
-        f"{shown[0][0]} is the largest sector at {_pct(shown[0][1])} of the portfolio. "
-        f"Across {sl['n_sectors']} sectors it behaves like about "
-        f"{_num(sl['sector_effective_bets'])} independent sector bets."
-    )
+    first = f"{shown[0][0]} is the largest sector at {_pct(shown[0][1])} of the portfolio."
+    if "sector_effective_bets" in sl:
+        first += (f" Across {sl['n_sectors']} sectors it behaves like about "
+                  f"{_num(sl['sector_effective_bets'])} independent sector bets.")
+    else:
+        first += " Sector-level diversification can't be assessed until every holding has a sector."
     more = "" if len(items) <= len(shown) else "\nThe remaining sectors are smaller than these."
-    tail = "" if concise else " " + _data_note(d)
+    if note:
+        more += f"\n\n{note}"
     return f"{first}\n\n{lines}{more}\n\nI can break any sector down by position.{tail}"
 
 
@@ -206,8 +232,7 @@ def _drawdown(d: dict, concise: bool) -> str:
 
 def _client_draft(d: dict, concise: bool) -> str:
     c, dd = d["concentration"], d["drawdown"]
-    sectors = list(d["sector_exposure"].items())
-    s0 = sectors[0]
+    sectors = _classified_sectors(d)
     label = dd["period_label"]
     out = [
         "DRAFT for advisor review. Not yet sent to the client.",
@@ -216,8 +241,8 @@ def _client_draft(d: dict, concise: bool) -> str:
         f"together, so in practice it behaves like about {_num(c['effective_bets'])} "
         f"independent bets rather than {c['n_positions']}.",
         "",
-        f"The largest share of your money is in {s0[0]}, at {_pct(s0[1])} of the portfolio.",
-        "",
+        *([f"The largest share of your money is in {sectors[0][0]}, at "
+           f"{_pct(sectors[0][1])} of the portfolio.", ""] if sectors else []),
         f"Looking at the history we analysed, the worst peak-to-trough drop was "
         f"{_pct(abs(dd['historical_max_drawdown']))} on a {label} basis. In a severe "
         f"1-in-100 {label} period, we would expect a loss of about "

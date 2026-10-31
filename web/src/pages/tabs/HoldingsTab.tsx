@@ -10,7 +10,10 @@ import type { Workspace } from "../ClientWorkspace";
 // validates them (long-only, positive prices, unique tickers) when the engine runs.
 interface EditRow { ticker: string; shares: string; price: string; sector: string }
 
-const toEdit = (r: HoldingRow): EditRow => ({ ticker: r.ticker, shares: String(r.shares), price: String(r.price), sector: r.sector });
+// "Unclassified" is the engine's label for no sector; edit it as a blank to fill in.
+const UNCLASSIFIED = "Unclassified";
+const toEdit = (r: HoldingRow): EditRow => ({ ticker: r.ticker, shares: String(r.shares), price: String(r.price),
+                                               sector: r.sector === UNCLASSIFIED ? "" : r.sector });
 const toApi = (rows: EditRow[]) => rows
   .filter((r) => r.ticker.trim())
   .map((r) => ({ ticker: r.ticker.trim(), shares: Number(r.shares), price: Number(r.price), sector: r.sector.trim() }));
@@ -41,7 +44,7 @@ export default function HoldingsTab({ ws }: { ws: Workspace }) {
   };
 
   if (source.isLoading) return <Loading />;
-  const sectors = [...new Set(rows.map((r) => r.sector).filter(Boolean))];
+  const sectors = [...new Set(rows.map((r) => r.sector).filter((s) => s && s !== UNCLASSIFIED))];
 
   return (
     <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
@@ -60,7 +63,8 @@ export default function HoldingsTab({ ws }: { ws: Workspace }) {
                              onChange={(e) => set(i, "shares", e.target.value)} /></td>
                   <td><input className="input !w-24 text-right" inputMode="decimal" value={r.price} aria-label={`Price ${i + 1}`}
                              onChange={(e) => set(i, "price", e.target.value)} /></td>
-                  <td><input className="input min-w-44" list="sectors" value={r.sector} aria-label={`Sector ${i + 1}`}
+                  <td><input className={`input min-w-44 ${r.sector.trim() ? "" : "border-gold"}`} list="sectors" value={r.sector}
+                             placeholder="Add sector" aria-label={`Sector ${i + 1}`}
                              onChange={(e) => set(i, "sector", e.target.value)} /></td>
                   <td><button className="text-faint hover:text-bad" title="Remove" aria-label={`Remove ${r.ticker}`}
                               onClick={() => { setRows(rows.filter((_, j) => j !== i)); whatIf.reset(); }}>✕</button></td>

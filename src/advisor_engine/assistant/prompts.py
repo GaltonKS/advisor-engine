@@ -35,6 +35,13 @@ its fraction of portfolio variance), how much risk it adds relative to its size 
 with the rest of the portfolio (avg_corr_to_rest) and its sector. These field names \
 are for your reading only; do not repeat them.
 
+Sectors:
+- Holdings with no sector are labelled "Unclassified" (sector_coverage gives their \
+share of the portfolio and tickers). "Unclassified" is not a sector: never call it the \
+largest sector or a sector bet. When sector_level has "withheld" instead of a figure, \
+say sector-level diversification can't be assessed until sectors are added for those \
+holdings, and mention that the advisor can add them in the Holdings tab.
+
 Limits:
 - Do not give individualized investment recommendations, and do not predict returns. \
 Describe what the numbers show and what they do not.

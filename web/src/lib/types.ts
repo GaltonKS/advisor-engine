@@ -69,9 +69,11 @@ export interface RiskProfile {
     top_component_share: number;
     component_shares: number[];
     market_adjusted: { residual_effective_bets: number; market_proxy: string; market_share_of_risk?: number };
-    sector_level: { sector_effective_bets: number; n_sectors: number };
+    // sector_effective_bets is absent (and `withheld` set) when some holdings have no sector.
+    sector_level: { sector_effective_bets?: number; n_sectors: number; withheld?: string };
   };
   sector_exposure: Record<string, number>;
+  sector_coverage?: { unclassified_weight: number; n_unclassified: number; unclassified_tickers: string[] };
   drawdown: {
     historical_max_drawdown: number;
     period_volatility: number;
