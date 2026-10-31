@@ -58,6 +58,19 @@ describe("charts", () => {
     expect([...container.querySelectorAll("text")].some((t) => t.textContent === "CASH")).toBe(false);
   });
 
+  it("never places a ticker label across the risk = size line", () => {
+    const spec: RiskVsSizeChart = {
+      ...base, kind: "risk_vs_size", title: "Risk versus size", x_max: 0.1, y_max: 0.1,
+      highlight_rule: "r",
+      points: [{ ticker: "ONLN", weight: 0.05, risk_share: 0.05, risk_to_weight: 1, highlight: false, label: true },
+               { ticker: "HIGH", weight: 0.02, risk_share: 0.08, risk_to_weight: 4, highlight: true, label: true }],
+    };
+    const { container } = render(<ChartView spec={spec} />);
+    const texts = [...container.querySelectorAll("text")].map((t) => t.textContent);
+    expect(texts).toContain("HIGH");
+    expect(texts).not.toContain("ONLN");
+  });
+
   it("Overview risk sources use whole numbers", () => {
     render(<RiskSourceBars sources={[{ name: "Largest common factor", share: 0.523 }]} />);
     expect(screen.getByText("52%")).toBeTruthy();
