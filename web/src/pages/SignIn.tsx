@@ -25,7 +25,7 @@ export default function SignIn() {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-rule">
+      <header className="navy-band">
         <div className="mx-auto max-w-[1240px] px-4 py-3"><Brand /></div>
       </header>
       <main className="mx-auto grid max-w-[1240px] gap-10 px-4 py-12 md:grid-cols-[1.2fr_1fr]">
@@ -35,7 +35,7 @@ export default function SignIn() {
             Analysis your clients can follow, behind a door only advisers can open.
           </h1>
           <p className="mt-5 max-w-md text-muted">
-            KVS turns a client's holdings and goals into scored, explained options. You make every
+            GaltonKS turns a client's holdings and goals into scored, explained options. You make every
             decision. Every figure comes from the engine, never from the language model.
           </p>
           <div className="my-6 h-px w-14 bg-gold" />
@@ -71,7 +71,7 @@ export default function SignIn() {
             {mode === "in" ? "New here? Request access" : "Already registered? Sign in"}
           </button>
           <p className="mt-5 text-[11px] text-faint">
-            KVS is decision support for registered advisers. It is not investment advice and does not hold or move client money.
+            GaltonKS is decision support for registered advisers. It is not investment advice and does not hold or move client money.
           </p>
         </form>
       </main>

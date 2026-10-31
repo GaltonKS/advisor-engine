@@ -1,4 +1,4 @@
-# KVS web app
+# GaltonKS web app
 
 React front end for the advisor engine API (Vite, React, TypeScript, TanStack Query,
 Tailwind, Supabase sign-in). It lays out what the API returns and computes no figures:

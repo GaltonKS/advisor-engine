@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- GaltonKS mark on the logo's navy, with the icon's gold rim. -->
+  <defs>
+    <linearGradient id="top" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#1b2433"/><stop offset="1" stop-color="#e3ad33"/>
+    </linearGradient>
+    <linearGradient id="mid" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#5d5a52"/><stop offset="1" stop-color="#e9d9b3"/>
+    </linearGradient>
+  </defs>
+  <rect x="1.5" y="1.5" width="61" height="61" rx="14" fill="#000815" stroke="#d4a032" stroke-width="2"/>
+  <g transform="translate(4 11)">
+    <path d="M2 30 L28 18 L54 30 L28 42 Z" fill="#253042"/>
+    <path d="M2 22 L28 10 L54 22 L28 34 Z" fill="url(#mid)"/>
+    <path d="M2 14 L28 2 L54 14 L28 26 Z" fill="url(#top)" stroke="#f2c14e" stroke-width="0.8"/>
+  </g>
+</svg>

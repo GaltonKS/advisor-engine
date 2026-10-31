@@ -74,7 +74,7 @@ function ClientCard({ client: c }: { client: Client }) {
   }
 
   return (
-    <div className="group relative border border-rule bg-card hover:border-gold">
+    <div className="group relative border border-rule bg-card hover:border-navy">
       <Link to={`/clients/${c.id}`} className="block p-4 pr-28">
         <div className="font-serif text-xl">{c.name}</div>
         <div className="mt-1 text-sm text-muted">{c.objective || "No objective recorded"}</div>
@@ -84,7 +84,7 @@ function ClientCard({ client: c }: { client: Client }) {
         </div>
       </Link>
       <div className="absolute right-3 top-3 flex gap-3 text-xs">
-        <button className="text-muted underline-offset-2 hover:text-ink hover:underline"
+        <button className="text-muted underline-offset-2 hover:text-navy hover:underline"
                 onClick={() => { setName(c.name); setMode("rename"); }}>Rename</button>
         <button className="text-muted underline-offset-2 hover:text-bad hover:underline"
                 onClick={() => setMode("delete")}>Delete</button>

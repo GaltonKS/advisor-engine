@@ -56,7 +56,7 @@ TOOL_LABELS = {"get_risk_profile": "Risk profile"}
 FOOTER = ("Decision support for registered advisers. Not investment advice. Every figure on "
           "this screen is computed by the engine; returns are synthetic and illustrative.")
 
-st.set_page_config(page_title="KVS · Advisor Engine", layout="wide")
+st.set_page_config(page_title="GaltonKS · Knowledge System", layout="wide")
 theme.inject()
 
 

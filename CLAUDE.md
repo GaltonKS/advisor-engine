@@ -74,6 +74,8 @@ src/advisor_engine/
         main.py        FastAPI routes over execute_tool / run_turn / verify
 web/                   React app (see web/README.md); formats engine output, computes nothing
 web/src/components/charts.tsx  draws chart specs (see "Charts" below)
+web/src/components/Logo.tsx    GaltonKS logo as SVG (see "Brand" below)
+web/public/brand/      source logo artwork (light logo, dark app icon)
 docs/migration-plan.md React + FastAPI + Supabase plan and the decisions behind it
 supabase/migrations/   Postgres schema, row-level security, append-only audit (see supabase/README.md)
 data/sample/           synthetic portfolios, the only committed data
@@ -213,6 +215,39 @@ every turn --append_audit--> data/audit/audit.jsonl
   API; the browser never calls the model.
 - `VITE_*` variables ship to the browser: only the Supabase publishable key, never the
   secret key.
+
+### Brand (`web/src/components/Logo.tsx`, `web/src/index.css`)
+- The product is **GaltonKS — Knowledge System** (formerly "KVS / Knowledge Vault
+  System"). Source artwork is in `web/public/brand/`: `galtonks-logo-light.webp` (on
+  paper) and `galtonks-icon-dark.webp` (app icon, on navy). Don't recolour or redraw
+  them; use them as the reference.
+- On screen the logo is drawn as SVG by `Logo.tsx`: `LogoMark` (three stacked plates:
+  navy grid, pale grid, dotted plate shading navy to gold) and `Logo` (mark plus the
+  GALTONKS / KNOWLEDGE SYSTEM wordmark, wide-tracked caps, "KS" in gold). `Logo onDark`
+  is the dark-icon version for navy grounds. `Brand` in `Layout.tsx` links it home.
+- Favicon `web/public/favicon.svg` (mark on navy with a gold rim) and
+  `apple-touch-icon.png` (the dark icon at 180px); `theme-color` is the navy.
+- **Navy is the highlight colour.** `--color-navy` `#000815` is the logo's navy, sampled
+  from the dark icon. It is close to black, so it only reads as navy over an area. Use
+  it for:
+  - The header band on every page (`.navy-band`: navy with a 2px gold rule under it,
+    dark logo, cream text).
+  - The active nav link and active workspace tab (navy text over the gold underline),
+    and hover states on links and client cards.
+  - `.btn-dark`.
+- Gold stays the primary accent: primary buttons, eyebrows, underlines, stat-card rules.
+  Paper and card surfaces are unchanged.
+- Text on navy uses the on-navy tokens only, all checked at ≥ 9:1 on `#000815`:
+  - `--color-card` for primary text.
+  - `--color-on-navy-muted` `#b9bfca` for secondary text.
+  - `--color-gold-bright` `#e3ad33`, the logo gold, for accents.
+  `--color-gold-bright` is for navy grounds only; on paper it is below 3:1, so gold text
+  on paper stays `--color-gold-dark`.
+- `--color-navy-soft` `#e7eaf0` is a navy tint for highlighted backgrounds.
+- Navy is a brand colour, not a chart colour. Charts keep the gold ramp below. Adding
+  navy to a chart means re-running the dataviz validator first.
+- Status red and green keep their meaning on navy too (the dev sign-in badge uses a
+  light red that passes on navy).
 
 ### Charts (`charts.py`, `web/src/components/charts.tsx`)
 How they work:
