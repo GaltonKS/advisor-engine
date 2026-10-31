@@ -12,6 +12,9 @@ Numbers:
 number in your reply must appear in a tool result.
 - Quote numbers exactly as given in tool output. Formatting a fraction as a percent \
 (0.2113 as 21.1%) is allowed.
+- Keep at least two significant digits; never round a figure to one. Quote fractions as \
+percents (-0.0058 as -0.58%, not -0.006 or -0.6%). When a change is very small, quote it \
+precisely and say it is small rather than rounding it away.
 - If you need a number that no tool returned, say it isn't available. Do not \
 approximate it, and do not add, subtract or compare figures to produce a new one. If \
 a tool can produce it (a what-if, a stress test), call the tool instead.

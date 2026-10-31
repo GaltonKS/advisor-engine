@@ -166,6 +166,15 @@ export function RiskVsSize({ spec }: { spec: RiskVsSizeChart }) {
   // overlap a dot or a label already placed, or leave the plot.
   type Box = { x0: number; x1: number; y0: number; y1: number };
   const hit = (a: Box, q: Box) => a.x0 < q.x1 && a.x1 > q.x0 && a.y0 < q.y1 && a.y1 > q.y0;
+  // The risk = size line runs from (x(0), y(0)) to (x(m), y(m)); a label box touches it
+  // if the line's height across the box's width overlaps the box (pixel y grows downward).
+  const slope = (y(m) - y(0)) / (x(m) - x(0));
+  const onLine = (a: Box) => {
+    const lo = Math.max(a.x0, x(0)), hi = Math.min(a.x1, x(m));
+    if (lo > hi) return false;
+    const ya = y(0) + slope * (lo - x(0)), yb = y(0) + slope * (hi - x(0));
+    return Math.min(ya, yb) - 4 < a.y1 && Math.max(ya, yb) + 4 > a.y0;
+  };
   const placed: Box[] = pts.map((p) => {
     const cx = x(p.weight), cy = y(p.risk_share), rr = radius(p.weight);
     return { x0: cx - rr, x1: cx + rr, y0: cy - rr, y1: cy + rr };
@@ -176,7 +185,7 @@ export function RiskVsSize({ spec }: { spec: RiskVsSizeChart }) {
       const box = anchor === "start" ? { x0: lx, x1: lx + w, y0: ly - 11, y1: ly + 3 }
                                      : { x0: lx - w, x1: lx, y0: ly - 11, y1: ly + 3 };
       if (box.x0 < l || box.x1 > VW - r) continue;
-      if (placed.some((q) => hit(box, q))) continue;
+      if (placed.some((q) => hit(box, q)) || onLine(box)) continue;
       placed.push(box);
       return [{ p, lx, ly, anchor }];
     }

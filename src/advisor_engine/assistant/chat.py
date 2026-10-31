@@ -86,6 +86,31 @@ def _tool_outputs(messages: list[dict]) -> list[str]:
     return outs
 
 
+# What to tell the model about each kind of number-check failure, so its one retry can
+# fix the figure rather than repeat it. Keys are numcheck.verify reasons.
+_RETRY_HINTS = {
+    "coarse match, unverified": (
+        "is rounded too far to check; quote it with the precision the tool gives, at least "
+        "two significant digits (for example -0.58% rather than -0.6% or -0.006)"),
+    "sign mismatch": (
+        "has the wrong direction; check whether the tool value is a fall or a rise, and "
+        "quote change values with the sign the tool gives"),
+    "no matching tool figure": (
+        "is not in any tool result; remove it, or call a tool that returns it"),
+}
+
+
+def _retry_message(verification: dict) -> str:
+    reasons = verification.get("reasons", {})
+    lines = [f"- {fig} {_RETRY_HINTS.get(reasons.get(fig, ''), 'is not in any tool result')}"
+             for fig in verification["unmatched"]]
+    return (
+        "Your answer contained figures that no tool returned:\n" + "\n".join(lines)
+        + "\nRestate it using only figures from the tool results, quoted as precisely as the "
+        "tool gives them, and say so where a figure is not available."
+    )
+
+
 def _withheld_message(unmatched: list[str]) -> str:
     return (
         "I withheld this answer because it contained figures that were not produced by the "
@@ -172,14 +197,7 @@ def run_turn(
         if len(retries) < max_retries:
             retries.append({"reply": text, "unmatched": verification["unmatched"]})
             drop.add(len(messages) - 1)
-            messages.append({
-                "role": "user",
-                "content": (
-                    f"Your answer contained figures that no tool returned: "
-                    f"{', '.join(verification['unmatched'])}. Restate it using only figures "
-                    "from the tool results, and say so where a figure is not available."
-                ),
-            })
+            messages.append({"role": "user", "content": _retry_message(verification)})
             drop.add(len(messages) - 1)
             continue
         block_reason = "unmatched_numbers"

@@ -141,7 +141,12 @@ function Message({ m, onOpenStress }: { m: ChatMessage; onOpenStress: () => void
       {(m.tool_calls ?? []).some((c) => c.name === "refer_to_stress_test" && !c.is_error) && (
         <button className="btn mt-3" onClick={onOpenStress}>Open in Stress test →</button>
       )}
-      {!m.blocked && charts.map((c, i) => <ChartView key={i} spec={c} />)}
+      {/* Charts are built by the engine, never by the model, so they stay visible even
+          when the reply's text was withheld by the number check. */}
+      {m.blocked && charts.length > 0 && (
+        <p className="mt-2 text-xs text-muted">Only the text above was withheld. The chart below is engine output.</p>
+      )}
+      {charts.map((c, i) => <ChartView key={i} spec={c} />)}
       {!m.blocked && m.verification && (
         <div className="mt-2 text-xs text-good">✓ Verified · {m.verification.checked ?? 0} figures matched engine output</div>
       )}
