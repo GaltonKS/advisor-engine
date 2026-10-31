@@ -103,6 +103,22 @@ def _holdings_rows(df: pd.DataFrame) -> list[dict]:
              for k, v in row.items()} for row in df.to_dict("records")]
 
 
+def assistant_error_message(e: Exception) -> str:
+    """What an adviser sees when a model call fails; the details go to the server log.
+
+    Reads the HTTP status the Anthropic SDK puts on its errors (without importing it):
+    401/403 and 400/404 are configuration problems (key, workspace, model name), 429
+    and 5xx/529 are temporary. Anything else gets the generic message.
+    """
+    status = getattr(e, "status_code", None)
+    if status in (400, 401, 403, 404) or isinstance(e, RuntimeError) and "anthropic" in str(e):
+        return ("The assistant isn't set up correctly, so it can't answer right now. "
+                "Your administrator can find the details in the server log.")
+    if status == 429 or (isinstance(status, int) and status >= 500):
+        return "The assistant is busy right now. Please try again in a minute."
+    return "The assistant is unavailable right now. Please try again."
+
+
 def _tool_view(call: dict) -> dict:
     """A tool call as the browser sees it: engine output, but not server file paths."""
     try:
@@ -368,7 +384,9 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
                              "client_id": portfolio["client_id"], "portfolio_id": portfolio_id},
             )
         except Exception as e:  # missing package, model API error, ...
-            raise HTTPException(502, f"The assistant is unavailable: {e}") from e
+            # The raw error can carry request ids and account details; keep it server-side.
+            log_.exception("Assistant turn failed for portfolio %s", portfolio_id)
+            raise HTTPException(502, assistant_error_message(e)) from e
 
         draft_id = None
         if body.draft and not result.blocked:
