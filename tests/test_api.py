@@ -383,6 +383,39 @@ def test_server_errors_reach_the_browser_with_cors_headers(tmp_path):
     assert "database unavailable" not in r.text  # internals stay in the server log
 
 
+class _ApiError(Exception):
+    """Shaped like the Anthropic SDK's errors: a message plus an HTTP status."""
+
+    def __init__(self, status_code, message):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+@pytest.mark.parametrize("error,expected", [
+    (_ApiError(400, "This API key is not scoped to a workspace ... req_011abc"), "isn't set up correctly"),
+    (_ApiError(401, "invalid x-api-key"), "isn't set up correctly"),
+    (RuntimeError('The anthropic package is missing: pip install -e ".[llm]"'), "isn't set up correctly"),
+    (_ApiError(429, "rate limited"), "busy"),
+    (_ApiError(529, "overloaded"), "busy"),
+    (ValueError("something else"), "unavailable right now"),
+])
+def test_assistant_errors_are_plain_and_keep_details_server_side(api, monkeypatch, error, expected):
+    from advisor_engine.api import main
+
+    client, _ = api
+    _, p = setup_portfolio(client)
+
+    def failing_turn(*args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(main, "run_turn", failing_turn)
+    r = client.post(f"/portfolios/{p['id']}/turns", headers=as_("alice"),
+                    json={"message": "How risky is this?"})
+    assert r.status_code == 502
+    detail = r.json()["detail"]
+    assert expected in detail and str(error) not in detail and "req_" not in detail
+
+
 def test_allowed_origins_ignore_trailing_slashes_and_spaces(monkeypatch):
     for k in ("ADVISOR_AUTH", "SUPABASE_URL", "SUPABASE_DB_URL", "RENDER"):
         monkeypatch.delenv(k, raising=False)
