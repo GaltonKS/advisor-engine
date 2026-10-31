@@ -40,7 +40,7 @@ def test_template_passes_verification_and_is_audited(question, tmp_path):
     r = turn(question, tmp_path)
     assert not r.blocked, r.reply
     assert r.verification["ok"] and r.verification["checked"] > 0
-    assert [c["name"] for c in r.tool_calls] == ["get_risk_profile"]
+    assert r.tool_calls[0]["name"] == "get_risk_profile"
     (rec,) = audit_lines(tmp_path)
     assert rec["model"] == "mock" and rec["blocked"] is False
     assert rec["tool_calls"][0]["output"] and rec["holdings_sha256"]
@@ -137,7 +137,7 @@ def test_overview_states_the_asset_class_mix(tmp_path):
 
 @pytest.mark.parametrize("question,tools,phrase", [
     ("How correlated is this portfolio with the market?", ["get_risk_profile"], "correlation with the market"),
-    ("What if we sold AAA and BBB?", ["get_risk_profile", "run_what_if"], "taken out"),
+    ("What if we sold AAA and BBB?", ["get_risk_profile", "run_what_if", "show_chart"], "taken out"),
     ("What happens in a recession?", ["get_risk_profile", "run_stress_test"], "recession scenario"),
     ("How much is the portfolio worth?", ["get_risk_profile", "get_holdings"], "worth"),
     ("What is the stress loss in a severe period?", ["get_risk_profile"], "1-in-100"),
@@ -147,6 +147,20 @@ def test_new_tools_in_mock_mode_pass_verification(question, tools, phrase, tmp_p
     assert not r.blocked, r.reply
     assert [c["name"] for c in r.tool_calls] == tools
     assert phrase in r.reply and r.verification["checked"] > 0
+
+
+@pytest.mark.parametrize("question,kind", [
+    ("What is my sector exposure?", "risk_by_group"),
+    ("How much risk is in bonds?", "risk_by_group"),
+    ("Show me what drives the risk", "risk_vs_size"),
+    ("What if we sold AAA?", "what_if"),
+])
+def test_mock_shows_a_chart_and_points_to_it(question, kind, tmp_path):
+    r = turn(question, tmp_path)
+    assert not r.blocked, r.reply
+    chart = json.loads(r.tool_calls[-1]["output"])["chart"]
+    assert r.tool_calls[-1]["name"] == "show_chart" and chart["kind"] == kind
+    assert "The chart below shows" in r.reply
 
 
 def test_force_bad_number_is_blocked_and_logged(tmp_path):

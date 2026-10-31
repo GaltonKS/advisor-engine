@@ -83,3 +83,27 @@ table.data td.num, table.data th.num { text-align: right; font-family: var(--fon
   .no-print { display: none !important; }
   body { background: #fff; }
 }
+
+/* Chart tokens (KVS mockup). Ramp checked with the dataviz validator as an ordered
+   scale on --viz-surface: darkest = largest source / main emphasis. The two light
+   steps sit below 3:1 on the surface, so every mark using them carries a written
+   value or an outline (the "relief" rule). Gold text uses --viz-gold-text only. */
+.viz-root {
+  --viz-surface: #fffcf4;
+  --viz-page: #f6efe3;
+  --viz-ink: #1c1a16;
+  --viz-text-2: #5e584c;
+  --viz-gold-text: #6b5113;
+  --viz-grid: #e2d6be;
+  --viz-ramp-1: #6b5113;
+  --viz-ramp-2: #906f22;
+  --viz-ramp-3: #b08b3a;
+  --viz-ramp-4: #c9ab66;
+  --viz-solid: #906f22;   /* main data fill: share of risk, highlighted dots */
+  --viz-pale: #c9ab66;    /* paired lighter fill: weight */
+  --viz-dot-pale: #eadfc4;/* unhighlighted dots, always with an ink outline */
+  --viz-region: #f3e8cc;  /* "more risk than size" region */
+  background: var(--viz-surface);
+  color: var(--viz-ink);
+}
+.viz-root .viz-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }

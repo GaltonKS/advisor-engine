@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { RiskSourceBars } from "../../components/charts";
 import { Bar, Panel, StatCard } from "../../components/ui";
 import { useApi } from "../../lib/api";
 import { assetClassLabel, lossPct, num, pct } from "../../lib/format";
@@ -34,7 +35,7 @@ export default function OverviewTab({ ws }: { ws: Workspace }) {
       <div className="grid gap-5 lg:grid-cols-2">
         <Panel title="Where the risk comes from">
           <p className="mb-2 text-[13px] text-muted">Share of the portfolio's risk by independent source, largest first.</p>
-          {conc.component_shares.map((x, i) => (
+          {conc.risk_sources ? <RiskSourceBars sources={conc.risk_sources} /> : conc.component_shares.map((x, i) => (
             <Bar key={i} label={i === 0 ? "Largest common factor" : `Factor ${i + 1}`} shown={pct(x)} fraction={x} />
           ))}
           <p className="mt-4 border-t border-rule pt-3 text-xs text-muted">

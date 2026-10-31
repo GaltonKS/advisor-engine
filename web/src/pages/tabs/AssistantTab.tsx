@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
+import { ChartView } from "../../components/charts";
 import { Chip, ErrorNote, Loading, Panel } from "../../components/ui";
 import { ApiError, useApi } from "../../lib/api";
 import { shortHash } from "../../lib/format";
-import type { ChatMessage, Draft, RiskProfile } from "../../lib/types";
+import type { ChartSpec, ChatMessage, Draft, RiskProfile } from "../../lib/types";
 import type { Workspace } from "../ClientWorkspace";
 
 const SUGGESTIONS = [
@@ -63,7 +64,7 @@ export default function AssistantTab({ ws }: { ws: Workspace }) {
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
       <div>
-        <div className="max-h-[560px] min-h-[320px] space-y-5 overflow-y-auto border border-rule bg-card p-5">
+        <div className="max-h-[78vh] min-h-[320px] space-y-5 overflow-y-auto border border-rule bg-card p-5">
           {messages.isLoading && <Loading />}
           {messages.data?.length === 0 && !ask.isPending && (
             <p className="text-sm text-muted">Ask about this portfolio. Every figure in a reply is checked against the engine's output before you see it.</p>
@@ -119,7 +120,10 @@ function Message({ m }: { m: ChatMessage }) {
     return <div className="ml-auto max-w-[85%] bg-ink px-4 py-3 text-sm text-card">{m.content}</div>;
   }
   const used = [...new Set((m.tool_calls ?? []).map((c) => c.label))];
-  const sources = (m.tool_calls ?? []).filter((c) => !c.is_error && typeof c.output === "object");
+  const ok = (m.tool_calls ?? []).filter((c) => !c.is_error && typeof c.output === "object");
+  // Charts carry their own source line; the Sources list covers the other tools.
+  const charts = ok.filter((c) => c.name === "show_chart").map((c) => (c.output as unknown as { chart: ChartSpec }).chart);
+  const sources = ok.filter((c) => c.name !== "show_chart");
   return (
     <div>
       {used.length > 0 && (
@@ -130,6 +134,7 @@ function Message({ m }: { m: ChatMessage }) {
       ) : (
         <div className="whitespace-pre-wrap font-serif text-[17px] leading-relaxed">{m.content}</div>
       )}
+      {!m.blocked && charts.map((c, i) => <ChartView key={i} spec={c} />)}
       {!m.blocked && m.verification && (
         <div className="mt-2 text-xs text-good">✓ Verified · {m.verification.checked ?? 0} figures matched engine output</div>
       )}

@@ -390,7 +390,8 @@ def test_turn_reports_each_tool_used(api):
                     json={"message": "What if we sold AAA?"})
     assert r.status_code == 200, r.text
     calls = r.json()["tool_calls"]
-    assert [c["label"] for c in calls] == ["Risk profile", "What-if"]
+    assert [c["label"] for c in calls] == ["Risk profile", "What-if", "Chart"]
+    assert calls[2]["output"]["chart"]["kind"] == "what_if"
     assert "comparison" in calls[1]["output"]
     assert "holdings_path" not in json.dumps(calls)  # no server paths leak
 

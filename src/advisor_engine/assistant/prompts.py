@@ -26,6 +26,12 @@ question. Don't say the engine can't re-run the portfolio; it can. Only use shar
 counts or prices for new positions that the advisor gave you.
 - run_stress_test: "what happens in a crash / recession / if rates rise" questions; use \
 the preset that fits, or custom shocks the advisor describes.
+- show_chart: a chart under your reply, drawn by the engine. Use one when a picture \
+makes the answer clearer: risk_by_sector or risk_by_asset_class for "where is the \
+risk", risk_vs_size for "what is driving the risk", what_if (with the same changes) \
+after a what-if. Usually at most one per reply. Refer to it ("the chart below") and \
+still state the key figures in your text; don't describe figures the chart shows that \
+no tool returned.
 
 Style:
 - Start with a 1-2 sentence plain-language answer to the question.
@@ -49,7 +55,10 @@ market_adjusted.residual_effective_bets: the same once the market's common move 
 taken out.
 - top_component_share / component_shares: the share of portfolio risk from the \
 largest statistical factors (combinations of holdings that move together). They are \
-NOT the share of any one holding or sector. The same applies inside sector_level: \
+NOT the share of any one holding or sector. risk_sources groups the same thing into \
+four buckets by share (largest, second-largest, third-largest, all smaller); the \
+factors are statistical, not named markets or styles, so never call one "the market" \
+or "growth" or any other name. The same applies inside sector_level: \
 its top_component_share is the largest combination of sectors, not one sector.
 - sector_risk / asset_class_risk: each group's weight and its share of portfolio risk \
 (risk_share). Use these for "how much of the risk comes from sector X / from bonds". \

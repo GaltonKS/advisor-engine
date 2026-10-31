@@ -51,10 +51,11 @@ src/advisor_engine/
     stress.py          preset/custom sector + asset-class shock scenarios (illustrative, uncalibrated)
     questionnaire.py   six-question client risk score (draft method) + drawdown check
     compare.py         before/after differences between two risk profiles
+    charts.py          chart specs from engine output (risk by group, risk vs size, what-if)
     demo.py            end-to-end run on data/sample/sample_holdings.csv
     assistant/
         _paths.py      REPO_ROOT, DATA_DIR, DEFAULT_HOLDINGS, AUDIT_PATH
-        tools.py       tool schemas (TOOLS: risk profile, holdings, what-if, stress), execute_tool(),
+        tools.py       tool schemas (TOOLS: risk profile, holdings, what-if, stress, show_chart), execute_tool(),
                        engine_profile(), get_returns() / get_market_returns(), path guard
         prompts.py     SYSTEM_PROMPT, FIRM_PROFILE, build_system_prompt()
         chat.py        run_turn(): tool loop, number check, retry, audit; llm_mode()
@@ -71,6 +72,7 @@ src/advisor_engine/
         supabase_store.py SupabaseStore: same methods on Postgres (RLS) + Storage
         main.py        FastAPI routes over execute_tool / run_turn / verify
 web/                   React app (see web/README.md); formats engine output, computes nothing
+web/src/components/charts.tsx  draws chart specs (see "Charts" below)
 docs/migration-plan.md React + FastAPI + Supabase plan and the decisions behind it
 supabase/migrations/   Postgres schema, row-level security, append-only audit (see supabase/README.md)
 data/sample/           synthetic portfolios, the only committed data
@@ -139,7 +141,8 @@ every turn --append_audit--> data/audit/audit.jsonl
   `engine_profile` carry beta and correlation to the market (per position and
   portfolio). The API uses `engine_profile` too, so tool and screen figures agree.
 - The model's tools: `get_risk_profile`, `get_holdings`, `run_what_if` (changes applied
-  by `apply_changes`, differences from `compare.compare_profiles`) and `run_stress_test`.
+  by `apply_changes`, differences from `compare.compare_profiles`), `run_stress_test` and
+  `show_chart` (specs from `charts.py`; see "Charts").
   What-if additions must use figures the adviser supplied (the prompt says so).
 - Profiles also carry `sector_risk` / `asset_class_risk` (weight and summed risk share
   per group). The prompt's glossary says what each field means; keep it in step with
@@ -188,6 +191,99 @@ every turn --append_audit--> data/audit/audit.jsonl
   API; the browser never calls the model.
 - `VITE_*` variables ship to the browser: only the Supabase publishable key, never the
   secret key.
+
+### Charts (`charts.py`, `web/src/components/charts.tsx`)
+How they work:
+- The model calls `show_chart` with a kind and, for what-if, the same changes as
+  `run_what_if`. The engine builds the spec in `charts.py`; the model never supplies a
+  figure, a label or a title (the what-if option name is built from the changes).
+- A spec carries the figures, copied from engine output, plus axis ranges, which items
+  to highlight or label, a caveat and a source. The browser positions marks and formats
+  values with `lib/format.ts`; it never derives a figure. A chart that needs a new
+  figure gets it from the engine first, with tests.
+- Every chart has a hover tooltip on each mark, a Table toggle with the same figures,
+  a legend when there are two or more series, and a source line.
+- Before shipping a chart change, draw it in the running app, screenshot it and look
+  at it: check for label collisions, clipping and overflow.
+
+Layout (from the adviser's design files):
+- **Risk by sector / asset class:** horizontal bars, because sector names read
+  better on the left. Each row has two thin bars: weight on top in the pale shade,
+  share of risk below in the solid shade. Rows are sorted by share of risk, highest
+  first. Names sit on the left, right-aligned; values sit just past the end of each
+  bar; a "Risk ÷ weight" column is on the far right, with ratios above 1.0 in bold.
+  The legend is one line, top-left under the subtitle.
+- **What-if before/after:**
+  - *Risk mix:* two 100% stacked horizontal bars, Current above the option, with each
+    percentage inside its segment. The legend is one row directly under the bars.
+  - *Headline measures:* volatility, independent bets and stress loss each get a
+    dumbbell row. A hollow dot is Current and a filled dot is the option, joined by a
+    gold line, with values above the dots. Each row has its own zero-based scale.
+    The two-dot legend sits top-right of the section.
+- **Risk vs size:** one dot per holding, weight (x) against share of risk (y), with a
+  dashed risk = size line and the region above it shaded. Holdings at or above
+  `charts.HIGHLIGHT_RATIO` × weight get the solid fill. Dot size repeats weight.
+  At most `MAX_POINT_LABELS` tickers are labelled, placed so they never overlap.
+
+Size:
+- Charts are drawn at the chat column's width (`VW` = 700 viewBox units, about
+  680–720px), so 12-unit labels display at 12px or larger. Never draw at another
+  width and scale down. Height follows content: about 3:2 for the scatter, and about
+  400px for the sector chart and 450px for the what-if at typical row counts.
+
+Colours (KVS mockup tokens, as `.viz-root` CSS variables in `web/src/index.css`):
+
+| Role | Hex |
+|---|---|
+| Page background | `#F6EFE3` |
+| Card / chart surface | `#FFFCF4` |
+| Primary text (ink) | `#1C1A16` |
+| Secondary text | `#5E584C` |
+| Gold label text (the only gold allowed for text) | `#6B5113` |
+| Gridlines, borders | `#E2D6BE` |
+| Four-step ramp, darkest to lightest | `#6B5113`, `#906F22`, `#B08B3A`, `#C9AB66` |
+| Main data fill (share of risk, highlighted dots) | `#906F22` |
+| Paired pale fill (weight) | `#C9AB66` |
+
+- The mockup's `#B8913A` (about 2.9:1 on the surface) and its two light ramp steps
+  (`#D6BC82`, `#EADDBE`) failed the dataviz validator. The ramp above is the nearest
+  passing version: a single hue with monotone lightness, and a light end at or above
+  2:1. The two light steps are still below 3:1, so every mark using them carries a
+  written value or an outline. Never use `#B8913A` for text.
+- Re-run the dataviz skill's validator (`validateOrdinal` for the ramp, `validate`
+  for categorical sets) against `#FFFCF4` whenever a chart colour changes.
+- Status red and green stay reserved for status (e.g. losses), never as a series colour.
+
+Risk sources ("Where the risk comes from"):
+- The engine's `risk_sources` is four buckets, sorted by share: Largest common factor,
+  Second-largest factor, Third-largest factor, All smaller factors. The Overview bars
+  and the what-if risk mix use these exact names, in this order, with the ramp from
+  darkest (largest) to lightest, as whole-number percentages.
+- The mockup named these "Overall market", "Growth versus value" and "Rates and
+  defensives". The engine's factors are statistical (unnamed principal components),
+  so those names would be invented. Use them only once the engine has a named
+  factor model that backs them.
+
+Number formats (screen and report alike):
+- Volatility: one decimal with % (3.5%). Independent bets: one decimal (1.6).
+- Stress loss: true minus sign (−8.1%, never -8.1%): `format.lossSigned`.
+- Risk sources: whole-number percentages. Ratios: two decimals with × (1.21×).
+
+Source line, caveat, fonts:
+- Every chart carries a source line under it in one format (`format.sourceLine`):
+  "Risk decomposition · 120 monthly synthetic returns · engine v0.6.0 · holdings
+  25b4d477". It always says where the figures came from. Synthetic data has no "as of"
+  date, so there is no date until real data is connected.
+- Synthetic charts say so in the eyebrow and the caveat.
+- Fonts: serif titles, sans-serif body, monospaced numbers. Georgia, Helvetica and
+  Menlo in the design files are stand-ins. A printed or PDF report must embed the
+  real brand fonts.
+
+Client report (not yet charted):
+- Charts in the report must use engine output only and show the same figures as the
+  screen. The design files' sector and risk-vs-size numbers were rough estimates for
+  layout testing only. Each report chart carries the source line, and the report uses
+  the same footer disclaimer wording as the screens.
 
 ### Tests
 - Tests never hit the network. Assistant tests use a scripted `FakeClient`; UI tests
