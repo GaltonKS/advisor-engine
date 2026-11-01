@@ -10,7 +10,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 ADMIN_URL = os.environ.get("TEST_DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/postgres")
-DEV_USERS = ("alice", "bob", "carol")
+DEV_USERS = ("alice", "bob", "carol")  # approved advisers, as most tests need
+NEW_USERS = ("dave",)                  # signed up but never approved (stays pending)
 
 
 def _with_db(url: str, name: str) -> str:
@@ -36,9 +37,19 @@ def supabase_db():
             for migration in sorted((ROOT / "supabase" / "migrations").glob("*.sql")):
                 conn.execute(migration.read_text())
             # Supabase creates auth.users rows at sign-up; the dev users stand in for that.
-            for user in DEV_USERS:
+            for user in DEV_USERS + NEW_USERS:
                 conn.execute("insert into auth.users (id, email) values (%s, %s)",
                              [dev_user_id(user), f"{user}@dev.local"])
+            # New sign-ups wait as pending; sign the dev users up and approve them, as the
+            # operator would, so tests start from active advisers.
+            for user in DEV_USERS:
+                with conn.transaction():
+                    conn.execute("set local role authenticated")
+                    conn.execute("select set_config('request.jwt.claims', %s, true)",
+                                 [f'{{"sub": "{dev_user_id(user)}", "email": "{user}@dev.local",'
+                                  ' "role": "authenticated"}'])
+                    conn.execute("select app.ensure_adviser()")
+                conn.execute("select app.approve_adviser(%s)", [f"{user}@dev.local"])
         yield url
     finally:
         admin.execute(f'drop database if exists "{name}" with (force)')

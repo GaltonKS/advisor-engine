@@ -547,3 +547,47 @@ def test_audit_entries_link_back_to_their_exchange_in_the_conversation(api):
         assert exchange[0]["content"] == r["user_message"]
     approved = next(r for r in audit if r["event"] == "draft_approved")
     assert any(m.get("draft_id") == approved["draft_id"] for m in messages)
+
+
+# --- adviser approval ---------------------------------------------------------------------
+
+@pytest.fixture(params=["local", "supabase"])
+def approval_api(request, tmp_path):
+    """An API where new sign-ups wait for approval, with a way to approve them."""
+    if request.param == "local":
+        store = LocalStore(tmp_path, require_approval=True)
+        approve = store.approve_adviser
+    else:
+        from advisor_engine.api import admin
+        from advisor_engine.api.supabase_store import MemoryStorage, SupabaseStore
+
+        db = request.getfixturevalue("supabase_db")
+        store = SupabaseStore(db, MemoryStorage(), cache_dir=tmp_path / "cache")
+        approve = lambda email, firm=None: admin.approve(db, email, firm)  # noqa: E731
+    app = create_app(Settings(auth="dev", store_dir=tmp_path), store=store)
+    return TestClient(app), approve
+
+
+def test_pending_adviser_registers_then_gets_in_once_approved(approval_api):
+    client, approve = approval_api
+    dave = as_("dave")
+    me = client.get("/me", headers=dave).json()
+    assert me["adviser"]["status"] == "pending"
+    r = client.get("/clients", headers=dave)
+    assert r.status_code == 403 and r.json()["detail"] == "Your account is awaiting approval."
+    assert client.post("/clients", json={"name": "X"}, headers=dave).status_code == 403
+
+    bad = client.post("/me/registration", headers=dave,
+                      json={"full_name": "Dave Adams", "crd": "CRD-12", "firm_name": "Dave Wealth"})
+    assert bad.status_code == 422
+    ok = client.post("/me/registration", headers=dave,
+                     json={"full_name": "Dave Adams", "crd": "1234567", "firm_name": "Dave Wealth"})
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["adviser"]["crd"] == "1234567"
+    assert client.get("/me", headers=dave).json()["adviser"]["registration_submitted_at"]
+
+    approve("dave@dev.local")
+    assert client.get("/clients", headers=dave).status_code == 200
+    again = client.post("/me/registration", headers=dave,
+                        json={"full_name": "Dave", "crd": "1", "firm_name": "F"})
+    assert again.status_code == 409

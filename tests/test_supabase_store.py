@@ -184,3 +184,77 @@ def test_storage_requests_use_the_secret_key(key, bearer):
     assert str(seen[0].url) == "https://x.supabase.co/storage/v1/object/holdings/f/p.csv"
     assert all(r.headers["apikey"] == key for r in seen)
     assert ("authorization" in seen[0].headers) == bearer
+
+
+# --- adviser approval ---------------------------------------------------------------------
+
+def test_new_sign_up_is_pending_and_cut_off(supabase_db, store, alice_world):
+    dave = as_(store, "dave")
+    adv = dave.get_or_create_adviser(None, None)
+    assert adv["status"] == "pending"
+    assert dave.list_clients(adv["firm_id"]) == []
+    assert dave.list_clients(alice_world["firm_id"]) == []
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):  # RLS refuses the write
+        dave.create_client(adv["firm_id"], adv["id"], {"name": "Mine"})
+
+
+def test_registration_is_stored_for_review_and_only_while_pending(supabase_db, store):
+    dave = as_(store, "dave")
+    dave.get_or_create_adviser(None, None)
+    with pytest.raises(PermissionError):  # the database checks the details too
+        dave.submit_registration("Dave", "12-34", "Dave Wealth", user_id=dev_user_id("dave"))
+    adv = dave.submit_registration("Dave Adams", "1234567", "Dave Wealth LLC",
+                                   user_id=dev_user_id("dave"))
+    assert adv["crd"] == "1234567" and adv["full_name"] == "Dave Adams"
+    assert adv["registration_submitted_at"] is not None and adv["status"] == "pending"
+    alice = as_(store, "alice")  # already active: registration is closed to her
+    with pytest.raises(PermissionError):
+        alice.submit_registration("A", "1", "F", user_id=dev_user_id("alice"))
+
+
+def test_advisers_cannot_approve_themselves(supabase_db, store):
+    as_(store, "dave").get_or_create_adviser(None, None)
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        raw(supabase_db, "dave", "select app.approve_adviser('dave@dev.local')")
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        raw(supabase_db, "dave", "update public.advisers set status = 'active'")
+
+
+def test_operator_approves_into_their_own_or_an_existing_firm(supabase_db, store, alice_world):
+    from advisor_engine.api import admin
+
+    dave = as_(store, "dave")
+    dave.get_or_create_adviser(None, None)
+    dave.submit_registration("Dave Adams", "1234567", "Dave Wealth LLC", user_id=dev_user_id("dave"))
+    assert [r["email"] for r in admin.list_pending(supabase_db)] == ["dave@dev.local"]
+    row = admin.approve(supabase_db, "dave@dev.local", alice_world["firm_id"])
+    assert row["status"] == "active" and row["role"] == "member"
+    assert [c["name"] for c in dave.list_clients(alice_world["firm_id"])] == ["Household A"]
+    assert admin.list_pending(supabase_db) == []
+    with pytest.raises(psycopg.errors.RaiseException):  # nothing left to approve
+        admin.approve(supabase_db, "dave@dev.local")
+
+
+def test_approval_names_the_new_firm_as_registered(supabase_db, store):
+    from advisor_engine.api import admin
+
+    dave = as_(store, "dave")
+    adv = dave.get_or_create_adviser(None, None)
+    dave.submit_registration("Dave Adams", "1234567", "Dave Wealth LLC", user_id=dev_user_id("dave"))
+    admin.approve(supabase_db, "dave@dev.local")
+    assert dave.get_firm(adv["firm_id"])["name"] == "Dave Wealth LLC"
+
+
+def test_admin_command_lists_and_approves(supabase_db, store, monkeypatch, capsys):
+    from advisor_engine.api import admin
+
+    dave = as_(store, "dave")
+    dave.get_or_create_adviser(None, None)
+    dave.submit_registration("Dave Adams", "1234567", "Dave Wealth LLC", user_id=dev_user_id("dave"))
+    monkeypatch.setenv("SUPABASE_DB_URL", supabase_db)
+    assert admin.main(["pending"]) == 0
+    assert "dave@dev.local  name=Dave Adams  CRD=1234567  firm=Dave Wealth LLC" in capsys.readouterr().out
+    assert admin.main(["approve", "dave@dev.local"]) == 0
+    assert "Approved dave@dev.local" in capsys.readouterr().out
+    monkeypatch.delenv("SUPABASE_DB_URL")
+    assert admin.main(["pending"]) == 2

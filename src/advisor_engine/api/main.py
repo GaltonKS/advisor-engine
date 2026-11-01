@@ -59,6 +59,12 @@ class ClientRenameIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
 
 
+class RegistrationIn(BaseModel):
+    full_name: str = Field(min_length=1, max_length=200)
+    crd: str = Field(pattern=r"^[0-9]{1,8}$")  # FINRA CRD numbers are digits only
+    firm_name: str = Field(min_length=1, max_length=200)
+
+
 class TurnIn(BaseModel):
     message: str = Field(default="", max_length=4000)
     draft: bool = False  # ask for a client-ready draft instead of answering `message`
@@ -218,9 +224,17 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
         allow_methods=["*"], allow_headers=["Authorization", "Content-Type", "X-Dev-User"],
     )
 
-    def ctx(user: User = Depends(current_user)) -> Ctx:
+    def any_ctx(user: User = Depends(current_user)) -> Ctx:
+        """The signed-in adviser, active or not (for /me and registration only)."""
         db = store.as_user(user.id, user.email)
         return Ctx(db.get_or_create_adviser(user.id, user.email), db)
+
+    def ctx(c: Ctx = Depends(any_ctx)) -> Ctx:
+        """An approved adviser. New sign-ups wait as pending until the operator verifies
+        them; row-level security already shows them nothing, and this says why."""
+        if c.adv.get("status", "active") != "active":
+            raise HTTPException(403, "Your account is awaiting approval.")
+        return c
 
     def own_client(c: Ctx, client_id: str) -> dict:
         client = c.db.get_client(c.adv["firm_id"], client_id)
@@ -259,10 +273,22 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
         return {"ok": True, "engine_version": __version__}
 
     @app.get("/me")
-    def me(c: Ctx = Depends(ctx)) -> dict:
+    def me(c: Ctx = Depends(any_ctx)) -> dict:
         return {"adviser": c.adv, "firm": c.db.get_firm(c.adv["firm_id"]), "auth": settings.auth,
                 "llm": settings.llm, "daily_turn_limit": settings.daily_turn_limit,
                 "engine_version": __version__, "returns_source": market_data_label()}
+
+    @app.post("/me/registration")
+    def register(body: RegistrationIn, c: Ctx = Depends(any_ctx)) -> dict:
+        """A pending adviser's name, CRD number and firm, for the operator to verify."""
+        try:
+            adv = c.db.submit_registration(body.full_name.strip(), body.crd,
+                                           body.firm_name.strip(), user_id=c.adv["id"])
+        except PermissionError as e:
+            raise HTTPException(409, "Registration is only for accounts awaiting approval.") from e
+        # Audit rows need an active firm, so this goes to the server log for the operator.
+        log_.warning("Registration submitted: adviser %s, CRD %s", adv["id"], body.crd)
+        return {"adviser": adv}
 
     # --- clients and portfolios ------------------------------------------------------
 

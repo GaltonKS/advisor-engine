@@ -125,6 +125,15 @@ class SupabaseSession:
     def get_or_create_adviser(self, user_id: str, email: str) -> dict:
         return self._run("select * from app.ensure_adviser()", one=True)
 
+    def submit_registration(self, full_name: str, crd: str, firm_name: str, *,
+                            user_id: str) -> dict:
+        """The caller's own registration (app.submit_registration checks it is pending)."""
+        try:
+            return self._run("select * from app.submit_registration(%s, %s, %s)",
+                             [full_name, crd, firm_name], one=True)
+        except psycopg.errors.RaiseException as e:
+            raise PermissionError(str(e).splitlines()[0]) from None
+
     def get_firm(self, firm_id: str) -> dict:
         return self._run("select * from public.firms where id = %s", [firm_id], one=True) or {
             "id": firm_id}

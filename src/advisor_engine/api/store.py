@@ -35,8 +35,11 @@ def _new_id() -> str:
 
 
 class LocalStore:
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, require_approval: bool = False):
         self.root = Path(root)
+        # Off for local development and most tests (dev users are trusted); on mirrors the
+        # Supabase rule that new sign-ups wait as pending until approved.
+        self.require_approval = require_approval
         self._lock = threading.RLock()
 
     def as_user(self, user_id: str, email: str) -> "LocalStore":
@@ -80,19 +83,51 @@ class LocalStore:
     # --- advisers and firms ----------------------------------------------------------
 
     def get_or_create_adviser(self, user_id: str, email: str) -> dict:
-        """Open sign-up: a new user gets a new firm of their own, as its owner."""
+        """A new user gets a new firm of their own, as its owner: active, or pending until
+        approved when `require_approval` is on (as with Supabase)."""
         path = self.root / "advisers.json"
         with self._lock:
             advisers = self._read(path, {})
             if user_id not in advisers:
                 firm_id = _new_id()
                 advisers[user_id] = {"id": user_id, "email": email, "firm_id": firm_id,
-                                     "role": "owner", "created_at": _now()}
+                                     "role": "owner", "created_at": _now(),
+                                     "status": "pending" if self.require_approval else "active"}
                 self._write(path, advisers)
                 self._write(self.firm_dir(firm_id) / "firm.json",
                             {"id": firm_id, "name": email.split("@")[-1] or "My firm",
                              "created_at": _now()})
             return advisers[user_id]
+
+    def submit_registration(self, full_name: str, crd: str, firm_name: str, *,
+                            user_id: str) -> dict:
+        path = self.root / "advisers.json"
+        with self._lock:
+            advisers = self._read(path, {})
+            adv = advisers.get(user_id)
+            if adv is None or adv.get("status", "active") != "pending":
+                raise PermissionError("registration is only for advisers awaiting approval")
+            adv.update(full_name=full_name, crd=crd, registration_submitted_at=_now())
+            self._write(path, advisers)
+            firm = self.get_firm(adv["firm_id"])
+            self._write(self.firm_dir(adv["firm_id"]) / "firm.json",
+                        {**firm, "requested_name": firm_name})
+            return adv
+
+    def approve_adviser(self, email: str, firm_id: str | None = None) -> dict:
+        """Operator only (no route calls this): activate a pending adviser."""
+        path = self.root / "advisers.json"
+        with self._lock:
+            advisers = self._read(path, {})
+            adv = next((a for a in advisers.values() if a["email"].lower() == email.lower()
+                        and a.get("status") == "pending"), None)
+            if adv is None:
+                raise LookupError(f"no pending adviser with email {email}")
+            adv.update(status="active", approved_at=_now())
+            if firm_id:
+                adv.update(firm_id=firm_id, role="member")
+            self._write(path, advisers)
+            return adv
 
     def get_firm(self, firm_id: str) -> dict:
         return self._read(self.firm_dir(firm_id) / "firm.json", {"id": firm_id})
