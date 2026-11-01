@@ -19,7 +19,11 @@ from .tools import TOOLS, execute_tool
 DEFAULT_MODEL = "claude-sonnet-5-5"
 MAX_TOOL_ROUNDS = 5
 MAX_RETRIES = 1
-MAX_TOKENS = 2048
+# Output cap per call. Thinking counts against it, so it is set well above a normal reply
+# (about 900 output tokens per call in production) to let a long-thinking answer finish
+# rather than be cut off. Billing is for tokens generated, not the cap. 16,000 stays under
+# the SDK's limit for non-streaming requests.
+MAX_TOKENS = 16000
 
 # Top-level automatic prompt caching: the API caches the request up to its last block, so
 # the next call in the tool loop (and the next turn, within the 5-minute TTL) reads the
@@ -27,6 +31,14 @@ MAX_TOKENS = 2048
 # changes billing only, not the reply. It relies on the prefix staying byte-identical:
 # keep TOOLS in a fixed order and nothing per-request (dates, ids) in the system prompt.
 CACHE_CONTROL = {"type": "ephemeral"}
+
+# Older tool results are not resent. When a turn ends, every tool result except the newest
+# one from each tool is replaced in the saved history by a short note (the model can call
+# the tool again), so a long conversation stops resending full risk profiles every call.
+# The full text stays on the block under "_full", which is stripped before any request,
+# so the number check still accepts figures quoted from earlier results. Results shorter
+# than this are kept as they are (errors, referrals): replacing them saves nothing.
+COMPACT_MIN_CHARS = 300
 
 # Token counts summed over a turn's API calls, recorded in the audit log.
 USAGE_FIELDS = ("input_tokens", "output_tokens", "cache_read_input_tokens",
@@ -103,11 +115,63 @@ def _add_usage(total: dict | None, resp) -> dict | None:
 
 
 def _tool_outputs(messages: list[dict]) -> list[str]:
+    """Every tool result in the conversation, in full (including compacted ones), for the
+    number check."""
     outs = []
     for m in messages:
         if m["role"] == "user" and isinstance(m["content"], list):
-            outs.extend(b["content"] for b in m["content"] if b.get("type") == "tool_result")
+            outs.extend(b.get("_full", b["content"]) for b in m["content"]
+                        if b.get("type") == "tool_result")
     return outs
+
+
+def _wire(messages: list[dict]) -> list[dict]:
+    """Messages as sent to the API: private keys (leading "_") removed from blocks."""
+    out = []
+    for m in messages:
+        if isinstance(m["content"], list) and any(
+                any(k.startswith("_") for k in b) for b in m["content"]):
+            m = {**m, "content": [{k: v for k, v in b.items() if not k.startswith("_")}
+                                  for b in m["content"]]}
+        out.append(m)
+    return out
+
+
+def _compacted_note(tool: str) -> str:
+    return (f"[Earlier {tool} result, left out to save space. A newer {tool} result comes "
+            f"later in this conversation; call {tool} again if you need figures from this one.]")
+
+
+def compact_history(messages: list[dict]) -> list[dict]:
+    """Keep only the newest result of each tool in full; see COMPACT_MIN_CHARS.
+
+    Run once per turn, on the history being saved, so the calls within a turn only ever
+    append (which keeps the prompt cache valid) and each later turn's prefix is stable
+    until a newer result of the same tool arrives.
+    """
+    names = {b["id"]: b["name"] for m in messages if m["role"] == "assistant"
+             and isinstance(m["content"], list) for b in m["content"] if b.get("type") == "tool_use"}
+    latest: dict[str, tuple[int, int]] = {}
+    for i, m in enumerate(messages):
+        if m["role"] == "user" and isinstance(m["content"], list):
+            for j, b in enumerate(m["content"]):
+                if b.get("type") == "tool_result":
+                    latest[names.get(b["tool_use_id"], "")] = (i, j)
+    keep = set(latest.values())
+    out = []
+    for i, m in enumerate(messages):
+        if m["role"] == "user" and isinstance(m["content"], list):
+            blocks = []
+            for j, b in enumerate(m["content"]):
+                if (b.get("type") == "tool_result" and (i, j) not in keep and "_full" not in b
+                        and not b.get("is_error") and isinstance(b["content"], str)
+                        and len(b["content"]) >= COMPACT_MIN_CHARS):
+                    tool = names.get(b["tool_use_id"]) or "tool"
+                    b = {**b, "content": _compacted_note(tool), "_full": b["content"]}
+                blocks.append(b)
+            m = {**m, "content": blocks}
+        out.append(m)
+    return out
 
 
 # What to tell the model about each kind of number-check failure, so its one retry can
@@ -189,10 +253,15 @@ def run_turn(
 
     while True:
         resp = client.messages.create(
-            model=model, max_tokens=MAX_TOKENS, system=system, tools=TOOLS, messages=list(messages),
+            model=model, max_tokens=MAX_TOKENS, system=system, tools=TOOLS, messages=_wire(messages),
             cache_control=CACHE_CONTROL,
         )
         usage = _add_usage(usage, resp)
+        if getattr(resp, "stop_reason", None) == "max_tokens":
+            # A cut-off reply is never shown, and a cut-off tool call is never run: its
+            # input may be incomplete.
+            block_reason = "max_tokens"
+            break
         blocks = _blocks(resp.content)
         messages.append({"role": "assistant", "content": blocks})
         uses = [b for b in blocks if b["type"] == "tool_use"]
@@ -231,7 +300,12 @@ def run_turn(
         break
 
     blocked = block_reason is not None
-    if block_reason == "tool_round_cap":
+    if block_reason == "max_tokens":
+        shown = ("I couldn't finish this answer within the length limit, so nothing was shown. "
+                 "Try asking a narrower question.")
+        verification = {"ok": False, "unmatched": [], "checked": 0}
+        new_history = history  # the turn is dropped, as for any withheld answer
+    elif block_reason == "tool_round_cap":
         shown = f"I stopped after {MAX_TOOL_ROUNDS} rounds of tool calls without reaching an answer."
         verification = {"ok": False, "unmatched": [], "checked": 0}
         new_history = history
@@ -242,7 +316,7 @@ def run_turn(
         shown = text
         if firm_profile and firm_profile.get("disclaimer"):
             shown += "\n\n" + firm_profile["disclaimer"]
-        new_history = [m for i, m in enumerate(messages) if i not in drop]
+        new_history = compact_history([m for i, m in enumerate(messages) if i not in drop])
 
     record = {
         **(audit_extra or {}),
