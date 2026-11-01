@@ -247,6 +247,10 @@ every turn --append_audit--> data/audit/audit.jsonl
   API; the browser never calls the model.
 - `VITE_*` variables ship to the browser: only the Supabase publishable key, never the
   secret key.
+- `/privacy` (`pages/Privacy.tsx`) is the approved Privacy Policy, public (shown before the
+  auth gate in `main.tsx`) and linked from the sign-in page and the app footer. It is legal
+  text: change it only from a new approved version, together with
+  `public/legal/GaltonKS-Privacy-Policy.pdf` and `PRIVACY_EFFECTIVE_DATE`.
 
 ### Brand (`web/src/components/Logo.tsx`, `web/src/index.css`)
 - The product is **GaltonKS — Knowledge System** (formerly "KVS / Knowledge Vault
