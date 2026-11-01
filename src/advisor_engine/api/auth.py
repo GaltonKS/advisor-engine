@@ -1,5 +1,10 @@
 """Who is calling: a verified Supabase access token, or a dev header locally.
 
+The token also says how strongly the caller signed in: `aal` is "aal1" after a password
+alone and "aal2" once they have entered a code from an enrolled authenticator, and `amr`
+lists each method used with the time it was used. The API enforces multi-factor sign-in
+from these (see main.py and docs/mfa-plan.md); the browser only guides the user.
+
 Supabase signs access tokens either with the project's asymmetric signing keys
 (published at /auth/v1/.well-known/jwks.json) or, on older projects, with a shared
 HS256 secret. Both are accepted; the audience must be "authenticated", so anon and
@@ -9,6 +14,7 @@ being issued before the address is verified, which this server relies on.
 
 from __future__ import annotations
 
+import time
 import uuid
 from dataclasses import dataclass
 from functools import lru_cache
@@ -19,10 +25,46 @@ from fastapi import Header, HTTPException, Request
 from .settings import Settings
 
 
+# Sign-in methods that count as a second factor in a token's `amr` claim. Supabase
+# records an authenticator code as "totp"; passkeys / security keys are listed so they
+# satisfy the same checks once they are added as a factor type.
+MFA_METHODS = frozenset({"totp", "mfa/totp", "webauthn", "mfa/webauthn"})
+
+# How recently a code must have been entered for a sensitive action (deleting a client,
+# removing an authenticator). Older than this, the API asks for a fresh code.
+FRESH_MFA_SECONDS = 300
+
+
 @dataclass(frozen=True)
 class User:
     id: str
     email: str
+    aal: str = "aal1"
+    # (method, unix time) pairs from the token's `amr` claim.
+    amr: tuple[tuple[str, int], ...] = ()
+
+    def mfa_age(self, now: float | None = None) -> float | None:
+        """Seconds since a second factor was last used in this session, or None if never."""
+        times = [t for method, t in self.amr if method in MFA_METHODS]
+        if not times:
+            return None
+        return (time.time() if now is None else now) - max(times)
+
+    def mfa_fresh(self, now: float | None = None) -> bool:
+        age = self.mfa_age(now)
+        return age is not None and age <= FRESH_MFA_SECONDS
+
+
+def _amr(claim) -> tuple[tuple[str, int], ...]:
+    """The `amr` claim as (method, timestamp) pairs; anything malformed is ignored."""
+    out = []
+    for entry in claim if isinstance(claim, list) else []:
+        if isinstance(entry, dict) and isinstance(entry.get("method"), str):
+            try:
+                out.append((entry["method"], int(entry.get("timestamp", 0))))
+            except (TypeError, ValueError):
+                continue
+    return tuple(out)
 
 
 @lru_cache(maxsize=4)
@@ -46,7 +88,9 @@ def verify_supabase_token(token: str, settings: Settings) -> User:
         raise HTTPException(401, f"Invalid sign-in token: {e}") from e
     if claims.get("is_anonymous"):
         raise HTTPException(401, "Anonymous sessions cannot use the engine.")
-    return User(id=claims["sub"], email=claims.get("email", ""))
+    aal = claims.get("aal") if claims.get("aal") in ("aal1", "aal2") else "aal1"
+    return User(id=claims["sub"], email=claims.get("email", ""), aal=aal,
+                amr=_amr(claims.get("amr")))
 
 
 def dev_user_id(name: str) -> str:

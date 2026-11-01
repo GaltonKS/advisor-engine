@@ -30,6 +30,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from ..assistant.audit import build_record
+from .auth_admin import secret_key_headers
 
 BUCKET = "holdings"
 # Portfolio columns the API returns (storage_path stays server-side).
@@ -63,11 +64,8 @@ class SupabaseStorage:
 
     def __init__(self, supabase_url: str, secret_key: str, *, client: httpx.Client | None = None):
         self.base = f"{supabase_url.rstrip('/')}/storage/v1/object/{BUCKET}"
-        headers = {"apikey": secret_key}
-        if not secret_key.startswith("sb_"):  # legacy service_role keys are JWTs
-            headers["Authorization"] = f"Bearer {secret_key}"
         self.http = client or httpx.Client(timeout=30)
-        self.headers = headers
+        self.headers = secret_key_headers(secret_key)
 
     def put(self, path: str, data: bytes) -> None:
         r = self.http.post(f"{self.base}/{path}", content=data,
@@ -101,14 +99,22 @@ class SupabaseStore:
         self.storage = storage
         self.cache_dir = Path(cache_dir)
 
-    def as_user(self, user_id: str, email: str) -> "SupabaseSession":
-        return SupabaseSession(self, user_id, email)
+    def as_user(self, user_id: str, email: str, aal: str = "aal1") -> "SupabaseSession":
+        return SupabaseSession(self, user_id, email, aal)
+
+    def mfa_mode(self) -> str:
+        """The database's multi-factor mode (app.security_settings), read as the owner."""
+        with psycopg.connect(self.db_url, prepare_threshold=None) as conn:
+            return conn.execute("select mfa_mode from app.security_settings").fetchone()[0]
 
 
 class SupabaseSession:
-    def __init__(self, store: SupabaseStore, user_id: str, email: str):
+    def __init__(self, store: SupabaseStore, user_id: str, email: str, aal: str = "aal1"):
         self.store = store
-        self.claims = json.dumps({"sub": user_id, "email": email, "role": "authenticated"})
+        # `aal` is the level the API verified on the caller's token, so the database's
+        # multi-factor policies see the same thing the API did.
+        self.claims = json.dumps({"sub": user_id, "email": email, "role": "authenticated",
+                                  "aal": aal})
 
     def _run(self, sql: str, params=(), *, one: bool = False):
         with psycopg.connect(self.store.db_url, prepare_threshold=None, row_factory=dict_row) as conn:
@@ -133,6 +139,10 @@ class SupabaseSession:
                              [full_name, crd, firm_name], one=True)
         except psycopg.errors.RaiseException as e:
             raise PermissionError(str(e).splitlines()[0]) from None
+
+    def list_firm_advisers(self, firm_id: str) -> list[dict]:
+        return self._run("select id, email, full_name, role, status, created_at "
+                         "from public.advisers where firm_id = %s order by created_at", [firm_id])
 
     def get_firm(self, firm_id: str) -> dict:
         return self._run("select * from public.firms where id = %s", [firm_id], one=True) or {

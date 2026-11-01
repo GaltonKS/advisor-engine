@@ -1,5 +1,7 @@
 // Shapes returned by the API. Every number in them was computed by the engine.
 
+import type { MfaInfo } from "./mfa";
+
 export interface Adviser {
   id: string;
   email: string;
@@ -21,6 +23,26 @@ export interface Me {
   engine_version: string;
   /** Where return history comes from: "synthetic", or a vendor such as "FMP". */
   returns_source?: string;
+  /** Two-step sign-in in force, and how this session signed in. */
+  mfa?: MfaInfo;
+}
+
+/** One adviser in the firm owner's two-step sign-in view. */
+export interface FirmMfaAdviser {
+  adviser_id: string;
+  email: string;
+  full_name?: string | null;
+  role?: string;
+  status?: string;
+  enrolled: boolean;
+  factor_count: number;
+  latest_factor_at: string | null;
+}
+
+export interface FirmMfa {
+  mode: MfaInfo["mode"];
+  deadline: string | null;
+  advisers: FirmMfaAdviser[];
 }
 
 export interface Portfolio {

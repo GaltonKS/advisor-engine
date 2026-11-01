@@ -6,6 +6,10 @@ Same guarantees as the Streamlit demo, now per signed-in adviser and per firm:
 - Model replies go through `run_turn`, so the number check, retry and withholding apply.
   The browser never talks to the model.
 - Every turn and approval is audited with the adviser and firm that made it.
+- Multi-factor sign-in is enforced here, not only in the browser: with
+  ADVISOR_REQUIRE_MFA=required every route except /me needs a session that entered an
+  authenticator code, and sensitive actions need a code entered in the last few minutes
+  (see docs/mfa-plan.md).
 """
 
 from __future__ import annotations
@@ -35,7 +39,8 @@ from ..compare import compare_profiles
 from ..data import get_market_data
 from ..holdings import COLUMNS, load_holdings, validate_holdings
 from ..stress import run_scenario, scenario_list, stress_test
-from .auth import User, current_user
+from .auth import FRESH_MFA_SECONDS, User, current_user
+from .auth_admin import AuthAdminError, MemoryAuthAdmin, SupabaseAuthAdmin, verified
 from .settings import Settings, load_settings
 from .store import LocalStore
 from .supabase_store import SupabaseStorage, SupabaseStore
@@ -47,6 +52,12 @@ TOOL_LABELS = {"get_risk_profile": "Risk profile", "get_holdings": "Holdings",
                "run_what_if": "What-if", "run_stress_test": "Stress test", "show_chart": "Chart",
                "refer_to_stress_test": "Stress test referral"}
 MAX_UPLOAD_BYTES = 2 * 1024 * 1024
+
+# Distinct 403 reasons, so the web app can tell "enter your code" from "awaiting approval".
+MFA_REQUIRED = {"code": "mfa_required",
+                "message": "Two-step sign-in is required. Enter the code from your authenticator app."}
+MFA_FRESH_REQUIRED = {"code": "mfa_fresh_required",
+                      "message": "Enter your authenticator code to confirm this action."}
 
 
 class ClientIn(BaseModel):
@@ -63,6 +74,10 @@ class RegistrationIn(BaseModel):
     full_name: str = Field(min_length=1, max_length=200)
     crd: str = Field(pattern=r"^[0-9]{1,8}$")  # FINRA CRD numbers are digits only
     firm_name: str = Field(min_length=1, max_length=200)
+
+
+class FactorIn(BaseModel):
+    factor_id: str = Field(min_length=1, max_length=100)
 
 
 class TurnIn(BaseModel):
@@ -183,9 +198,10 @@ def _tool_view(call: dict) -> dict:
 
 @dataclass
 class Ctx:
-    """The signed-in adviser and a store session that acts as them."""
+    """The signed-in adviser, a store session that acts as them, and how they signed in."""
     adv: dict
     db: object
+    user: User
 
 
 def make_store(settings: Settings):
@@ -196,9 +212,16 @@ def make_store(settings: Settings):
     return LocalStore(settings.store_dir)
 
 
-def create_app(settings: Settings | None = None, store=None) -> FastAPI:
+def make_auth_admin(settings: Settings):
+    if settings.auth == "supabase" and settings.supabase_secret_key:
+        return SupabaseAuthAdmin(settings.supabase_url, settings.supabase_secret_key)
+    return MemoryAuthAdmin()  # dev auth has no authenticators
+
+
+def create_app(settings: Settings | None = None, store=None, auth_admin=None) -> FastAPI:
     settings = settings or load_settings()
     store = store or make_store(settings)
+    auth_admin = auth_admin or make_auth_admin(settings)
     app = FastAPI(title="Advisor Engine API", version=__version__)
     app.state.settings = settings
     app.state.store = store
@@ -217,6 +240,16 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
             return JSONResponse({"detail": "Server error. It has been logged; please try again."},
                                 status_code=500)
 
+    # The database enforces its own multi-factor mode; one stricter than the API's would
+    # leave password-only sessions past the API but shown nothing. Say so in the log.
+    if hasattr(store, "mfa_mode"):
+        try:
+            db_mode = store.mfa_mode()
+            if db_mode != settings.mfa:
+                log_.warning("Multi-factor mode differs: API %s, database %s.", settings.mfa, db_mode)
+        except Exception:
+            log_.warning("Could not read the database's multi-factor mode.", exc_info=True)
+
     # In the deploy log, so a CORS mismatch is visible without guessing.
     log_.warning("CORS allowed origins: %s", ", ".join(settings.allowed_origins) or "(none)")
     app.add_middleware(
@@ -224,10 +257,17 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
         allow_methods=["*"], allow_headers=["Authorization", "Content-Type", "X-Dev-User"],
     )
 
-    def any_ctx(user: User = Depends(current_user)) -> Ctx:
-        """The signed-in adviser, active or not (for /me and registration only)."""
-        db = store.as_user(user.id, user.email)
-        return Ctx(db.get_or_create_adviser(user.id, user.email), db)
+    def base_ctx(user: User = Depends(current_user)) -> Ctx:
+        """The signed-in adviser, before any multi-factor or approval check (/me only)."""
+        db = store.as_user(user.id, user.email, aal=user.aal)
+        return Ctx(db.get_or_create_adviser(user.id, user.email), db, user)
+
+    def any_ctx(c: Ctx = Depends(base_ctx)) -> Ctx:
+        """Signed in with a second factor when that is required; active or not (for
+        registration and an adviser's own authenticators)."""
+        if settings.mfa == "required" and c.user.aal != "aal2":
+            raise HTTPException(403, MFA_REQUIRED)
+        return c
 
     def ctx(c: Ctx = Depends(any_ctx)) -> Ctx:
         """An approved adviser. New sign-ups wait as pending until the operator verifies
@@ -235,6 +275,33 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
         if c.adv.get("status", "active") != "active":
             raise HTTPException(403, "Your account is awaiting approval.")
         return c
+
+    def require_fresh_code(c: Ctx) -> bool:
+        """For sensitive actions: a code entered within FRESH_MFA_SECONDS, even inside a
+        verified session. True when one was checked (recorded on the audit row).
+
+        Skipped when MFA is off, and in the `enrol` grace period for sessions without a
+        second factor (they have no code to give yet; that is what `enrol` allows)."""
+        if settings.mfa == "off" or (settings.mfa == "enrol" and c.user.aal != "aal2"):
+            return False
+        if not c.user.mfa_fresh():
+            raise HTTPException(403, MFA_FRESH_REQUIRED)
+        return True
+
+    def audit_or_log(c: Ctx, event: str, **fields) -> None:
+        """Audit rows need an active firm; a pending adviser's goes to the server log."""
+        if c.adv.get("status", "active") == "active":
+            log(c, event, **fields)
+        else:
+            log_.warning("%s: adviser %s %s", event, c.adv["id"], fields)
+
+    def factors_of(user_id: str) -> list[dict]:
+        try:
+            return auth_admin.list_factors(user_id)
+        except LookupError:
+            return []
+        except AuthAdminError as e:
+            raise HTTPException(502, str(e)) from None
 
     def own_client(c: Ctx, client_id: str) -> dict:
         client = c.db.get_client(c.adv["firm_id"], client_id)
@@ -266,17 +333,78 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
         """Every engine run from a CFP tool is audited with its inputs and result."""
         c.db.write_audit(c.adv["firm_id"], {"event": event, "model": None,
                                             "adviser_id": c.adv["id"],
-                                            "firm_id": c.adv["firm_id"], **fields})
+                                            "firm_id": c.adv["firm_id"], **session_fields(c),
+                                            **fields})
+
+    def session_fields(c: Ctx) -> dict:
+        """How the adviser signed in, for audit rows (real sign-in only)."""
+        return {"aal": c.user.aal} if settings.auth == "supabase" else {}
 
     @app.get("/health")
     def health() -> dict:
         return {"ok": True, "engine_version": __version__}
 
     @app.get("/me")
-    def me(c: Ctx = Depends(any_ctx)) -> dict:
+    def me(c: Ctx = Depends(base_ctx)) -> dict:
         return {"adviser": c.adv, "firm": c.db.get_firm(c.adv["firm_id"]), "auth": settings.auth,
                 "llm": settings.llm, "daily_turn_limit": settings.daily_turn_limit,
-                "engine_version": __version__, "returns_source": market_data_label()}
+                "engine_version": __version__, "returns_source": market_data_label(),
+                "mfa": {"mode": settings.mfa, "deadline": settings.mfa_deadline or None,
+                        "aal": c.user.aal, "fresh_seconds": FRESH_MFA_SECONDS}}
+
+    # --- multi-factor sign-in --------------------------------------------------------
+    # Enrolling and entering codes happen between the browser and Supabase. These routes
+    # are the parts the server must decide: recording an enrolment, removing a factor,
+    # and the firm owner's view.
+
+    @app.post("/me/mfa/enrolled")
+    def mfa_enrolled(body: FactorIn, c: Ctx = Depends(any_ctx)) -> dict:
+        """Audit a newly enrolled authenticator, once Supabase confirms it is verified."""
+        factor = next((f for f in verified(factors_of(c.user.id)) if f["id"] == body.factor_id), None)
+        if factor is None:
+            raise HTTPException(404, "Authenticator not found.")
+        audit_or_log(c, "mfa_enrolled", inputs={"factor_id": factor["id"],
+                                                "friendly_name": factor["friendly_name"]})
+        return factor
+
+    @app.delete("/me/mfa/factors/{factor_id}", status_code=204)
+    def mfa_remove(factor_id: str, c: Ctx = Depends(any_ctx)) -> None:
+        """Remove one of the adviser's own authenticators: needs a fresh code, and never
+        the last verified one while two-step sign-in is required."""
+        factors = factors_of(c.user.id)
+        factor = next((f for f in factors if f["id"] == factor_id), None)
+        if factor is None:
+            raise HTTPException(404, "Authenticator not found.")
+        fresh = require_fresh_code(c)
+        if (settings.mfa == "required" and factor["status"] == "verified"
+                and len(verified(factors)) == 1):
+            raise HTTPException(409, "You can't remove your only authenticator while two-step "
+                                     "sign-in is required. Add another one first.")
+        try:
+            auth_admin.delete_factor(c.user.id, factor_id)
+        except LookupError:
+            raise HTTPException(404, "Authenticator not found.") from None
+        except AuthAdminError as e:
+            raise HTTPException(502, str(e)) from None
+        audit_or_log(c, "mfa_factor_removed", fresh_code=fresh,
+                     inputs={"factor_id": factor_id, "friendly_name": factor["friendly_name"]})
+
+    @app.get("/firm/mfa")
+    def firm_mfa(c: Ctx = Depends(ctx)) -> dict:
+        """The firm owner's view: which of the firm's advisers have set up two-step
+        sign-in. Names, counts and dates only; nothing secret."""
+        if c.adv.get("role") != "owner":
+            raise HTTPException(403, "Only the firm's owner can see this.")
+        rows = []
+        for a in c.db.list_firm_advisers(c.adv["firm_id"]):
+            factors = verified(factors_of(a["id"]))
+            rows.append({"adviser_id": a["id"], "email": a["email"],
+                         "full_name": a.get("full_name"), "role": a.get("role"),
+                         "status": a.get("status", "active"), "enrolled": bool(factors),
+                         "factor_count": len(factors),
+                         "latest_factor_at": max((f["created_at"] or "" for f in factors),
+                                                 default=None)})
+        return {"mode": settings.mfa, "deadline": settings.mfa_deadline or None, "advisers": rows}
 
     @app.post("/me/registration")
     def register(body: RegistrationIn, c: Ctx = Depends(any_ctx)) -> dict:
@@ -324,8 +452,10 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
         """Remove a client from the firm's list. A soft delete: their portfolios, drafts
         and the audit trail are kept on record, but the app no longer shows or uses them."""
         client = own_client(c, client_id)
+        fresh = require_fresh_code(c)
         c.db.delete_client(c.adv["firm_id"], client_id, c.adv["id"])
-        log(c, "client_deleted", client_id=client_id, inputs={"name": client["name"]})
+        log(c, "client_deleted", client_id=client_id, inputs={"name": client["name"]},
+            fresh_code=fresh)
 
     @app.post("/clients/{client_id}/portfolios", status_code=201)
     async def upload_portfolio(client_id: str, file: UploadFile = File(...),
@@ -498,6 +628,7 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
                 data_dir=c.db.firm_dir(fid),
                 audit_sink=lambda record: c.db.write_audit(fid, record),
                 audit_extra={"event": "turn", "adviser_id": c.adv["id"], "firm_id": fid,
+                             **session_fields(c),
                              "client_id": portfolio["client_id"], "portfolio_id": portfolio_id,
                              "turn_id": turn_id},
             )
@@ -544,6 +675,7 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
             "user_message": DRAFT_REQUEST, "tool_calls": draft["tool_calls"],
             "reply": draft["original"], "approved_text": body.text,
             "edited": body.text != draft["original"], "verification": check, "blocked": False,
+            **session_fields(c),
         })
         draft.update(approved=True, approved_text=body.text, approved_by=c.adv["id"],
                      approved_at=record["timestamp"])

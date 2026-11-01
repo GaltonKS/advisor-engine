@@ -7,11 +7,14 @@ Rules enforced here rather than left to deployment discipline:
   misconfigured deploy fails loudly instead of letting anyone pick an identity.
 - On Render the data must live in Supabase (SUPABASE_DB_URL): the local store would be
   wiped on every deploy.
+- Multi-factor sign-in (ADVISOR_REQUIRE_MFA) only applies to real sign-in: with dev
+  auth there are no authenticators, so it is always off.
 """
 
 from __future__ import annotations
 
 import os
+from datetime import date
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -19,6 +22,10 @@ from ..assistant._paths import DATA_DIR
 from ..assistant.chat import llm_mode
 
 DEFAULT_DAILY_TURN_LIMIT = 200
+# off: no second factor asked for. enrol: advisers are prompted to set one up (the grace
+# period), but password-only sessions still work. required: every route except /me needs
+# a session that entered an authenticator code (aal2).
+MFA_MODES = ("off", "enrol", "required")
 
 
 @dataclass(frozen=True)
@@ -31,6 +38,8 @@ class Settings:
     supabase_secret_key: str = ""  # sb_secret_... (or legacy service_role), Storage only
     allowed_origins: list[str] = field(default_factory=list)
     daily_turn_limit: int = DEFAULT_DAILY_TURN_LIMIT
+    require_mfa: str = "off"  # one of MFA_MODES
+    mfa_deadline: str = ""    # ISO date MFA becomes required, shown during `enrol`
 
     @property
     def store(self) -> str:
@@ -40,6 +49,11 @@ class Settings:
     def llm(self) -> str:
         """"mock" or "anthropic". Live only once sign-in is real (see module docstring)."""
         return llm_mode() if self.auth == "supabase" else "mock"
+
+    @property
+    def mfa(self) -> str:
+        """The multi-factor mode in force: always "off" with dev auth (see docstring)."""
+        return self.require_mfa if self.auth == "supabase" else "off"
 
 
 def load_settings() -> Settings:
@@ -61,6 +75,15 @@ def load_settings() -> Settings:
         raise RuntimeError("SUPABASE_DB_URL also needs SUPABASE_URL and SUPABASE_SECRET_KEY.")
     # Browsers send the origin with no trailing slash ("https://app.example.com"), and CORS
     # compares it exactly, so "https://app.example.com/" would silently never match.
+    mfa = os.environ.get("ADVISOR_REQUIRE_MFA", "").strip().lower() or "off"
+    if mfa not in MFA_MODES:
+        raise ValueError(f"ADVISOR_REQUIRE_MFA must be one of {', '.join(MFA_MODES)}, not {mfa!r}.")
+    deadline = os.environ.get("ADVISOR_MFA_DEADLINE", "").strip()
+    if deadline:
+        try:
+            date.fromisoformat(deadline)
+        except ValueError:
+            raise ValueError("ADVISOR_MFA_DEADLINE must be a date like 2026-11-15.") from None
     origins = [o.strip().rstrip("/") for o in os.environ.get("ALLOWED_ORIGINS", "").split(",")
                if o.strip().rstrip("/")]
     return Settings(
@@ -72,4 +95,6 @@ def load_settings() -> Settings:
         supabase_secret_key=secret_key,
         allowed_origins=origins or (["http://localhost:5173"] if auth == "dev" else []),
         daily_turn_limit=int(os.environ.get("ADVISOR_DAILY_TURN_LIMIT", DEFAULT_DAILY_TURN_LIMIT)),
+        require_mfa=mfa,
+        mfa_deadline=deadline,
     )

@@ -61,9 +61,9 @@ Built in one pass so the app's structure fits the tools from the start. Done:
 engine modules (`stress.py`, `questionnaire.py`, `compare.py`; synthetic returns seeded
 per ticker so what-if is meaningful, engine 0.2.0), API routes for each, a migration for
 questionnaire answers and labelled portfolio versions, and `web/` with every tab listed
-in `web/README.md`. Not yet: strategy options (needs an optimizer and real data), MFA
-enrolment screens, and "explain this" for what-if / stress results (needs new model
-tools so the number check covers them).
+in `web/README.md`. Not yet: strategy options (needs an optimizer and real data), and "explain this" for what-if / stress results (needs new model
+tools so the number check covers them). Two-step sign-in (MFA) has since been built:
+see docs/mfa-plan.md.
 
 ### Phase 3 (original notes): React app matching Streamlit
 - Vite, React, TypeScript, React Router, TanStack Query, Supabase JS (sign-in only), Tailwind with the KVS tokens, Recharts.
@@ -90,7 +90,8 @@ Each new engine feature follows CLAUDE.md "A new engine metric", and each new ki
 ### Phase 5: deploy on Render
 `render.yaml` with a web service (`uvicorn advisor_engine.api.main:app`) and a static site
 (the React build). Settings: `SUPABASE_URL`, `ALLOWED_ORIGINS`, `ANTHROPIC_API_KEY`, and
-optionally `ADVISOR_LLM`, `ADVISOR_MODEL`, `ADVISOR_DAILY_TURN_LIMIT`. Use the paid Starter tier
+optionally `ADVISOR_LLM`, `ADVISOR_MODEL`, `ADVISOR_DAILY_TURN_LIMIT`, `ADVISOR_REQUIRE_MFA`,
+`ADVISOR_MFA_DEADLINE` (two-step sign-in, see docs/mfa-plan.md). Use the paid Starter tier
 (the free tier goes to sleep) and Python 3.12. Do not deploy with `LocalStore`: Render's
 disk is wiped on deploy, so it waits for Phase 2.
 
