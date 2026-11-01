@@ -115,7 +115,16 @@ class LocalStore:
             return adv
 
     def approve_adviser(self, email: str, firm_id: str | None = None) -> dict:
-        """Operator only (no route calls this): activate a pending adviser."""
+        """Operator only, like app.approve_adviser: approve with no checks recorded."""
+        self.review_adviser(email, "approved", "sql:local", [], None,
+                            "Approved in the SQL editor (no checks recorded)", None, firm_id)
+        return next(a for a in self._read(self.root / "advisers.json", {}).values()
+                    if a["email"].lower() == email.lower())
+
+    def review_adviser(self, email: str, decision: str, reviewed_by: str, checks: list[str],
+                       reason: str | None, summary: str, note: str | None,
+                       firm_id: str | None = None) -> dict:
+        """Approve or reject a pending adviser and append the record (as app.review_adviser)."""
         path = self.root / "advisers.json"
         with self._lock:
             advisers = self._read(path, {})
@@ -123,11 +132,27 @@ class LocalStore:
                         and a.get("status") == "pending"), None)
             if adv is None:
                 raise LookupError(f"no pending adviser with email {email}")
-            adv.update(status="active", approved_at=_now())
-            if firm_id:
-                adv.update(firm_id=firm_id, role="member")
+            if decision == "approved":
+                adv.update(status="active", approved_at=_now())
+                if firm_id:
+                    adv.update(firm_id=firm_id, role="member")
+            else:
+                adv.update(status="rejected")
             self._write(path, advisers)
-            return adv
+            review = {"reviewed_at": _now(), "adviser_email": adv["email"],
+                      "adviser_name": adv.get("full_name"), "crd": adv.get("crd"),
+                      "decision": decision, "reviewed_by": reviewed_by, "checks": list(checks),
+                      "reason": reason, "summary": summary, "note": (note or "").strip() or None}
+            with (self.root / "adviser_reviews.jsonl").open("a") as f:  # append-only
+                f.write(json.dumps(review) + "\n")
+            return review
+
+    def _reviews(self) -> list[dict]:
+        path = self.root / "adviser_reviews.jsonl"
+        if not path.exists():
+            return []
+        rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+        return rows[::-1][:100]  # newest first, as the Supabase query
 
     def pilot_metrics(self) -> dict:
         """The same report as SupabaseStore.pilot_metrics, from the local files."""
@@ -183,6 +208,7 @@ class LocalStore:
                        "ran_analysis": sum(a["id"] in analysed for a in advisers)},
             "avg_approval_hours": sum(waits) / len(waits) if waits else None,
             "pending": pending,
+            "reviews": self._reviews(),
         }
 
     def get_firm(self, firm_id: str) -> dict:

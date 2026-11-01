@@ -26,7 +26,7 @@ export default function Layout() {
   const { email, signOut, dev } = useAuth();
   const me = useMe();
   const location = useLocation();
-  const pending = me.data?.adviser.status === "pending";
+  const pending = me.data?.adviser.status === "pending" || me.data?.adviser.status === "rejected";
   // A page type only (see lib/analytics.ts): never the real address, ids or query text.
   useEffect(() => {
     if (!me.data) return;
@@ -71,7 +71,7 @@ export default function Layout() {
         </div>
       </header>
       <main className="mx-auto max-w-[1240px] px-4 py-6">
-        {me.data?.adviser.status === "pending" ? <PendingApproval me={me.data} /> : me.data || me.error ? <Outlet /> : null}
+        {pending && me.data ? <PendingApproval me={me.data} /> : me.data || me.error ? <Outlet /> : null}
       </main>
       <footer className="no-print mx-auto max-w-[1240px] border-t border-rule px-4 py-4 text-xs text-muted">
         Decision support for registered advisers. Not investment advice. Every figure is computed by the

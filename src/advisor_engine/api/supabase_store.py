@@ -157,11 +157,28 @@ class SupabaseStore:
                   from public.advisers a join public.firms f on f.id = a.firm_id
                  where a.status = 'pending'
                  order by a.registration_submitted_at nulls last, a.created_at""")
+            reviews = q(conn, """
+                select reviewed_at, adviser_email, adviser_name, crd, decision, reviewed_by,
+                       checks, reason, summary, note
+                  from public.adviser_reviews order by reviewed_at desc, id desc limit 100""")
         hours = funnel.pop("avg_approval_hours")
         return {"weeks": WEEKS, "feature_days": FEATURE_DAYS, "totals": totals,
                 "weekly_active": weekly, "features": features, "funnel": funnel,
                 "avg_approval_hours": float(hours) if hours is not None else None,
-                "pending": pending}
+                "pending": pending, "reviews": reviews}
+
+    def review_adviser(self, email: str, decision: str, reviewed_by: str, checks: list[str],
+                       reason: str | None, summary: str, note: str | None) -> dict:
+        """Approve or reject a pending adviser and record it (app.review_adviser), on the
+        owner connection: advisers can't run it. LookupError if nobody is pending."""
+        try:
+            with psycopg.connect(self.db_url, prepare_threshold=None, row_factory=dict_row) as conn:
+                row = conn.execute(
+                    "select * from app.review_adviser(%s, %s, %s, %s, %s, %s, %s)",
+                    [email, decision, reviewed_by, checks, reason, summary, note]).fetchone()
+        except psycopg.errors.RaiseException as e:
+            raise LookupError(str(e).splitlines()[0]) from None
+        return _plain(row)
 
 
 class SupabaseSession:

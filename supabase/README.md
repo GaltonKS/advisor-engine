@@ -35,6 +35,7 @@ applied.
 | `20261102000000_client_soft_delete.sql` | `clients.deleted_at` / `deleted_by` (deleting a client hides it; nothing is removed) |
 | `20261103000000_market_price_cache.sql` | `market.prices` / `market.fetches`: shared month-end price cache, private to the API |
 | `20261104000000_adviser_approval.sql` | New sign-ups start `pending`; `app.submit_registration` (name, CRD, firm) and operator-only `app.approve_adviser` |
+| `20261105000000_adviser_reviews.sql` | `public.adviser_reviews` (append-only approval audit trail), `app.review_adviser`, `rejected` status; `approve_adviser` now records a review |
 
 Apply a new migration **before** merging the code that uses it: Render redeploys the API
 from `main`, and the new API reads the new columns.
@@ -79,6 +80,12 @@ With `SUPABASE_URL` set, sign-in is real and the assistant may go live
 
 
 ## Approving advisers
+
+**Preferred:** open **Pilot metrics** in the app (operators only, see `ADVISOR_OPERATORS`),
+click **Review** on a pending sign-up, tick the BrokerCheck checks and approve, or pick a
+reason and reject. Your email, the time, the checks and a summary go into the approval
+audit trail (`public.adviser_reviews`), which can't be edited or deleted. The SQL below
+still works, but is recorded as `sql:<database user>` with no checks.
 
 New sign-ups wait as `pending`: they can sign in, but see only a registration form
 (name, CRD number, firm name) until you approve them. Existing advisers are not affected.

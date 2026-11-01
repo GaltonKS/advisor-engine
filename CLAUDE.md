@@ -241,6 +241,16 @@ every turn --append_audit--> data/audit/audit.jsonl
   connection (`store.pilot_metrics()`), never a user session, and answers 404 to anyone
   who isn't an operator. It returns counts, dates and the approval queue only: never
   client names, holdings or question text. Add a figure there, not in the page.
+- Approval reviews: operators approve or reject pending sign-ups from the Pilot metrics
+  page (`POST /operator/reviews`, 404 to non-operators). Approval needs every
+  `metrics.REVIEW_CHECKS` confirmed; rejection needs a `REJECT_REASONS` key (and a note
+  for "other"). The reviewer is the operator's signed-in email, never a client-supplied
+  field; `review_summary` writes the one-line record. `app.review_adviser` changes the
+  status and appends to `public.adviser_reviews` in one transaction. That table is
+  append-only (triggers refuse UPDATE/DELETE/TRUNCATE, even for the owner) and private
+  (no anon/authenticated rights). `app.approve_adviser` (SQL Editor, admin command) goes
+  through it as `sql:<db user>` with no checks. Rejected advisers (`status='rejected'`)
+  see a "not approved" page and get 403 "Your registration wasn't approved."
 - Live model calls require `auth == "supabase"` (`Settings.llm`). Don't add another path to
   the real client.
 - Responses never include server file paths (see `_tool_view`).

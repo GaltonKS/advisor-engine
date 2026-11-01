@@ -36,6 +36,23 @@ export interface PilotMetrics {
   avg_approval_hours: number | null;
   pending: { email: string; full_name: string | null; crd: string | null; firm_name: string | null;
              submitted_at: string | null; signed_up_at: string }[];
+  /** The approval audit trail, newest first (append-only in the database). */
+  reviews: AdviserReview[];
+  review_presets: { checks: { key: string; label: string }[]; reject_reasons: { key: string; label: string }[] };
+}
+
+export interface AdviserReview {
+  reviewed_at: string;
+  adviser_email: string;
+  adviser_name: string | null;
+  crd: string | null;
+  decision: "approved" | "rejected";
+  /** The operator's sign-in email, or "sql:<user>" for approvals made in the SQL Editor. */
+  reviewed_by: string;
+  checks: string[];
+  reason: string | null;
+  summary: string;
+  note: string | null;
 }
 
 export interface Portfolio {
