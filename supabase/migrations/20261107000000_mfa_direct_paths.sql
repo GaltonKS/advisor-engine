@@ -22,6 +22,16 @@
 --    The mode is the database's own (app.security_settings), as for app.mfa_ok().
 --
 -- Errors use SQLSTATE PT403, which Supabase's REST layer answers as HTTP 403.
+--
+-- Needs 20261106000000_mfa.sql (app.security_settings) applied first.
+
+do $$
+begin
+    if to_regclass('app.security_settings') is null then
+        raise exception 'Apply 20261106000000_mfa.sql first: app.security_settings is missing.';
+    end if;
+end
+$$;
 
 -- --- 1. authenticators ----------------------------------------------------------------
 
