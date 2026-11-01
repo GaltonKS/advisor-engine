@@ -1,0 +1,40 @@
+{
+  "name": "advisor-engine-desktop",
+  "version": "0.1.0",
+  "description": "Thin desktop shell for GaltonKS (loads the web app in a window)",
+  "author": "GaltonKS",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "dependencies": {
+    "electron-updater": "6.3.9"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "com.galtonks.advisorengine",
+    "productName": "GaltonKS",
+    "files": [
+      "main.js",
+      "preload.js",
+      "offline.html"
+    ],
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.finance"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "GaltonKS",
+      "repo": "advisor-engine"
+    }
+  }
+}

@@ -73,6 +73,7 @@ src/advisor_engine/
         supabase_store.py SupabaseStore: same methods on Postgres (RLS) + Storage
         main.py        FastAPI routes over execute_tool / run_turn / verify
 web/                   React app (see web/README.md); formats engine output, computes nothing
+desktop/               Electron shell that loads the web app (see desktop/README.md); no figures, no Node in the page
 web/src/components/charts.tsx  draws chart specs (see "Charts" below)
 web/src/components/Logo.tsx    GaltonKS logo as SVG (see "Brand" below)
 web/public/brand/      source logo artwork (light logo, dark app icon)
@@ -251,6 +252,10 @@ every turn --append_audit--> data/audit/audit.jsonl
   is the dark-icon version for navy grounds. `Brand` in `Layout.tsx` links it home.
 - Favicon `web/public/favicon.svg` (mark on navy with a gold rim) and
   `apple-touch-icon.png` (the dark icon at 180px); `theme-color` is the navy.
+- Installable web app: `web/public/manifest.webmanifest` with `icon-192.png`,
+  `icon-512.png` and `icon-maskable-512.png` (all the dark icon; the maskable one keeps
+  it inside the centre 80%). `lib/install.ts` drives the header's **Install app**
+  button. No service worker on purpose: client data is never cached in the browser.
 - **Navy is the highlight colour.** `--color-navy` `#000815` is the logo's navy, sampled
   from the dark icon. It is close to black, so it only reads as navy over an area. Use
   it for:
