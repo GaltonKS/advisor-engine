@@ -1,5 +1,7 @@
 // Shapes returned by the API. Every number in them was computed by the engine.
 
+import type { MfaInfo } from "./mfa";
+
 export interface Adviser {
   id: string;
   email: string;
@@ -23,6 +25,8 @@ export interface Me {
   returns_source?: string;
   /** True for the platform operators (ADVISOR_OPERATORS): shows the Pilot metrics page. */
   operator?: boolean;
+  /** Two-step sign-in in force, and how this session signed in. */
+  mfa?: MfaInfo;
 }
 
 /** GET /operator/metrics: usage across every firm, counts only (api/metrics.py). */
@@ -53,6 +57,24 @@ export interface AdviserReview {
   reason: string | null;
   summary: string;
   note: string | null;
+}
+
+/** One adviser in the firm owner's two-step sign-in view. */
+export interface FirmMfaAdviser {
+  adviser_id: string;
+  email: string;
+  full_name?: string | null;
+  role?: string;
+  status?: string;
+  enrolled: boolean;
+  factor_count: number;
+  latest_factor_at: string | null;
+}
+
+export interface FirmMfa {
+  mode: MfaInfo["mode"];
+  deadline: string | null;
+  advisers: FirmMfaAdviser[];
 }
 
 export interface Portfolio {

@@ -36,6 +36,8 @@ applied.
 | `20261103000000_market_price_cache.sql` | `market.prices` / `market.fetches`: shared month-end price cache, private to the API |
 | `20261104000000_adviser_approval.sql` | New sign-ups start `pending`; `app.submit_registration` (name, CRD, firm) and operator-only `app.approve_adviser` |
 | `20261105000000_adviser_reviews.sql` | `public.adviser_reviews` (append-only approval audit trail), `app.review_adviser`, `rejected` status; `approve_adviser` now records a review |
+| `20261106000000_mfa.sql` | Two-step sign-in: `app.security_settings` mode (starts `off`), `app.mfa_ok()`, restrictive `mfa_required` policies on every firm table (see docs/mfa-plan.md) |
+| `20261107000000_mfa_direct_paths.sql` | Fresh-code checks the database enforces too: verified authenticators can only be deleted with a permit from the API (trigger on `auth.mfa_factors`), and soft-deleting a client needs a fresh code (`app.mfa_fresh_ok()`, trigger on `public.clients`) |
 
 Apply a new migration **before** merging the code that uses it: Render redeploys the API
 from `main`, and the new API reads the new columns.
@@ -112,3 +114,19 @@ New sign-ups wait as `pending`: they can sign in, but see only a registration fo
 
 The same from a terminal with `SUPABASE_DB_URL` set: `python -m advisor_engine.api.admin
 pending` and `python -m advisor_engine.api.admin approve name@firm.com [--firm <id>]`.
+
+### Two-step sign-in
+
+Switch the API's `ADVISOR_REQUIRE_MFA` first, then the database's own mode with
+`python -m advisor_engine.api.admin mfa-mode enrol|required` (or
+`select app.set_mfa_mode('required');` in the SQL Editor). The database must never be
+stricter than the API. To reset an adviser who lost every authenticator, after checking
+their identity out of band: `python -m advisor_engine.api.admin reset-mfa name@firm.com
+--requested-by ... --verified-by ... --check ...` (needs `SUPABASE_URL` and
+`SUPABASE_SECRET_KEY` too). Full steps in docs/mfa-plan.md.
+
+Authenticators can only be removed through the API (Security page) or `reset-mfa`: the
+database refuses to delete a verified factor otherwise, including from the dashboard's
+Authentication pages. Deleting a whole user still works. If you need to remove one by
+hand, run `select app.allow_factor_removal('<user id>', '<factor id>');` first (it lasts
+two minutes).

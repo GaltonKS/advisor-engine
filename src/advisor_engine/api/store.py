@@ -42,9 +42,13 @@ class LocalStore:
         self.require_approval = require_approval
         self._lock = threading.RLock()
 
-    def as_user(self, user_id: str, email: str) -> "LocalStore":
+    def as_user(self, user_id: str, email: str, aal: str = "aal1",
+                amr: tuple = ()) -> "LocalStore":
         """Every method already takes the caller's firm explicitly, so the session is self."""
         return self
+
+    def allow_factor_removal(self, user_id: str, factor_id: str) -> None:
+        """Nothing to permit locally: dev auth has no Supabase Auth behind it."""
 
     # --- files -----------------------------------------------------------------------
 
@@ -210,6 +214,10 @@ class LocalStore:
             "pending": pending,
             "reviews": self._reviews(),
         }
+
+    def list_firm_advisers(self, firm_id: str) -> list[dict]:
+        advisers = self._read(self.root / "advisers.json", {}).values()
+        return sorted((a for a in advisers if a["firm_id"] == firm_id), key=lambda a: a["created_at"])
 
     def get_firm(self, firm_id: str) -> dict:
         return self._read(self.firm_dir(firm_id) / "firm.json", {"id": firm_id})

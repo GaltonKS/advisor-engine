@@ -1,13 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useApi } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useInstallPrompt } from "../lib/install";
+import { mfaStep } from "../lib/mfa";
 import type { Me } from "../lib/types";
 import { pageType, trackPageview } from "../lib/analytics";
 import { Logo } from "./Logo";
+import { MfaChallengeScreen, MfaEnrolScreen } from "../pages/MfaSetup";
 import PendingApproval from "../pages/PendingApproval";
+import { Loading } from "./ui";
 
 export function Brand({ onDark = true }: { onDark?: boolean }) {
   return (
@@ -22,8 +25,21 @@ export function useMe() {
   return useQuery({ queryKey: ["me"], queryFn: () => api<Me>("/me") });
 }
 
+const POSTPONED_KEY = "galtonks.mfa-postponed";
+
+function readPostponed(): boolean {
+  try {
+    return sessionStorage.getItem(POSTPONED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+const navClass = ({ isActive }: { isActive: boolean }) =>
+  isActive ? "border-b-2 border-gold-bright pb-0.5 font-semibold text-card" : "text-on-navy-muted hover:text-card";
+
 export default function Layout() {
-  const { email, signOut, dev } = useAuth();
+  const { email, signOut, dev, mfa } = useAuth();
   const me = useMe();
   const location = useLocation();
   const pending = me.data?.adviser.status === "pending" || me.data?.adviser.status === "rejected";
@@ -33,6 +49,19 @@ export default function Layout() {
     trackPageview(pending ? "/awaiting-approval" : pageType(location.pathname, location.search),
                   pending ? "/awaiting-approval" : location.pathname + location.search);
   }, [me.data, pending, location.pathname, location.search]);
+  // "Remind me next time" lasts for this browser tab only, and only until the deadline.
+  const [postponed, setPostponed] = useState(readPostponed);
+  const step = dev ? "ok" : mfaStep({ mfa: me.data?.mfa, currentLevel: mfa.currentLevel,
+                                      hasFactor: mfa.factors.length > 0, postponed });
+  // Once set-up starts, stay on it until the adviser continues: verifying the first code
+  // satisfies the gate at once, but they should still see the backup prompt.
+  const [inSetup, setInSetup] = useState(false);
+  useEffect(() => { if (step === "enrol") setInSetup(true); }, [step]);
+  const postpone = () => {
+    try { sessionStorage.setItem(POSTPONED_KEY, "1"); } catch { /* still postponed for now */ }
+    setPostponed(true);
+    setInSetup(false);
+  };
   const install = useInstallPrompt();
   const initials = (email ?? "?").slice(0, 2).toUpperCase();
   return (
@@ -41,14 +70,9 @@ export default function Layout() {
         <div className="mx-auto flex max-w-[1240px] flex-wrap items-center gap-6 px-4 py-3">
           <Brand />
           <nav className="flex gap-5 text-sm">
-            <NavLink to="/" end className={({ isActive }) => (isActive ? "border-b-2 border-gold-bright pb-0.5 font-semibold text-card" : "text-on-navy-muted hover:text-card")}>
-              Clients
-            </NavLink>
-            {me.data?.operator && (
-              <NavLink to="/operator" className={({ isActive }) => (isActive ? "border-b-2 border-gold-bright pb-0.5 font-semibold text-card" : "text-on-navy-muted hover:text-card")}>
-                Pilot metrics
-              </NavLink>
-            )}
+            <NavLink to="/" end className={navClass}>Clients</NavLink>
+            <NavLink to="/security" className={navClass}>Security</NavLink>
+            {me.data?.operator && <NavLink to="/operator" className={navClass}>Pilot metrics</NavLink>}
           </nav>
           <div className="ml-auto flex items-center gap-3 text-xs">
             {install && (
@@ -71,7 +95,12 @@ export default function Layout() {
         </div>
       </header>
       <main className="mx-auto max-w-[1240px] px-4 py-6">
-        {pending && me.data ? <PendingApproval me={me.data} /> : me.data || me.error ? <Outlet /> : null}
+        {!dev && !mfa.loaded ? <Loading what="Checking your sign-in" />
+          : step === "challenge" ? <MfaChallengeScreen />
+          : (step === "enrol" || inSetup) && me.data
+            ? <MfaEnrolScreen me={me.data} onPostpone={postpone} onFinish={() => setInSetup(false)} />
+          : pending && me.data ? <PendingApproval me={me.data} />
+          : me.data || me.error ? <Outlet /> : null}
       </main>
       <footer className="no-print mx-auto max-w-[1240px] border-t border-rule px-4 py-4 text-xs text-muted">
         Decision support for registered advisers. Not investment advice. Every figure is computed by the
