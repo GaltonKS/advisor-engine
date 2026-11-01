@@ -86,3 +86,12 @@ Then **Redirects/Rewrites**: add a rewrite from `/*` to `/index.html` so links l
 `/clients/<id>` load the app. After the first deploy, add the site's address to the API's
 `ALLOWED_ORIGINS` and to Supabase **Authentication → URL Configuration** (Site URL and
 Redirect URLs).
+
+### Two-step sign-in
+
+With Supabase sign-in, the app asks for an authenticator code after the password
+(`pages/MfaSetup.tsx`), and for a fresh code before sensitive actions such as deleting a
+client (`components/StepUp.tsx`). Advisers manage their authenticators under
+**Security**, where a firm's owner also sees who has set it up. Whether it is required is
+the API's `ADVISOR_REQUIRE_MFA`, reported by `/me`; the API enforces it, the app only
+guides. Dev sign-in (`VITE_DEV_USER`) has no two-step sign-in. See docs/mfa-plan.md.

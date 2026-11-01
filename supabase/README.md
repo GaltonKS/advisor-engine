@@ -36,6 +36,7 @@ applied.
 | `20261103000000_market_price_cache.sql` | `market.prices` / `market.fetches`: shared month-end price cache, private to the API |
 | `20261104000000_adviser_approval.sql` | New sign-ups start `pending`; `app.submit_registration` (name, CRD, firm) and operator-only `app.approve_adviser` |
 | `20261105000000_adviser_reviews.sql` | `public.adviser_reviews` (append-only approval audit trail), `app.review_adviser`, `rejected` status; `approve_adviser` now records a review |
+| `20261106000000_mfa.sql` | Two-step sign-in: `app.security_settings` mode (starts `off`), `app.mfa_ok()`, restrictive `mfa_required` policies on every firm table (see docs/mfa-plan.md) |
 
 Apply a new migration **before** merging the code that uses it: Render redeploys the API
 from `main`, and the new API reads the new columns.
@@ -112,3 +113,13 @@ New sign-ups wait as `pending`: they can sign in, but see only a registration fo
 
 The same from a terminal with `SUPABASE_DB_URL` set: `python -m advisor_engine.api.admin
 pending` and `python -m advisor_engine.api.admin approve name@firm.com [--firm <id>]`.
+
+### Two-step sign-in
+
+Switch the API's `ADVISOR_REQUIRE_MFA` first, then the database's own mode with
+`python -m advisor_engine.api.admin mfa-mode enrol|required` (or
+`select app.set_mfa_mode('required');` in the SQL Editor). The database must never be
+stricter than the API. To reset an adviser who lost every authenticator, after checking
+their identity out of band: `python -m advisor_engine.api.admin reset-mfa name@firm.com
+--requested-by ... --verified-by ... --check ...` (needs `SUPABASE_URL` and
+`SUPABASE_SECRET_KEY` too). Full steps in docs/mfa-plan.md.

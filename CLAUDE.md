@@ -74,11 +74,12 @@ src/advisor_engine/
     ui/theme.py        KVS stylesheet + escaped HTML builders (cards, bars, audit panel)
     api/
         settings.py    env config; dev auth forces mock and refuses to run on Render
-        auth.py        current_user(): Supabase access token (JWKS/HS256) or X-Dev-User
+        auth.py        current_user(): Supabase access token (JWKS/HS256) or X-Dev-User; aal/amr
+        auth_admin.py  Supabase Auth admin calls (list/delete a user's MFA factors), secret key
         store.py       LocalStore: firm-scoped clients, portfolios, drafts, audit (dev, tests)
         supabase_store.py SupabaseStore: same methods on Postgres (RLS) + Storage
         main.py        FastAPI routes over execute_tool / run_turn / verify
-        admin.py       operator commands: list pending sign-ups, approve (`python -m advisor_engine.api.admin`)
+        admin.py       operator commands: pending sign-ups, approve, mfa-mode, reset-mfa (`python -m advisor_engine.api.admin`)
         metrics.py     pilot metrics definitions (weekly active, feature use, funnel) for the operator page
 web/                   React app (see web/README.md); formats engine output, computes nothing
 desktop/               Electron shell that loads the web app (see desktop/README.md); no figures, no Node in the page
@@ -86,6 +87,7 @@ web/src/components/charts.tsx  draws chart specs (see "Charts" below)
 web/src/components/Logo.tsx    GaltonKS logo as SVG (see "Brand" below)
 web/public/brand/      source logo artwork (light logo, dark app icon)
 docs/migration-plan.md React + FastAPI + Supabase plan and the decisions behind it
+docs/mfa-plan.md       two-step sign-in: decisions, what was built, how to switch it on
 supabase/migrations/   Postgres schema, row-level security, append-only audit (see supabase/README.md)
 data/sample/           synthetic portfolios, the only committed data
 .streamlit/config.toml KVS palette when running `streamlit run` from the repo root
@@ -253,6 +255,20 @@ every turn --append_audit--> data/audit/audit.jsonl
   see a "not approved" page and get 403 "Your registration wasn't approved."
 - Live model calls require `auth == "supabase"` (`Settings.llm`). Don't add another path to
   the real client.
+- Two-step sign-in (docs/mfa-plan.md). `Settings.mfa` is `ADVISOR_REQUIRE_MFA` (`off` /
+  `enrol` / `required`), always `off` with dev auth. Dependencies run `base_ctx` (only
+  `/me`) → `any_ctx` (in `required`, 403 `{"code": "mfa_required"}` below aal2) → `ctx`
+  (approval). The MFA check comes before the approval check.
+- Sensitive actions call `require_fresh_code(c)`: an authenticator code in the token's
+  `amr` within `auth.FRESH_MFA_SECONDS`, else 403 `{"code": "mfa_fresh_required"}`; the
+  audit row records `fresh_code`. Today: deleting a client, removing an authenticator.
+  Anything new of that kind (email or password change, bulk export) goes through an API
+  route with this check, never straight from the browser to Supabase.
+- `store.as_user(..., aal=user.aal)` forwards the verified level, so the database's
+  restrictive `mfa_required` policies (`app.mfa_ok()`, mode in `app.security_settings`)
+  see what the API saw. The database mode is switched with `admin mfa-mode`, after the
+  API's, never before. Factor lists and removals go through `auth_admin`; never return a
+  secret or QR code from the API. `GET /firm/mfa` is for the firm's owner only.
 - Responses never include server file paths (see `_tool_view`).
 - Clients can be renamed (`PATCH /clients/{id}`) and deleted (`DELETE /clients/{id}`).
   Deleting is a soft delete (`deleted_at`): `get_client` / `list_clients` skip the row and
@@ -281,6 +297,11 @@ every turn --append_audit--> data/audit/audit.jsonl
   Public pages report `/sign-in` and `/privacy`, pending advisers `/awaiting-approval`.
   No custom events, props, user ids or session recording: the Privacy Policy describes
   page views only, so anything more needs an approved policy update first.
+- Two-step sign-in in the browser: `lib/mfa.ts` (`mfaStep`) picks the screen from `/me`'s
+  `mfa` and the Supabase session; `lib/api.ts` `request` turns 403 `mfa_fresh_required`
+  into the `StepUpProvider` code dialog and retries once, and `mfa_required` into a
+  re-check. `auth.headers()` reads the latest session (a ref), so the retry carries the
+  new token. QR codes and set-up keys are shown once and never stored.
 - `/privacy` (`pages/Privacy.tsx`) is the approved Privacy Policy, public (shown before the
   auth gate in `main.tsx`) and linked from the sign-in page and the app footer. It is legal
   text: change it only from a new approved version, together with

@@ -36,6 +36,7 @@ export const ANALYTICS_TABS = [
 export function pageType(pathname: string, search = ""): string {
   if (pathname === "/" || pathname === "") return "/clients";
   if (pathname === "/operator") return "/operator";
+  if (pathname === "/security") return "/security";
   if (/^\/clients\/[^/]+\/?$/.test(pathname)) {
     const tab = new URLSearchParams(search).get("tab") ?? "overview";
     return (ANALYTICS_TABS as readonly string[]).includes(tab)
