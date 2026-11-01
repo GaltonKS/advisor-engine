@@ -104,6 +104,23 @@ def test_clients_cannot_be_hard_deleted(supabase_db, alice_world):
         raw(supabase_db, "alice", "delete from public.clients")
 
 
+@pytest.mark.parametrize("sql", [
+    "select count(*) from market.prices",
+    "select count(*) from market.fetches",
+    "insert into market.prices values ('FMP', 'AAA', '2026-10-31', 1.0)",
+])
+def test_licensed_prices_are_not_readable_or_writable_by_advisers(supabase_db, alice_world, sql):
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        raw(supabase_db, "alice", sql)
+
+
+def test_anon_cannot_reach_the_price_cache(supabase_db):
+    with psycopg.connect(supabase_db) as conn:
+        conn.execute("set local role anon")
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            conn.execute("select count(*) from market.prices")
+
+
 def test_advisers_cannot_change_their_firm_role_or_status(supabase_db, alice_world):
     with pytest.raises(psycopg.errors.InsufficientPrivilege):
         raw(supabase_db, "alice", "update public.advisers set role = 'owner', status = 'active'")

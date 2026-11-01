@@ -53,6 +53,12 @@ src/advisor_engine/
     compare.py         before/after differences between two risk profiles
     charts.py          chart specs from engine output (risk by group, risk vs size, what-if)
     demo.py            end-to-end run on data/sample/sample_holdings.csv
+    data/
+        __init__.py    get_market_data(): the configured source (synthetic | fmp), SyntheticData
+        base.py        PriceSource protocol, PriceHistoryData (month-end prices -> returns), errors
+        cache.py       PriceCache: month-end closes per vendor/symbol on disk, 24h freshness
+        supabase_cache.py SupabasePriceCache: same interface in Postgres (market schema), shared
+        fmp.py         FMPSource: dividend-adjusted daily closes from FMP's stable API
     assistant/
         _paths.py      REPO_ROOT, DATA_DIR, DEFAULT_HOLDINGS, AUDIT_PATH
         tools.py       tool schemas (TOOLS: risk profile, holdings, what-if, stress, show_chart), execute_tool(),
@@ -139,11 +145,12 @@ every turn --append_audit--> data/audit/audit.jsonl
 - `execute_tool` never raises: errors come back as `ToolResult(..., is_error=True)`.
 - Holdings paths must resolve inside `data/`, must be `.csv`, and may not be under
   `data/audit/`. Keep all file access going through `resolve_holdings_path`.
-- `get_returns` and `get_market_returns` in `tools.py` are **the only places real market
-  data plugs in**. When they change, update `RETURNS_SOURCE` / `MARKET_SOURCE` to match.
-  The synthetic market factor stands in as the market today, so profiles from
-  `engine_profile` carry beta and correlation to the market (per position and
-  portfolio). The API uses `engine_profile` too, so tool and screen figures agree.
+- Market data comes only from `data.get_market_data()` (used by `get_returns`,
+  `get_market_returns` and `engine_profile` in `tools.py`). It is synthetic unless
+  `ADVISOR_MARKET_DATA=fmp` (see "Real market data" below). Every profile carries its
+  `returns_source`, a market series (the synthetic factor, or `ADVISOR_MARKET_INDEX`) so
+  beta and correlation to the market are always present, and with real data
+  `returns_as_of`. The API uses `engine_profile` too, so tool and screen figures agree.
 - The model's tools: `get_risk_profile`, `get_holdings`, `run_what_if` (changes applied
   by `apply_changes`, differences from `compare.compare_profiles`), `run_stress_test`,
   `show_chart` (specs from `charts.py`; see "Charts") and `refer_to_stress_test`.
@@ -413,11 +420,38 @@ Client report (not yet charted):
    `tests/test_assistant.py` using `FakeClient`.
 
 ### Real market data
-- Replace the body of `tools.get_returns` (contract: columns cover every holdings
-  ticker) and set `RETURNS_SOURCE`. Replace `tools.get_market_returns` with a broad
-  index on the same periods and set `MARKET_SOURCE`.
-- Do not commit licensed price or fundamentals data. Everything in `data/` except
-  `data/sample/` is gitignored for that reason.
+- `src/advisor_engine/data/` splits the job in two. A vendor adapter (`PriceSource`) only
+  returns a symbol's dividend-adjusted daily closes, or raises `SymbolNotFound`.
+  Everything else is vendor-neutral, in `PriceHistoryData`: month-end closes of complete
+  months only, the longest window every holding and the index share (at most
+  `N_PERIODS` = 120, at least `MIN_PERIODS` = 24, or a `ValueError` naming the short
+  tickers), simple monthly returns, and the cache. Cash is not priced: it keeps the
+  synthetic near-constant return (a zero-variance column breaks the correlations).
+- To add a vendor, write an adapter like `fmp.py`, add a branch in `data._build`, and
+  test it with `httpx.MockTransport` (tests never hit the network). Error messages are
+  shown to advisers: never include the API key or the request URL (FMP puts the key in
+  the query string), and raise from `None` so the httpx cause isn't chained.
+- Config: `ADVISOR_MARKET_DATA` (synthetic | fmp), `FMP_API_KEY`, `ADVISOR_MARKET_INDEX`
+  (default SPY), `ADVISOR_MARKET_CACHE` (default `data/market_cache`). The key is a
+  secret: Render/`.env` only, never `VITE_*`, never logged.
+- `returns_as_of` is quoted as month and year ("to the end of October 2026"): years are
+  not figures to the number check, days are. The prompt says so; keep it that way.
+- Caches implement `get_many(source, symbols)` / `put_many(source, {symbol: closes})`,
+  fresh for 24 hours. With `SUPABASE_DB_URL` set the default is `SupabasePriceCache`
+  (`ADVISOR_MARKET_CACHE=supabase|disk|<dir>` overrides): tables `market.prices` and
+  `market.fetches`, shared by every firm and every API instance, so prices survive
+  deploys. Freshness uses the database clock. Reads are batched (two queries per
+  profile), with a process-local copy on top. A symbol's history is replaced as a
+  whole on write, because adjusted closes are restated after every dividend.
+- The cache never breaks a profile: a database error is logged, reads become misses
+  (the vendor is asked) and writes are skipped.
+- `market` is not keyed on `app.current_firm_id()` on purpose: prices are not client
+  data. They are licensed, though, so the schema is not exposed by Supabase's REST API,
+  RLS is on with no policies, and anon/authenticated have no rights. Only the API's own
+  connection (the owner role) uses it, without switching to `authenticated`. Keep
+  advisers and browsers away from raw vendor prices.
+- The disk cache lives under `data/`, which git ignores. Do not commit licensed price
+  or fundamentals data.
 
 ### Prompt or firm-profile changes
 - `SYSTEM_PROMPT` rules on numbers are a first line of defence only; the number check
@@ -439,3 +473,6 @@ changes, since the audit log records it; tag releases in git (`git tag v0.1.0`).
 - Number check limits: spelled-out numbers aren't detected, coarse figures can match
   nearby values, and numbers the user typed aren't allowed unless a tool returned them.
 - Methodology provenance and data ownership are not yet documented.
+- Real data: a what-if that adds a ticker with a short history shortens the shared
+  window, so before and after can cover different months. Prices are fetched on demand
+  (no nightly refresh, by choice), and vendor API calls are not logged or counted yet.

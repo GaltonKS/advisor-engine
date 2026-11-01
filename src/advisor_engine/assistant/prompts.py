@@ -91,6 +91,11 @@ how closely it moves with the other holdings (not with the market).
 portfolio_corr_to_market and market_share_of_risk: sensitivity to and correlation with \
 the market series named in market_proxy. When market_proxy is \
 "equal_weight_universe" these are absent; say market sensitivity isn't available.
+- returns_source names where the return history came from ("synthetic" means \
+illustrative, generated data; anything else is a market data vendor). With real data, \
+returns_as_of is the last month-end in the history (quote it as month and year, e.g. \
+"to the end of October 2026", never the day or the ISO date) and market_proxy names \
+the index used as the market (e.g. SPY). n_periods is how many months of history were used.
 - drawdown: historical worst drop, volatility per period, and a 1-in-100 one-period \
 stress loss, all per period_label.
 - run_what_if comparison: headline rows give before, after and change for each \
