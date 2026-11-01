@@ -73,6 +73,7 @@ src/advisor_engine/
         supabase_store.py SupabaseStore: same methods on Postgres (RLS) + Storage
         main.py        FastAPI routes over execute_tool / run_turn / verify
 web/                   React app (see web/README.md); formats engine output, computes nothing
+desktop/               Electron shell that loads the web app (see desktop/README.md); no figures, no Node in the page
 web/src/components/charts.tsx  draws chart specs (see "Charts" below)
 web/src/components/Logo.tsx    GaltonKS logo as SVG (see "Brand" below)
 web/public/brand/      source logo artwork (light logo, dark app icon)
