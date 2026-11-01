@@ -57,6 +57,7 @@ src/advisor_engine/
         __init__.py    get_market_data(): the configured source (synthetic | fmp), SyntheticData
         base.py        PriceSource protocol, PriceHistoryData (month-end prices -> returns), errors
         cache.py       PriceCache: month-end closes per vendor/symbol on disk, 24h freshness
+        supabase_cache.py SupabasePriceCache: same interface in Postgres (market schema), shared
         fmp.py         FMPSource: dividend-adjusted daily closes from FMP's stable API
     assistant/
         _paths.py      REPO_ROOT, DATA_DIR, DEFAULT_HOLDINGS, AUDIT_PATH
@@ -430,8 +431,22 @@ Client report (not yet charted):
   secret: Render/`.env` only, never `VITE_*`, never logged.
 - `returns_as_of` is quoted as month and year ("to the end of October 2026"): years are
   not figures to the number check, days are. The prompt says so; keep it that way.
-- The cache is shared by every firm (prices are not client data) and lives under
-  `data/`, which git ignores. Do not commit licensed price or fundamentals data.
+- Caches implement `get_many(source, symbols)` / `put_many(source, {symbol: closes})`,
+  fresh for 24 hours. With `SUPABASE_DB_URL` set the default is `SupabasePriceCache`
+  (`ADVISOR_MARKET_CACHE=supabase|disk|<dir>` overrides): tables `market.prices` and
+  `market.fetches`, shared by every firm and every API instance, so prices survive
+  deploys. Freshness uses the database clock. Reads are batched (two queries per
+  profile), with a process-local copy on top. A symbol's history is replaced as a
+  whole on write, because adjusted closes are restated after every dividend.
+- The cache never breaks a profile: a database error is logged, reads become misses
+  (the vendor is asked) and writes are skipped.
+- `market` is not keyed on `app.current_firm_id()` on purpose: prices are not client
+  data. They are licensed, though, so the schema is not exposed by Supabase's REST API,
+  RLS is on with no policies, and anon/authenticated have no rights. Only the API's own
+  connection (the owner role) uses it, without switching to `authenticated`. Keep
+  advisers and browsers away from raw vendor prices.
+- The disk cache lives under `data/`, which git ignores. Do not commit licensed price
+  or fundamentals data.
 
 ### Prompt or firm-profile changes
 - `SYSTEM_PROMPT` rules on numbers are a first line of defence only; the number check
@@ -453,7 +468,6 @@ changes, since the audit log records it; tag releases in git (`git tag v0.1.0`).
 - Number check limits: spelled-out numbers aren't detected, coarse figures can match
   nearby values, and numbers the user typed aren't allowed unless a tool returned them.
 - Methodology provenance and data ownership are not yet documented.
-- Real data: on Render the disk is ephemeral, so the price cache refills after each
-  deploy (a Supabase-backed cache is the next step). A what-if that adds a ticker with
-  a short history shortens the shared window, so before and after can cover different
-  months. Fetches are on demand; there is no nightly refresh or API-call logging yet.
+- Real data: a what-if that adds a ticker with a short history shortens the shared
+  window, so before and after can cover different months. Prices are fetched on demand
+  (no nightly refresh, by choice), and vendor API calls are not logged or counted yet.

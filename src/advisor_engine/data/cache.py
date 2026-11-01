@@ -21,6 +21,13 @@ MAX_AGE_SECONDS = 24 * 3600
 _SAFE = re.compile(r"[^A-Za-z0-9.\-^=]")
 
 
+def month_index(values) -> pd.DatetimeIndex:
+    """Month-end dates at one fixed precision. pandas picks the unit from its input (dates
+    from Postgres, strings from CSV, timestamps from a vendor), and mixed units make
+    otherwise equal series compare unequal."""
+    return pd.DatetimeIndex(pd.to_datetime(values)).as_unit("ns").rename(None)
+
+
 class PriceCache:
     def __init__(self, root: Path, max_age: float = MAX_AGE_SECONDS, clock=time.time):
         self.root = Path(root)
@@ -42,8 +49,20 @@ class PriceCache:
         except (FileNotFoundError, ValueError, pd.errors.EmptyDataError):
             return None
         s = frame.iloc[:, 0].astype(float)
-        s.index.name, s.name = None, None  # same shape as a freshly fetched series
+        s.index, s.name = month_index(s.index), None  # same shape as a fetched series
         return s
+
+    def get_many(self, source: str, symbols: list[str]) -> dict[str, pd.Series]:
+        """Fresh cached closes for those of `symbols` that have them."""
+        out = {}
+        for s in symbols:
+            if (closes := self.get(source, s)) is not None:
+                out[s] = closes
+        return out
+
+    def put_many(self, source: str, closes: dict[str, pd.Series]) -> None:
+        for symbol, series in closes.items():
+            self.put(source, symbol, series)
 
     def put(self, source: str, symbol: str, closes: pd.Series) -> None:
         p = self.path(source, symbol)

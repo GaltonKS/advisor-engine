@@ -11,7 +11,9 @@ Configured by environment variables:
     ADVISOR_MARKET_DATA   synthetic (default) | fmp
     FMP_API_KEY           required for fmp; never logged or returned
     ADVISOR_MARKET_INDEX  market index symbol for real data (default SPY)
-    ADVISOR_MARKET_CACHE  cache directory (default data/market_cache)
+    ADVISOR_MARKET_CACHE  where month-end prices are cached: "supabase" (the default when
+                          SUPABASE_DB_URL is set, so prices survive deploys), "disk", or
+                          a directory (default data/market_cache)
 
 To add a vendor: write a `PriceSource` (see base.py and fmp.py) and add a branch below.
 """
@@ -48,18 +50,31 @@ class SyntheticData:
         return synthetic_market(len(returns)).set_axis(returns.index)
 
 
-def _settings() -> tuple[str, str, str, str]:
+def _settings() -> tuple[str, str, str, str, str]:
     return (os.environ.get("ADVISOR_MARKET_DATA", "synthetic").strip().lower() or "synthetic",
             os.environ.get("FMP_API_KEY", "").strip(),
             os.environ.get("ADVISOR_MARKET_INDEX", DEFAULT_INDEX).strip().upper() or DEFAULT_INDEX,
-            os.environ.get("ADVISOR_MARKET_CACHE", "").strip())
+            os.environ.get("ADVISOR_MARKET_CACHE", "").strip(),
+            os.environ.get("SUPABASE_DB_URL", "").strip())
+
+
+def _cache(setting: str, db_url: str):
+    if setting.lower() == "supabase" or (not setting and db_url):
+        if not db_url:
+            raise DataSourceError("ADVISOR_MARKET_CACHE=supabase needs SUPABASE_DB_URL.")
+        from .supabase_cache import SupabasePriceCache
+
+        return SupabasePriceCache(db_url)
+    if not setting or setting.lower() == "disk":
+        return PriceCache(DATA_DIR / "market_cache")
+    return PriceCache(Path(setting))
 
 
 @lru_cache(maxsize=4)
-def _build(mode: str, fmp_key: str, index: str, cache_dir: str):
+def _build(mode: str, fmp_key: str, index: str, cache_setting: str, db_url: str):
     if mode == "synthetic":
         return SyntheticData()
-    cache = PriceCache(Path(cache_dir) if cache_dir else DATA_DIR / "market_cache")
+    cache = _cache(cache_setting, db_url)
     if mode == "fmp":
         from .fmp import FMPSource
 

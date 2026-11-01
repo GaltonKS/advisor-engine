@@ -47,7 +47,7 @@ Returns are synthetic by default. To use real prices from Financial Modeling Pre
 | `ADVISOR_MARKET_DATA` | `fmp` (default `synthetic`) |
 | `FMP_API_KEY` | your FMP key (secret: `.env` or the host's settings, never git) |
 | `ADVISOR_MARKET_INDEX` | the market index symbol (default `SPY`) |
-| `ADVISOR_MARKET_CACHE` | where month-end prices are cached (default `data/market_cache`) |
+| `ADVISOR_MARKET_CACHE` | where month-end prices are cached: `supabase` (default when `SUPABASE_DB_URL` is set), `disk`, or a directory (default `data/market_cache`) |
 
 The engine uses monthly returns from dividend-adjusted closes: up to 120 months, over
 the window every holding shares (at least 24). Profiles then say `returns_source: FMP`

@@ -20,7 +20,7 @@ from advisor_engine.data.base import (
     SymbolNotFound,
     month_end_closes,
 )
-from advisor_engine.data.cache import PriceCache
+from advisor_engine.data.cache import PriceCache, month_index
 from advisor_engine.holdings import validate_holdings
 
 TODAY = date(2026, 11, 15)
@@ -266,3 +266,80 @@ def test_as_of_month_and_year_pass_the_number_check():
     from advisor_engine.assistant.numcheck import verify
     out = json.dumps({"returns_source": "FMP", "returns_as_of": "2026-10-31", "n_periods": 120})
     assert verify("120 months of FMP history to the end of October 2026.", [out])["ok"]
+
+
+# --- Supabase-backed cache (real Postgres with the migrations applied) ----------------------
+
+def closes(*values, start="2026-08-31"):
+    return pd.Series(values, index=month_index(pd.date_range(start, periods=len(values), freq="ME")),
+                     dtype=float)
+
+
+@pytest.fixture
+def db_cache(supabase_db):
+    from advisor_engine.data.supabase_cache import SupabasePriceCache
+
+    return lambda **kw: SupabasePriceCache(supabase_db, **kw)
+
+
+def test_supabase_cache_round_trip_across_instances(db_cache):
+    db_cache().put_many("Fake", {"AAA": closes(1.0, 2.0, 3.0), "BBB": closes(4.0, 5.0)})
+    got = db_cache().get_many("Fake", ["AAA", "BBB", "CCC"])  # a fresh process
+    assert sorted(got) == ["AAA", "BBB"]
+    pd.testing.assert_series_equal(got["AAA"], closes(1.0, 2.0, 3.0), check_freq=False)
+
+
+def test_supabase_cache_replaces_a_symbols_whole_history(db_cache, supabase_db):
+    db_cache().put_many("Fake", {"AAA": closes(1.0, 2.0, 3.0)})
+    db_cache().put_many("Fake", {"AAA": closes(9.0, 8.0, start="2026-09-30")})  # restated
+    assert list(db_cache().get_many("Fake", ["AAA"])["AAA"]) == [9.0, 8.0]
+
+
+def test_supabase_cache_entries_expire_by_the_database_clock(db_cache, supabase_db):
+    import psycopg
+
+    db_cache().put_many("Fake", {"AAA": closes(1.0)})
+    with psycopg.connect(supabase_db, autocommit=True) as conn:
+        conn.execute("update market.fetches set fetched_at = now() - interval '2 days'")
+    assert db_cache().get_many("Fake", ["AAA"]) == {}
+
+
+def test_supabase_cache_serves_repeat_reads_from_memory(db_cache):
+    cache = db_cache()
+    cache.put_many("Fake", {"AAA": closes(1.0)})
+    cache._connect = lambda: (_ for _ in ()).throw(AssertionError("no database call"))
+    assert list(cache.get_many("Fake", ["AAA"])["AAA"]) == [1.0]
+
+
+def test_supabase_cache_outage_falls_back_to_the_vendor(tmp_path, caplog):
+    from advisor_engine.data.supabase_cache import SupabasePriceCache
+
+    down = SupabasePriceCache("postgresql://nobody@127.0.0.1:1/none")
+    assert down.get_many("Fake", ["AAA"]) == {}
+    down.put_many("Fake", {"AAA": closes(1.0)})  # skipped, not raised
+    md = PriceHistoryData(source_for("AAA", "SPY"), down, "SPY", today=lambda: TODAY)
+    assert len(md.returns(frame("AAA"))) == 120
+    assert "Price cache read failed" in caplog.text
+
+
+def test_vendor_is_asked_once_per_symbol_across_api_instances(db_cache):
+    src = source_for("AAA", "BBB", "SPY")
+    for _ in range(2):  # two instances, e.g. after a deploy
+        PriceHistoryData(src, db_cache(), "SPY", today=lambda: TODAY).returns(frame("AAA", "BBB"))
+    assert sorted(src.calls) == ["AAA", "BBB", "SPY"]
+
+
+def test_cache_configuration(monkeypatch, tmp_path):
+    from advisor_engine.data.supabase_cache import SupabasePriceCache
+
+    monkeypatch.setenv("ADVISOR_MARKET_DATA", "fmp")
+    monkeypatch.setenv("FMP_API_KEY", "k")
+    monkeypatch.delenv("ADVISOR_MARKET_CACHE", raising=False)
+    monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://x@db/postgres")
+    assert isinstance(data.get_market_data().cache, SupabasePriceCache)  # default with Supabase
+    monkeypatch.setenv("ADVISOR_MARKET_CACHE", "disk")
+    assert isinstance(data.get_market_data().cache, PriceCache)
+    monkeypatch.setenv("ADVISOR_MARKET_CACHE", "supabase")
+    monkeypatch.delenv("SUPABASE_DB_URL")
+    with pytest.raises(data.DataSourceError, match="needs SUPABASE_DB_URL"):
+        data.get_market_data()

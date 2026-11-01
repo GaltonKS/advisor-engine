@@ -18,7 +18,7 @@ from typing import Protocol
 import pandas as pd
 
 from ..synthetic import CASH_NOISE, CASH_RETURN, _rng
-from .cache import PriceCache
+from .cache import PriceCache, month_index  # or SupabasePriceCache: same get_many / put_many
 
 N_PERIODS = 120   # ten years of months, when every holding has that much history
 MIN_PERIODS = 24  # risk_profile's own minimum
@@ -47,7 +47,7 @@ class PriceSource(Protocol):
 
 def month_end_closes(daily: pd.Series, today: date) -> pd.Series:
     """Last close of each complete calendar month, indexed by month end."""
-    s = pd.Series(daily.to_numpy(dtype=float), index=pd.to_datetime(daily.index)).sort_index()
+    s = pd.Series(daily.to_numpy(dtype=float), index=month_index(daily.index)).sort_index()
     monthly = s.dropna().resample("ME").last().dropna()
     # The current month is still moving; leave it out until it ends.
     return monthly[monthly.index < pd.Timestamp(today.replace(day=1))]
@@ -76,13 +76,8 @@ class PriceHistoryData:
         """Month-end closes per symbol: from the cache when fresh, else from the vendor
         (in parallel). Raises ValueError naming every symbol the vendor doesn't have."""
         name = self.source.name
-        out, missing = {}, []
-        for s in symbols:
-            cached = self.cache.get(name, s)
-            if cached is not None:
-                out[s] = cached
-            else:
-                missing.append(s)
+        out = self.cache.get_many(name, symbols)
+        missing = [s for s in symbols if s not in out]
         if missing:
             def one(sym):
                 try:
@@ -95,9 +90,9 @@ class PriceHistoryData:
             if unknown:
                 raise ValueError(f"No {name} price history for: {', '.join(sorted(unknown))}. "
                                  "Check the tickers (for example BRK-B rather than BRK/B).")
-            for s, series in fetched:
-                self.cache.put(name, s, series)
-                out[s] = series
+            fresh = dict(fetched)
+            self.cache.put_many(name, fresh)
+            out.update(fresh)
         return out
 
     # --- MarketData interface --------------------------------------------------------

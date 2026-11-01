@@ -33,6 +33,7 @@ applied.
 | `20261031000000_firm_scoped_schema.sql` | Tables, row-level security, audit log, `holdings` bucket |
 | `20261101000000_questionnaire_and_versions.sql` | `clients.questionnaire`, `portfolios.label` / `source` |
 | `20261102000000_client_soft_delete.sql` | `clients.deleted_at` / `deleted_by` (deleting a client hides it; nothing is removed) |
+| `20261103000000_market_price_cache.sql` | `market.prices` / `market.fetches`: shared month-end price cache, private to the API |
 
 Apply a new migration **before** merging the code that uses it: Render redeploys the API
 from `main`, and the new API reads the new columns.
