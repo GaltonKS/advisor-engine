@@ -157,7 +157,8 @@ export default function ClientWorkspace() {
             )}
           </div>
           <div className="no-print mt-8 text-xs text-faint">
-            Holdings file {portfolio.filename} · {shortHash(portfolio.sha256)} · engine v{profile.data?.engine_version}
+            Holdings file {portfolio.filename} · {shortHash(portfolio.sha256)}
+            {profile.data?.engine_version && <> · engine v{profile.data.engine_version}</>}
           </div>
         </>
       )}

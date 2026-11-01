@@ -40,8 +40,13 @@ class FakeSource:
         self.histories = histories
         self.calls = []
 
+    blocked: tuple = ()
+
     def daily_closes(self, symbol, start):
         self.calls.append(symbol)
+        if symbol in self.blocked:
+            from advisor_engine.data.base import NotInPlan
+            raise NotInPlan(symbol)
         if symbol not in self.histories:
             raise SymbolNotFound(symbol)
         s = self.histories[symbol]
@@ -343,3 +348,37 @@ def test_cache_configuration(monkeypatch, tmp_path):
     monkeypatch.delenv("SUPABASE_DB_URL")
     with pytest.raises(data.DataSourceError, match="needs SUPABASE_DB_URL"):
         data.get_market_data()
+
+
+# --- tickers outside the vendor plan ---------------------------------------------------------
+
+def test_tickers_outside_the_plan_are_named_and_the_rest_are_kept(tmp_path):
+    src = source_for("AAA", "BBB", "SPY")
+    src.blocked = ("BBB",)
+    md = market_data(src, tmp_path)
+    with pytest.raises(ValueError, match=r"Your Fake plan doesn't include: BBB\.$") as e:
+        md.returns(frame("AAA", "BBB"))
+    assert "SPY" not in str(e.value)
+    src.blocked = ()
+    calls = len(src.calls)
+    md.returns(frame("AAA", "BBB"))
+    assert src.calls[calls:] == ["BBB"]  # AAA and SPY were cached on the first try
+
+
+def test_market_index_outside_the_plan_says_how_to_fix_it(tmp_path):
+    src = source_for("AAA", "SPY")
+    src.blocked = ("SPY",)
+    with pytest.raises(ValueError, match="doesn't include SPY, the market index.*ADVISOR_MARKET_INDEX"):
+        market_data(src, tmp_path).returns(frame("AAA"))
+
+
+@pytest.mark.parametrize("response", [
+    httpx.Response(402, json={"Error Message": "Premium endpoint"}),
+    httpx.Response(200, json={"Error Message": "Special Endpoint: this symbol is not available "
+                                               "under your current subscription"}),
+])
+def test_fmp_plan_limits_are_reported_per_symbol(response):
+    from advisor_engine.data.base import NotInPlan
+
+    with pytest.raises(NotInPlan):
+        fmp(lambda r: response).daily_closes("SPY", date(2016, 1, 1))
