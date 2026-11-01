@@ -427,6 +427,11 @@ Client report (not yet charted):
   `N_PERIODS` = 120, at least `MIN_PERIODS` = 24, or a `ValueError` naming the short
   tickers), simple monthly returns, and the cache. Cash is not priced: it keeps the
   synthetic near-constant return (a zero-variance column breaks the correlations).
+- Adapters raise `SymbolNotFound` for an unknown ticker and `NotInPlan` for one the
+  account's plan excludes (FMP: HTTP 402, or an error message about the subscription).
+  `monthly_closes` names every failing ticker in one message, says so separately when the
+  market index itself is excluded (fix: upgrade, or `ADVISOR_MARKET_INDEX`), and still
+  caches the symbols that did load.
 - To add a vendor, write an adapter like `fmp.py`, add a branch in `data._build`, and
   test it with `httpx.MockTransport` (tests never hit the network). Error messages are
   shown to advisers: never include the API key or the request URL (FMP puts the key in

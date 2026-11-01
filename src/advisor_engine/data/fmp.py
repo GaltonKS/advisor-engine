@@ -15,7 +15,7 @@ from datetime import date
 
 import pandas as pd
 
-from .base import DataSourceError, SymbolNotFound
+from .base import DataSourceError, NotInPlan, SymbolNotFound
 
 BASE_URL = "https://financialmodelingprep.com/stable"
 TIMEOUT_SECONDS = 20
@@ -50,6 +50,8 @@ class FMPSource:
         if r.status_code in (401, 403):
             raise DataSourceError("FMP refused the request: check FMP_API_KEY and that the "
                                   "plan includes dividend-adjusted price history.")
+        if r.status_code == 402:  # FMP: "payment required", the symbol is outside the plan
+            raise NotInPlan(symbol)
         if r.status_code == 429:
             raise DataSourceError("FMP rate limit reached; try again in a minute.")
         if r.status_code >= 400:
@@ -59,6 +61,9 @@ class FMPSource:
         except ValueError:
             raise DataSourceError("FMP returned a response that isn't JSON.") from None
         if isinstance(data, dict) and ("Error Message" in data or "error" in data):
+            message = str(data.get("Error Message") or data.get("error") or "").lower()
+            if any(w in message for w in ("subscription", "premium", "restricted", "plan")):
+                raise NotInPlan(symbol)
             raise DataSourceError("FMP refused the request: check FMP_API_KEY and the plan.")
         rows = data.get("historical", []) if isinstance(data, dict) else data
         points = {}

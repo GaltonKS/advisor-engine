@@ -34,6 +34,11 @@ class SymbolNotFound(DataSourceError):
     """The vendor has no price history for this symbol."""
 
 
+class NotInPlan(DataSourceError):
+    """The vendor has this symbol, but the account's plan doesn't include it (e.g. ETFs or
+    some exchanges on a lower tier)."""
+
+
 class PriceSource(Protocol):
     """A market data vendor. `name` labels the figures (returns_source)."""
 
@@ -81,18 +86,33 @@ class PriceHistoryData:
         if missing:
             def one(sym):
                 try:
-                    return sym, self._fetch(sym)
+                    return sym, self._fetch(sym), None
                 except SymbolNotFound:
-                    return sym, None
+                    return sym, None, "unknown"
+                except NotInPlan:
+                    return sym, None, "plan"
             with ThreadPoolExecutor(max_workers=FETCH_WORKERS) as pool:
                 fetched = list(pool.map(one, missing))
-            unknown = [s for s, series in fetched if series is None or series.empty]
-            if unknown:
-                raise ValueError(f"No {name} price history for: {', '.join(sorted(unknown))}. "
-                                 "Check the tickers (for example BRK-B rather than BRK/B).")
-            fresh = dict(fetched)
+            fresh = {s: series for s, series, _ in fetched if series is not None and not series.empty}
+            # Keep what did load, so fixing one ticker doesn't refetch the rest.
             self.cache.put_many(name, fresh)
             out.update(fresh)
+            unknown = sorted(s for s, series, why in fetched if s not in fresh and why != "plan")
+            blocked = sorted(s for s, _, why in fetched if why == "plan")
+            problems = []
+            if self.index_symbol in blocked:
+                blocked.remove(self.index_symbol)
+                problems.append(
+                    f"Your {name} plan doesn't include {self.index_symbol}, the market index "
+                    "every profile is measured against. Upgrade the plan, or set "
+                    "ADVISOR_MARKET_INDEX to an index symbol the plan includes.")
+            if blocked:
+                problems.append(f"Your {name} plan doesn't include: {', '.join(blocked)}.")
+            if unknown:
+                problems.append(f"No {name} price history for: {', '.join(unknown)}. "
+                                "Check the tickers (for example BRK-B rather than BRK/B).")
+            if problems:
+                raise ValueError(" ".join(problems))
         return out
 
     # --- MarketData interface --------------------------------------------------------
@@ -142,5 +162,5 @@ def as_of(returns: pd.DataFrame) -> str | None:
     return None
 
 
-__all__ = ["DataSourceError", "MIN_PERIODS", "N_PERIODS", "PriceHistoryData", "PriceSource",
+__all__ = ["DataSourceError", "MIN_PERIODS", "N_PERIODS", "NotInPlan", "PriceHistoryData", "PriceSource",
            "SymbolNotFound", "as_of", "month_end_closes"]
