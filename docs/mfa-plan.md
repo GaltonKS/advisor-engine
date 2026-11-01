@@ -1,6 +1,6 @@
 # Plan: multi-factor sign-in
 
-Status: proposal, not built. Nothing in the code changes until this plan is agreed.
+Status: agreed, not built. The open questions are settled (see "Decisions" at the end).
 
 ## Why
 
@@ -179,7 +179,8 @@ volume justifies it.
 1. Ship the web screens and Security settings with `ADVISOR_REQUIRE_MFA=off`; advisers
    can enrol voluntarily.
 2. Switch to `enrol`: everyone signing in is prompted to set up MFA, and is told the date
-   it becomes required. Watch how many advisers have enrolled.
+   it becomes required, **one week** later. Watch how many advisers have enrolled (firm
+   owners can see this for their own firm, below).
 3. Switch to `required` and apply the database migration. Sessions already at `aal1` get
    the code screen on their next request; nobody is signed out mid-task without a path
    back in.
@@ -202,11 +203,62 @@ volume justifies it.
   required.
 - Dev auth tests stay as they are.
 
-## Open questions
+## Decisions
 
-- Grace-period length before `required` (suggest two weeks from the `enrol` switch).
-- Whether firm owners should be able to see which of their advisers have enrolled (a
-  per-firm view, no secrets), useful for a firm's own compliance checks.
-- Whether to require re-entering a code for sensitive actions (deleting a client,
-  approving a draft for a client) even within an `aal2` session.
-- Passkeys as a second factor type, once Supabase's support is generally available.
+Settled after review of the first draft.
+
+### 1. Grace period: one week
+
+The `enrol` stage lasts **one week**, then `required` is switched on. Advisers are told the
+date from their first sign-in in `enrol` mode, and the enrol screen can be postponed
+("Remind me next time") until that date, not after. On the date, the screen can no longer
+be skipped. The date is a deployment decision (when the operator changes the setting),
+not something the app counts down itself.
+
+### 2. MFA is required at every firm, and firms can see who has enrolled
+
+- MFA is required for every adviser at every firm. There is no per-firm switch to turn it
+  off.
+- A firm's owner (and, if we add the role, its compliance officer) can see which of the
+  firm's advisers have enrolled: name, email, whether MFA is set up, how many
+  authenticators, and when the latest one was added. The view never shows secrets or QR
+  codes, and it lists only the firm's own advisers (row-level security on
+  `app.current_firm_id()`, as for every other table).
+- Supabase keeps factors in its `auth` schema, which advisers cannot read. Enrolment status
+  is therefore exposed through one narrow, security-definer function (or view) that
+  returns only the fields above, for the caller's own firm, to an `aal2` session. The API
+  serves it on a new route, and the web app shows it in the firm's settings, for example
+  as a "Two-step sign-in" column next to each adviser.
+- Advisers who haven't enrolled yet during the grace week are shown as "Not set up", so an
+  owner can chase them before the deadline.
+- Enrolment changes (`mfa_enrolled`, `mfa_factor_removed`, `mfa_reset_by_operator`) appear
+  in the firm's audit trail, so the view can be checked against a history.
+
+### 3. Re-enter a code for sensitive actions
+
+Some actions need a **fresh code even inside an `aal2` session**:
+
+- Deleting a client (`DELETE /clients/{id}`). This is the agreed first case.
+- Proposed for the same treatment, to confirm when building: removing an authenticator,
+  changing the account email or password, and exporting client data in bulk if that
+  feature is added.
+
+How it works:
+- The access token's `amr` claim records each sign-in method with the time it was used.
+  For a sensitive route, the API requires a TOTP entry no older than a short window (for
+  example five minutes). Otherwise it answers **403 with its own reason** ("Enter your
+  code to confirm this action"), distinct from the other 403s.
+- The web app catches that reason, asks for a code in a small confirmation dialog
+  ("Delete Jane Smith? Enter your authenticator code to confirm"), verifies it with
+  Supabase (which issues a fresh token), and retries the same request once.
+- The check is on the server, so calling the API directly cannot skip it. The time window
+  lives in one constant in the API, with tests for fresh, stale and missing codes.
+- The audit record for the action notes that a fresh code was used.
+
+### 4. Passkeys later, as a second factor
+
+Passkeys (and hardware security keys) are kept on the plan as an **additional factor
+type**, next to authenticator codes, not a replacement. They are added once Supabase's
+support is generally available and works across the browsers and the desktop app we
+support. Until then, TOTP is the only factor. When they arrive, either factor satisfies
+`aal2` and the fresh-code check for sensitive actions.
