@@ -179,6 +179,11 @@ every turn --append_audit--> data/audit/audit.jsonl
   number check reads `_full`, so figures from earlier results still verify. Compacting
   only between turns keeps each turn's requests append-only for the cache. Never send
   `_full` to the API or drop it from saved history.
+- `chat.MAX_TOKENS` (16,000) is the output cap per call. Thinking counts against it, so
+  keep it well above a normal reply; you pay for tokens generated, not the cap. A
+  response that stops at the cap (`stop_reason == "max_tokens"`) is withheld with
+  `block_reason="max_tokens"`, not retried, its tool calls are not run, and the turn is
+  not kept in history.
 - The firm disclaimer is appended verbatim by code in `chat.py`, never given to the
   model and never run through the number check.
 - Mode: `ADVISOR_LLM=mock|anthropic`. Unset means mock without `ANTHROPIC_API_KEY`,

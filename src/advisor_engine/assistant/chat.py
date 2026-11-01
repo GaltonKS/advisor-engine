@@ -19,7 +19,11 @@ from .tools import TOOLS, execute_tool
 DEFAULT_MODEL = "claude-sonnet-5-5"
 MAX_TOOL_ROUNDS = 5
 MAX_RETRIES = 1
-MAX_TOKENS = 2048
+# Output cap per call. Thinking counts against it, so it is set well above a normal reply
+# (about 900 output tokens per call in production) to let a long-thinking answer finish
+# rather than be cut off. Billing is for tokens generated, not the cap. 16,000 stays under
+# the SDK's limit for non-streaming requests.
+MAX_TOKENS = 16000
 
 # Top-level automatic prompt caching: the API caches the request up to its last block, so
 # the next call in the tool loop (and the next turn, within the 5-minute TTL) reads the
@@ -253,6 +257,11 @@ def run_turn(
             cache_control=CACHE_CONTROL,
         )
         usage = _add_usage(usage, resp)
+        if getattr(resp, "stop_reason", None) == "max_tokens":
+            # A cut-off reply is never shown, and a cut-off tool call is never run: its
+            # input may be incomplete.
+            block_reason = "max_tokens"
+            break
         blocks = _blocks(resp.content)
         messages.append({"role": "assistant", "content": blocks})
         uses = [b for b in blocks if b["type"] == "tool_use"]
@@ -291,7 +300,12 @@ def run_turn(
         break
 
     blocked = block_reason is not None
-    if block_reason == "tool_round_cap":
+    if block_reason == "max_tokens":
+        shown = ("I couldn't finish this answer within the length limit, so nothing was shown. "
+                 "Try asking a narrower question.")
+        verification = {"ok": False, "unmatched": [], "checked": 0}
+        new_history = history  # the turn is dropped, as for any withheld answer
+    elif block_reason == "tool_round_cap":
         shown = f"I stopped after {MAX_TOOL_ROUNDS} rounds of tool calls without reaching an answer."
         verification = {"ok": False, "unmatched": [], "checked": 0}
         new_history = history

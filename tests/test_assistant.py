@@ -502,3 +502,32 @@ def test_requests_only_append_within_a_turn_and_across_turns(tmp_path):
     calls = [c["messages"] for c in c1.calls + c2.calls]
     for before, after in zip(calls, calls[1:]):
         assert after[:len(before)] == before
+
+
+# --- output cap ---------------------------------------------------------------------------
+
+def test_output_cap_leaves_room_for_thinking(tmp_path):
+    client = FakeClient([[text_block("Hello.")]])
+    run(client, tmp_path)
+    assert client.calls[0]["max_tokens"] == chat.MAX_TOKENS >= 16000
+
+
+class CutOffClient(FakeClient):
+    def create(self, **kw):
+        resp = super().create(**kw)
+        resp.stop_reason = "max_tokens"
+        return resp
+
+
+@pytest.mark.parametrize("blocks", [
+    [text_block("Effective bets are")],                    # reply cut off mid-sentence
+    [tool_block()],                                        # tool call cut off: never run
+])
+def test_a_reply_cut_off_at_the_cap_is_withheld_and_not_kept(tmp_path, blocks):
+    client = CutOffClient([blocks])
+    r = run(client, tmp_path)
+    assert r.blocked and r.block_reason == "max_tokens"
+    assert "length limit" in r.reply and r.history == [] and r.tool_calls == []
+    assert len(client.calls) == 1  # no retry
+    rec = audit_lines(tmp_path)[-1]
+    assert rec["blocked"] and rec["block_reason"] == "max_tokens"
