@@ -591,3 +591,57 @@ def test_pending_adviser_registers_then_gets_in_once_approved(approval_api):
     again = client.post("/me/registration", headers=dave,
                         json={"full_name": "Dave", "crd": "1", "firm_name": "F"})
     assert again.status_code == 409
+
+
+# --- pilot metrics (operator only) -----------------------------------------------------------
+
+def operator_app(store, tmp_path, **kw):
+    return TestClient(create_app(Settings(auth="dev", store_dir=tmp_path,
+                                          operator_emails=("alice@dev.local",), **kw), store=store))
+
+
+def test_pilot_metrics_are_for_operators_only(api, tmp_path):
+    _, store = api
+    client = operator_app(store, tmp_path)
+    assert client.get("/me", headers=as_("alice")).json()["operator"] is True
+    assert client.get("/me", headers=as_("bob")).json()["operator"] is False
+    r = client.get("/operator/metrics", headers=as_("bob"))
+    assert r.status_code == 404  # not 403: the route isn't revealed
+    assert client.get("/operator/metrics", headers=as_("alice")).status_code == 200
+
+
+def test_pilot_metrics_count_activity_across_firms_without_client_data(api, tmp_path):
+    _, store = api
+    client = operator_app(store, tmp_path)
+    c, p = setup_portfolio(client, "bob")  # another firm's activity still counts
+    client.post(f"/portfolios/{p['id']}/turns", json={"message": "How risky is it?"}, headers=as_("bob"))
+    r = client.post(f"/portfolios/{p['id']}/stress", json={"scenario_id": "broad_selloff"}, headers=as_("bob"))
+    assert r.status_code == 200
+    m = client.get("/operator/metrics", headers=as_("alice")).json()
+    assert len(m["weekly_active"]) == m["weeks"] == 12
+    assert m["weekly_active"][-1]["advisers"] == 1  # bob, this week
+    uses = {f["event"]: f for f in m["features"]}
+    assert uses["turn"]["uses"] == 1 and uses["turn"]["advisers"] == 1
+    assert uses["stress"]["uses"] == 1
+    assert m["totals"]["questions"] == 1 and m["totals"]["clients"] == 1
+    assert m["funnel"]["added_client"] == 1 and m["funnel"]["ran_analysis"] == 1
+    text = json.dumps(m)
+    assert "Sample Household A" not in text and "How risky" not in text and c["id"] not in text
+
+
+def test_pilot_metrics_show_the_approval_queue_and_wait(approval_api, tmp_path):
+    client, approve = approval_api
+    store = client.app.state.store
+    ops = operator_app(store, tmp_path)
+    if isinstance(store, LocalStore):  # with Supabase, alice is approved by the fixture
+        ops.get("/me", headers=as_("alice"))
+        store.approve_adviser("alice@dev.local")
+    ops.post("/me/registration", headers=as_("dave"),
+             json={"full_name": "Dave Adams", "crd": "1234567", "firm_name": "Dave Wealth"})
+    m = ops.get("/operator/metrics", headers=as_("alice")).json()
+    assert [(p["email"], p["crd"], p["firm_name"]) for p in m["pending"]] == [
+        ("dave@dev.local", "1234567", "Dave Wealth")]
+    assert m["totals"]["pending_advisers"] == 1 and m["funnel"]["registered"] == 1
+    approve("dave@dev.local")
+    m = ops.get("/operator/metrics", headers=as_("alice")).json()
+    assert m["pending"] == [] and m["avg_approval_hours"] is not None

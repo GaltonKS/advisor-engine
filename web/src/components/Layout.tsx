@@ -44,6 +44,11 @@ export default function Layout() {
             <NavLink to="/" end className={({ isActive }) => (isActive ? "border-b-2 border-gold-bright pb-0.5 font-semibold text-card" : "text-on-navy-muted hover:text-card")}>
               Clients
             </NavLink>
+            {me.data?.operator && (
+              <NavLink to="/operator" className={({ isActive }) => (isActive ? "border-b-2 border-gold-bright pb-0.5 font-semibold text-card" : "text-on-navy-muted hover:text-card")}>
+                Pilot metrics
+              </NavLink>
+            )}
           </nav>
           <div className="ml-auto flex items-center gap-3 text-xs">
             {install && (

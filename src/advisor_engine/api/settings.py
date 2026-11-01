@@ -31,6 +31,12 @@ class Settings:
     supabase_secret_key: str = ""  # sb_secret_... (or legacy service_role), Storage only
     allowed_origins: list[str] = field(default_factory=list)
     daily_turn_limit: int = DEFAULT_DAILY_TURN_LIMIT
+    # Emails of the platform operators (lower case): only they see the pilot metrics page,
+    # which reads across every firm. Set with ADVISOR_OPERATORS (comma-separated).
+    operator_emails: tuple[str, ...] = ()
+
+    def is_operator(self, email: str | None) -> bool:
+        return bool(email) and email.strip().lower() in self.operator_emails
 
     @property
     def store(self) -> str:
@@ -72,4 +78,6 @@ def load_settings() -> Settings:
         supabase_secret_key=secret_key,
         allowed_origins=origins or (["http://localhost:5173"] if auth == "dev" else []),
         daily_turn_limit=int(os.environ.get("ADVISOR_DAILY_TURN_LIMIT", DEFAULT_DAILY_TURN_LIMIT)),
+        operator_emails=tuple(e.strip().lower() for e in
+                              os.environ.get("ADVISOR_OPERATORS", "").split(",") if e.strip()),
     )

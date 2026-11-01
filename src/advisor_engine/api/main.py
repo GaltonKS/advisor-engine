@@ -276,7 +276,8 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
     def me(c: Ctx = Depends(any_ctx)) -> dict:
         return {"adviser": c.adv, "firm": c.db.get_firm(c.adv["firm_id"]), "auth": settings.auth,
                 "llm": settings.llm, "daily_turn_limit": settings.daily_turn_limit,
-                "engine_version": __version__, "returns_source": market_data_label()}
+                "engine_version": __version__, "returns_source": market_data_label(),
+                "operator": settings.is_operator(c.adv.get("email"))}
 
     @app.post("/me/registration")
     def register(body: RegistrationIn, c: Ctx = Depends(any_ctx)) -> dict:
@@ -289,6 +290,14 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
         # Audit rows need an active firm, so this goes to the server log for the operator.
         log_.warning("Registration submitted: adviser %s, CRD %s", adv["id"], body.crd)
         return {"adviser": adv}
+
+    @app.get("/operator/metrics")
+    def operator_metrics(c: Ctx = Depends(ctx)) -> dict:
+        """Pilot usage across every firm (counts only), for the platform operator.
+        Anyone else gets 404, so the route's existence isn't revealed."""
+        if not settings.is_operator(c.adv.get("email")):
+            raise HTTPException(404, "Not found.")
+        return store.pilot_metrics()
 
     # --- clients and portfolios ------------------------------------------------------
 

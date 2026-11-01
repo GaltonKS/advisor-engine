@@ -35,6 +35,7 @@ export const ANALYTICS_TABS = [
 /** The page type reported for an address inside the signed-in app. */
 export function pageType(pathname: string, search = ""): string {
   if (pathname === "/" || pathname === "") return "/clients";
+  if (pathname === "/operator") return "/operator";
   if (/^\/clients\/[^/]+\/?$/.test(pathname)) {
     const tab = new URLSearchParams(search).get("tab") ?? "overview";
     return (ANALYTICS_TABS as readonly string[]).includes(tab)

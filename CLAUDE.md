@@ -79,6 +79,7 @@ src/advisor_engine/
         supabase_store.py SupabaseStore: same methods on Postgres (RLS) + Storage
         main.py        FastAPI routes over execute_tool / run_turn / verify
         admin.py       operator commands: list pending sign-ups, approve (`python -m advisor_engine.api.admin`)
+        metrics.py     pilot metrics definitions (weekly active, feature use, funnel) for the operator page
 web/                   React app (see web/README.md); formats engine output, computes nothing
 desktop/               Electron shell that loads the web app (see desktop/README.md); no figures, no Node in the page
 web/src/components/charts.tsx  draws chart specs (see "Charts" below)
@@ -234,6 +235,12 @@ every turn --append_audit--> data/audit/audit.jsonl
   only. `app.approve_adviser(email, firm_id?)` activates them, optionally as a member of
   an existing firm; only the owner connection can run it (`api/admin.py` or the SQL
   Editor), never an adviser. Verify the CRD on FINRA BrokerCheck before approving.
+- Operators (`ADVISOR_OPERATORS`, comma-separated emails -> `Settings.operator_emails`)
+  get `/me` `operator: true` and the **Pilot metrics** page (`/operator`, `pages/PilotMetrics.tsx`).
+  `GET /operator/metrics` reads across every firm, so it runs on the store's owner
+  connection (`store.pilot_metrics()`), never a user session, and answers 404 to anyone
+  who isn't an operator. It returns counts, dates and the approval queue only: never
+  client names, holdings or question text. Add a figure there, not in the page.
 - Live model calls require `auth == "supabase"` (`Settings.llm`). Don't add another path to
   the real client.
 - Responses never include server file paths (see `_tool_view`).

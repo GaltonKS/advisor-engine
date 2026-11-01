@@ -10,6 +10,7 @@ import { trackPageview } from "./lib/analytics";
 import { AuthProvider, useAuth } from "./lib/auth";
 import ClientWorkspace from "./pages/ClientWorkspace";
 import Clients from "./pages/Clients";
+import PilotMetrics from "./pages/PilotMetrics";
 import Privacy from "./pages/Privacy";
 import SignIn from "./pages/SignIn";
 
@@ -30,6 +31,7 @@ function App() {
       <Route element={<Layout />}>
         <Route index element={<Clients />} />
         <Route path="clients/:clientId" element={<ClientWorkspace />} />
+        <Route path="operator" element={<PilotMetrics />} />
       </Route>
     </Routes>
   );
