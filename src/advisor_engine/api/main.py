@@ -1,6 +1,6 @@
 """HTTP API over the engine and the assistant: `uvicorn advisor_engine.api.main:app`.
 
-Same guarantees as the Streamlit demo, now per signed-in adviser and per firm:
+Per signed-in adviser and per firm:
 - Every figure comes from `execute_tool` / `run_turn`; routes only move engine output
   around and never compute.
 - Model replies go through `run_turn`, so the number check, retry and withholding apply.

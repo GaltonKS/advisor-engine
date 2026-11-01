@@ -26,7 +26,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - run: pip install -e ".[dev,llm,ui,api]"
+      - run: pip install -e ".[dev,llm,api]"
       # Mock mode and no key: the suite must never reach the real API. The grep fails the
       # job if the Postgres-backed tests skipped instead of running.
       - run: |
