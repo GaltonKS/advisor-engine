@@ -269,7 +269,7 @@ def create_app(settings: Settings | None = None, store=None, auth_admin=None) ->
 
     def base_ctx(user: User = Depends(current_user)) -> Ctx:
         """The signed-in adviser, before any multi-factor or approval check (/me only)."""
-        db = store.as_user(user.id, user.email, aal=user.aal)
+        db = store.as_user(user.id, user.email, aal=user.aal, amr=user.amr)
         return Ctx(db.get_or_create_adviser(user.id, user.email), db, user)
 
     def any_ctx(c: Ctx = Depends(base_ctx)) -> Ctx:
@@ -394,6 +394,9 @@ def create_app(settings: Settings | None = None, store=None, auth_admin=None) ->
                 and len(verified(factors)) == 1):
             raise HTTPException(409, "You can't remove your only authenticator while two-step "
                                      "sign-in is required. Add another one first.")
+        # Supabase refuses to delete a verified factor without this permit, so a browser
+        # can't skip these checks by unenrolling directly (see the migration).
+        store.allow_factor_removal(c.user.id, factor_id)
         try:
             auth_admin.delete_factor(c.user.id, factor_id)
         except LookupError:
@@ -508,7 +511,11 @@ def create_app(settings: Settings | None = None, store=None, auth_admin=None) ->
         and the audit trail are kept on record, but the app no longer shows or uses them."""
         client = own_client(c, client_id)
         fresh = require_fresh_code(c)
-        c.db.delete_client(c.adv["firm_id"], client_id, c.adv["id"])
+        try:
+            c.db.delete_client(c.adv["firm_id"], client_id, c.adv["id"])
+        except PermissionError:
+            # The database checks the code too (it can differ by a clock tick, or by mode).
+            raise HTTPException(403, MFA_FRESH_REQUIRED) from None
         log(c, "client_deleted", client_id=client_id, inputs={"name": client["name"]},
             fresh_code=fresh)
 

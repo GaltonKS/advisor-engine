@@ -264,11 +264,19 @@ every turn --append_audit--> data/audit/audit.jsonl
   audit row records `fresh_code`. Today: deleting a client, removing an authenticator.
   Anything new of that kind (email or password change, bulk export) goes through an API
   route with this check, never straight from the browser to Supabase.
-- `store.as_user(..., aal=user.aal)` forwards the verified level, so the database's
-  restrictive `mfa_required` policies (`app.mfa_ok()`, mode in `app.security_settings`)
-  see what the API saw. The database mode is switched with `admin mfa-mode`, after the
+- `store.as_user(..., aal=user.aal, amr=user.amr)` forwards the verified level and code
+  times, so the database's restrictive `mfa_required` policies (`app.mfa_ok()`, mode in
+  `app.security_settings`) and its fresh-code check see what the API saw. The database mode is switched with `admin mfa-mode`, after the
   API's, never before. Factor lists and removals go through `auth_admin`; never return a
   secret or QR code from the API. `GET /firm/mfa` is for the firm's owner only.
+- The database backs the fresh-code checks, so calling Supabase directly can't skip them
+  (`20261107000000_mfa_direct_paths.sql`). A trigger on `auth.mfa_factors` refuses to
+  delete a verified factor without a one-time permit (`store.allow_factor_removal`,
+  two minutes), which the API issues only after its own checks, and `admin reset-mfa`
+  issues too; unverified factors and user deletions pass. A trigger on `public.clients`
+  refuses changes to `deleted_at` / `deleted_by` by `authenticated` without a fresh code
+  (`app.mfa_fresh_ok()`, the same rule and 300 s window as `require_fresh_code`; keep
+  them in step). Both raise SQLSTATE `PT403` (HTTP 403 in Supabase's REST API).
 - Responses never include server file paths (see `_tool_view`).
 - Clients can be renamed (`PATCH /clients/{id}`) and deleted (`DELETE /clients/{id}`).
   Deleting is a soft delete (`deleted_at`): `get_client` / `list_clients` skip the row and

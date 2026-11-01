@@ -91,6 +91,9 @@ def reset_mfa(db_url: str, auth_admin, email: str, *, requested_by: str, verifie
         except LookupError:
             factors = []
         for f in factors:
+            # Supabase refuses to delete a verified factor without a permit (see
+            # 20261107000000_mfa_direct_paths.sql); autocommit, so Supabase Auth sees it.
+            conn.execute("select app.allow_factor_removal(%s, %s)", [uid, f["id"]])
             auth_admin.delete_factor(uid, f["id"])
             removed.append({"factor_id": f["id"], "friendly_name": f["friendly_name"]})
         record = build_record({"event": "mfa_reset_by_operator", "model": None,

@@ -275,6 +275,7 @@ support. Until then, TOTP is the only factor. When they arrive, either factor sa
 | `api/main.py` | `required`: every route except `/me` answers 403 `{"code": "mfa_required"}` below aal2, checked before approval. Fresh code (403 `{"code": "mfa_fresh_required"}`) for deleting a client and removing an authenticator. `POST /me/mfa/enrolled`, `DELETE /me/mfa/factors/{id}`, `GET /firm/mfa` (owner only). Audit rows carry `aal`, and `fresh_code` on sensitive actions. |
 | `api/auth_admin.py` | Supabase Auth admin calls with the secret key: list and delete a user's factors. |
 | `api/admin.py` | `mfa-mode [MODE]` and `reset-mfa EMAIL --requested-by --verified-by --check`. |
+| `supabase/migrations/20261107000000_mfa_direct_paths.sql` | Trigger on `auth.mfa_factors` (verified factors need a permit from the API), `app.mfa_fresh_ok()` and a trigger on `public.clients` (soft delete needs a fresh code). |
 | `supabase/migrations/20261106000000_mfa.sql` | `app.security_settings` (the database's mode, starts `off`), `app.mfa_ok()`, restrictive `mfa_required` policies on every firm table; `submit_registration` and `bump_turns` check it too. |
 | `web/src/lib/mfa.ts`, `lib/auth.tsx` | Which screen to show; assurance level and factors from Supabase; enrol and verify. |
 | `web/src/pages/MfaSetup.tsx` | "Set up your authenticator" (with backup prompt) and "Enter your code". |
@@ -293,13 +294,24 @@ support. Until then, TOTP is the only factor. When they arrive, either factor sa
 
 ### Known gaps
 
-- A browser holding an aal2 session can still call Supabase directly to remove an
-  authenticator (`supabase.auth.mfa.unenroll`) without a fresh code; Supabase only
-  requires aal2 for that. The app always goes through the API. The audit trail only
-  records removals made through the API.
-- The same applies to soft-deleting a client through Supabase's REST API, if the `public`
-  schema is exposed there (`authenticated` has UPDATE on `clients`, as before this change).
-  Closing it means not exposing `public` to the REST API, or routing the update through a
-  function that checks the `amr` time.
+- Closed (`20261107000000_mfa_direct_paths.sql`): a browser holding an aal2 session used
+  to be able to remove an authenticator by calling Supabase directly
+  (`supabase.auth.mfa.unenroll`), skipping the fresh code. Supabase Auth deletes the row
+  from `auth.mfa_factors` for both its own and the admin call, so a trigger there now
+  refuses to delete a verified factor unless the API issued a one-time permit for it
+  (`app.allow_factor_removal`, two minutes, used up by the delete) after its own checks.
+  `reset-mfa` issues permits too. Unverified factors (abandoned set-ups) and deletes that
+  cascade from deleting the user still pass. A direct unenroll now fails with an error.
+- Closed (same migration): soft-deleting a client through Supabase's REST API, if the
+  `public` schema is exposed there. A trigger on `public.clients` refuses any change to
+  `deleted_at` / `deleted_by` made as `authenticated` without a fresh code
+  (`app.mfa_fresh_ok()`: the API's rule, the database's own mode, 300 seconds). The API
+  forwards the token's `amr` claim, so its own deletes pass the same check.
+- The trigger on `auth.mfa_factors` sits on a table Supabase manages. Supabase allows
+  triggers on its auth tables today; if a platform change ever drops it, the gap reopens
+  silently. After each Supabase upgrade, check it is still there:
+  `select tgname from pg_trigger where tgrelid = 'auth.mfa_factors'::regclass;`.
+- The fresh-code window is now in two places, `auth.FRESH_MFA_SECONDS` and
+  `app.mfa_fresh_ok()`; tests check both at the same boundary.
 - `mfa_enrolled` is recorded when the browser reports it; the API confirms the factor is
   verified with Supabase first, but an enrolment made outside the app isn't recorded.

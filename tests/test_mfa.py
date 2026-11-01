@@ -351,10 +351,15 @@ def test_admin_adapter_network_failure_is_plain():
 psycopg = pytest.importorskip("psycopg")
 
 
-def raw(url, user, sql, params=(), aal=None):
+def raw(url, user, sql, params=(), aal=None, code_age=None):
+    """Run SQL as `user` the way Supabase's REST API would. `code_age`: seconds since an
+    authenticator code (None: no code in the token's `amr`)."""
     claims = {"sub": dev_user_id(user), "email": f"{user}@dev.local", "role": "authenticated"}
     if aal:
         claims["aal"] = aal
+    if code_age is not None:
+        claims["amr"] = [{"method": "password", "timestamp": int(time.time()) - 3600},
+                         {"method": "totp", "timestamp": int(time.time() - code_age)}]
     import json
 
     with psycopg.connect(url) as conn:
@@ -458,3 +463,202 @@ def test_api_and_database_modes_that_differ_are_logged(supabase_db, tmp_path, ca
                             supabase_jwt_secret=SECRET, require_mfa="enrol"), store=store,
                    auth_admin=MemoryAuthAdmin())
     assert "API enrol, database required" in caplog.text
+
+
+# --- the direct-to-Supabase paths (20261107000000_mfa_direct_paths.sql) -------------------
+
+def owner(url, sql, params=()):
+    """As the owner role, as Supabase Auth's own connection would."""
+    with psycopg.connect(url, autocommit=True) as conn:
+        cur = conn.execute(sql, params)
+        return cur.fetchall() if cur.description else None
+
+
+def add_factor(url, user, status="verified") -> str:
+    import uuid
+
+    fid = str(uuid.uuid4())
+    owner(url, "insert into auth.mfa_factors (id, user_id, friendly_name, status) "
+               "values (%s, %s, 'Phone', %s)", [fid, dev_user_id(user), status])
+    return fid
+
+
+def unenroll(url, factor_id):
+    """What Supabase Auth runs for `supabase.auth.mfa.unenroll` (and for the admin API)."""
+    owner(url, "delete from auth.mfa_factors where id = %s", [factor_id])
+
+
+def factor_ids(url, user):
+    return {str(r[0]) for r in owner(url, "select id from auth.mfa_factors where user_id = %s",
+                                     [dev_user_id(user)])}
+
+
+class DbAuthAdmin(MemoryAuthAdmin):
+    """Supabase Auth's admin API over the test database: deletes go through the trigger."""
+
+    def __init__(self, url):
+        super().__init__()
+        self.url = url
+
+    def list_factors(self, user_id):
+        return [{"id": str(r[0]), "friendly_name": r[1], "factor_type": "totp", "status": r[2],
+                 "created_at": None, "updated_at": None}
+                for r in owner(self.url, "select id, friendly_name, status from auth.mfa_factors "
+                                         "where user_id = %s", [user_id])]
+
+    def delete_factor(self, user_id, factor_id):
+        try:
+            unenroll(self.url, factor_id)
+        except psycopg.Error:
+            raise AuthAdminError("The sign-in service refused the request (HTTP 500).") from None
+
+
+def test_a_verified_authenticator_cannot_be_removed_by_calling_supabase_directly(supabase_db):
+    fid = add_factor(supabase_db, "alice")
+    with pytest.raises(psycopg.Error) as e:
+        unenroll(supabase_db, fid)
+    assert e.value.sqlstate == "PT403" and "Security page" in str(e.value)
+    assert fid in factor_ids(supabase_db, "alice")
+    # Abandoned set-ups (never verified) can still be tidied away by the browser.
+    unverified = add_factor(supabase_db, "alice", status="unverified")
+    unenroll(supabase_db, unverified)
+    assert unverified not in factor_ids(supabase_db, "alice")
+
+
+def test_a_permit_from_the_api_allows_one_removal_and_expires(supabase_db, tmp_path):
+    from advisor_engine.api.supabase_store import MemoryStorage, SupabaseStore
+
+    store = SupabaseStore(supabase_db, MemoryStorage(), cache_dir=tmp_path / "cache")
+    uid = dev_user_id("alice")
+    a, b, c = (add_factor(supabase_db, "alice") for _ in range(3))
+    store.allow_factor_removal(uid, a)
+    unenroll(supabase_db, a)
+    # Used up: the same id again is refused, and a permit covers only its own factor.
+    owner(supabase_db, "insert into auth.mfa_factors (id, user_id, status) values (%s, %s, 'verified')",
+          [a, uid])
+    with pytest.raises(psycopg.Error):
+        unenroll(supabase_db, a)
+    with pytest.raises(psycopg.Error):
+        unenroll(supabase_db, b)
+    # Another user's permit doesn't cover it either.
+    store.allow_factor_removal(dev_user_id("bob"), c)
+    with pytest.raises(psycopg.Error):
+        unenroll(supabase_db, c)
+    store.allow_factor_removal(uid, b)
+    owner(supabase_db, "update app.mfa_factor_removals set allowed_until = now() - interval '1 second'")
+    with pytest.raises(psycopg.Error):
+        unenroll(supabase_db, b)
+
+
+def test_advisers_cannot_issue_or_see_permits(supabase_db, alice_client):
+    fid = add_factor(supabase_db, "alice")
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        raw(supabase_db, "alice", "select app.allow_factor_removal(%s, %s)",
+            [dev_user_id("alice"), fid], aal="aal2", code_age=0)
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        raw(supabase_db, "alice", "select * from app.mfa_factor_removals", aal="aal2")
+
+
+def test_deleting_a_user_still_removes_their_authenticators(supabase_db):
+    import uuid
+
+    uid = str(uuid.uuid4())
+    owner(supabase_db, "insert into auth.users (id, email) values (%s, 'gone@x.com')", [uid])
+    owner(supabase_db, "insert into auth.mfa_factors (id, user_id, status) values (%s, %s, 'verified')",
+          [str(uuid.uuid4()), uid])
+    owner(supabase_db, "delete from auth.users where id = %s", [uid])
+    assert owner(supabase_db, "select count(*) from auth.mfa_factors where user_id = %s", [uid])[0][0] == 0
+
+
+@pytest.mark.parametrize("mode", ["off", "enrol", "required"])
+def test_removal_through_the_api_works_and_direct_removal_does_not(supabase_db, tmp_path, mode):
+    from advisor_engine.api.supabase_store import MemoryStorage, SupabaseStore
+
+    admin.set_mfa_mode(supabase_db, mode)
+    store = SupabaseStore(supabase_db, MemoryStorage(), cache_dir=tmp_path / "cache")
+    settings = Settings(auth="supabase", store_dir=tmp_path, supabase_url=SUPABASE_URL,
+                        supabase_jwt_secret=SECRET, require_mfa=mode)
+    client = TestClient(create_app(settings, store=store, auth_admin=DbAuthAdmin(supabase_db)))
+    keep, remove = add_factor(supabase_db, "alice"), add_factor(supabase_db, "alice")
+    with pytest.raises(psycopg.Error):
+        unenroll(supabase_db, remove)  # the browser calling Supabase itself
+    r = client.delete(f"/me/mfa/factors/{remove}", headers=bearer("alice"))
+    assert r.status_code == 204, r.text
+    assert factor_ids(supabase_db, "alice") == {keep}
+    assert "mfa_factor_removed" in [e["event"] for e in audit_events(client)]
+
+
+def test_operator_reset_removes_verified_factors_from_supabase(supabase_db):
+    fids = {add_factor(supabase_db, "alice"), add_factor(supabase_db, "alice", status="unverified")}
+    record = admin.reset_mfa(supabase_db, DbAuthAdmin(supabase_db), "alice@dev.local",
+                             requested_by="Alice", verified_by="ops", check="call-back")
+    assert {r["factor_id"] for r in record["inputs"]["removed"]} == fids
+    assert factor_ids(supabase_db, "alice") == set()
+
+
+def client_id_of(alice_client, url):
+    return str(raw(url, "alice", "select id from public.clients limit 1", aal="aal2")[0][0])
+
+
+SOFT_DELETE = "update public.clients set deleted_at = now() where id = %s"
+
+
+@pytest.mark.parametrize("mode,session,allowed", [
+    ("off", {}, True),                                        # no code needed
+    ("enrol", {"aal": "aal1"}, True),                         # nothing to give yet
+    ("enrol", {"aal": "aal2", "code_age": FRESH_MFA_SECONDS + 60}, False),
+    ("enrol", {"aal": "aal2", "code_age": 0}, True),
+    ("required", {"aal": "aal2"}, False),                     # verified, but no code time
+    ("required", {"aal": "aal2", "code_age": FRESH_MFA_SECONDS + 60}, False),
+    ("required", {"aal": "aal2", "code_age": FRESH_MFA_SECONDS - 30}, True),
+])
+def test_soft_deleting_a_client_directly_needs_a_fresh_code(supabase_db, alice_client, mode,
+                                                            session, allowed):
+    cid = client_id_of(alice_client, supabase_db)
+    admin.set_mfa_mode(supabase_db, mode)
+    if allowed:
+        raw(supabase_db, "alice", SOFT_DELETE, [cid], **session)
+        assert owner(supabase_db, "select deleted_at is not null from public.clients where id = %s",
+                     [cid])[0][0]
+    else:
+        with pytest.raises(psycopg.Error) as e:
+            raw(supabase_db, "alice", SOFT_DELETE, [cid], **session)
+        assert e.value.sqlstate == "PT403"
+        assert owner(supabase_db, "select deleted_at from public.clients where id = %s", [cid])[0][0] is None
+
+
+def test_other_client_updates_and_the_owner_need_no_code(supabase_db, alice_client):
+    cid = client_id_of(alice_client, supabase_db)
+    admin.set_mfa_mode(supabase_db, "required")
+    raw(supabase_db, "alice", "update public.clients set name = 'Renamed' where id = %s", [cid],
+        aal="aal2", code_age=FRESH_MFA_SECONDS + 60)
+    with pytest.raises(psycopg.Error):  # nor can deleted_by be set on its own
+        raw(supabase_db, "alice", "update public.clients set deleted_by = %s where id = %s",
+            [alice_client["id"], cid], aal="aal2")
+    owner(supabase_db, SOFT_DELETE, [cid])
+    with pytest.raises(psycopg.Error):  # undeleting is a change to deleted_at too
+        raw(supabase_db, "alice", "update public.clients set deleted_at = null where id = %s",
+            [cid], aal="aal2")
+
+
+def test_the_api_forwards_the_code_time_and_answers_the_databases_refusal(supabase_db, tmp_path):
+    from advisor_engine.api.supabase_store import MemoryStorage, SupabaseStore
+
+    store = SupabaseStore(supabase_db, MemoryStorage(), cache_dir=tmp_path / "cache")
+    admin.set_mfa_mode(supabase_db, "required")
+
+    def api(mode):
+        settings = Settings(auth="supabase", store_dir=tmp_path, supabase_url=SUPABASE_URL,
+                            supabase_jwt_secret=SECRET, require_mfa=mode)
+        return TestClient(create_app(settings, store=store, auth_admin=MemoryAuthAdmin()))
+
+    # The API's own check passes and the database agrees: the amr claim reached it.
+    client = api("required")
+    cid = new_client(client)["id"]
+    assert client.delete(f"/clients/{cid}", headers=bearer("alice")).status_code == 204
+    # An API in `off` mode skips its check; the stricter database still asks for a code.
+    client = api("off")
+    cid = new_client(client)["id"]
+    r = client.delete(f"/clients/{cid}", headers=bearer("alice", **STALE))
+    assert r.status_code == 403 and r.json()["detail"]["code"] == "mfa_fresh_required"
+    assert any(c["id"] == cid for c in client.get("/clients", headers=bearer("alice")).json())

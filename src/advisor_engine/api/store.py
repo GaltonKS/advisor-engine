@@ -42,9 +42,13 @@ class LocalStore:
         self.require_approval = require_approval
         self._lock = threading.RLock()
 
-    def as_user(self, user_id: str, email: str, aal: str = "aal1") -> "LocalStore":
+    def as_user(self, user_id: str, email: str, aal: str = "aal1",
+                amr: tuple = ()) -> "LocalStore":
         """Every method already takes the caller's firm explicitly, so the session is self."""
         return self
+
+    def allow_factor_removal(self, user_id: str, factor_id: str) -> None:
+        """Nothing to permit locally: dev auth has no Supabase Auth behind it."""
 
     # --- files -----------------------------------------------------------------------
 

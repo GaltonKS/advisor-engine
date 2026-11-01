@@ -99,8 +99,20 @@ class SupabaseStore:
         self.storage = storage
         self.cache_dir = Path(cache_dir)
 
-    def as_user(self, user_id: str, email: str, aal: str = "aal1") -> "SupabaseSession":
-        return SupabaseSession(self, user_id, email, aal)
+    def as_user(self, user_id: str, email: str, aal: str = "aal1",
+                amr: tuple = ()) -> "SupabaseSession":
+        return SupabaseSession(self, user_id, email, aal, amr)
+
+    def allow_factor_removal(self, user_id: str, factor_id: str) -> None:
+        """Let Supabase Auth delete this verified authenticator once, within two minutes.
+
+        A trigger on auth.mfa_factors refuses any other delete of a verified factor, so a
+        browser can't skip the API's fresh-code check by calling Supabase directly. Call
+        this only after those checks pass. Owner connection, committed before returning,
+        because the delete happens on Supabase Auth's own connection.
+        """
+        with psycopg.connect(self.db_url, prepare_threshold=None, autocommit=True) as conn:
+            conn.execute("select app.allow_factor_removal(%s, %s)", [user_id, factor_id])
 
     def mfa_mode(self) -> str:
         """The database's multi-factor mode (app.security_settings), read as the owner."""
@@ -185,12 +197,14 @@ class SupabaseStore:
 
 
 class SupabaseSession:
-    def __init__(self, store: SupabaseStore, user_id: str, email: str, aal: str = "aal1"):
+    def __init__(self, store: SupabaseStore, user_id: str, email: str, aal: str = "aal1",
+                 amr: tuple = ()):
         self.store = store
-        # `aal` is the level the API verified on the caller's token, so the database's
-        # multi-factor policies see the same thing the API did.
+        # `aal` and `amr` are what the API verified on the caller's token, so the
+        # database's multi-factor policies and fresh-code trigger see what the API did.
         self.claims = json.dumps({"sub": user_id, "email": email, "role": "authenticated",
-                                  "aal": aal})
+                                  "aal": aal, "amr": [{"method": m, "timestamp": t}
+                                                      for m, t in amr]})
 
     def _run(self, sql: str, params=(), *, one: bool = False):
         with psycopg.connect(self.store.db_url, prepare_threshold=None, row_factory=dict_row) as conn:
@@ -251,10 +265,16 @@ class SupabaseSession:
                          "and deleted_at is null returning *", [name, firm_id, client_id], one=True)
 
     def delete_client(self, firm_id: str, client_id: str, adviser_id: str) -> None:
-        """Soft delete: portfolios, drafts and audit rows stay on record (see migration)."""
-        self._run("update public.clients set deleted_at = now(), deleted_by = %s "
-                  "where firm_id = %s and id = %s and deleted_at is null",
-                  [adviser_id, firm_id, client_id])
+        """Soft delete: portfolios, drafts and audit rows stay on record (see migration).
+        The database asks for a fresh code too (app.guard_client_delete): PermissionError."""
+        try:
+            self._run("update public.clients set deleted_at = now(), deleted_by = %s "
+                      "where firm_id = %s and id = %s and deleted_at is null",
+                      [adviser_id, firm_id, client_id])
+        except psycopg.Error as e:
+            if e.sqlstate == "PT403":
+                raise PermissionError("fresh code required") from None
+            raise
 
     def save_questionnaire(self, firm_id: str, client_id: str, answers: dict) -> dict:
         return self._run(
