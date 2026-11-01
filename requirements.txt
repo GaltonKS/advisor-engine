@@ -1,3 +1,0 @@
-# For Streamlit Community Cloud (it installs this file). Editable install so the app
-# finds data/ next to the source; with no ANTHROPIC_API_KEY secret it runs in mock mode.
--e .[llm,ui]

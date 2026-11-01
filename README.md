@@ -38,6 +38,11 @@ python -m advisor_engine.assistant --holdings data/my_book.csv   # must be insid
 Type questions at the prompt; `/quit` exits. The model name comes from
 `ADVISOR_MODEL` (default `claude-sonnet-5-5`).
 
+Works with **no API key**: mode is chosen by `ADVISOR_LLM=mock|anthropic`. If unset, it
+is `mock` without `ANTHROPIC_API_KEY` and `anthropic` with one (a key in `.env` counts).
+Mock mode is an offline stand-in that still goes through the real tool call, number
+check and audit log. The assistant prints the active mode.
+
 ### Market data
 
 Returns are synthetic by default. To use real prices from Financial Modeling Prep, set:
@@ -82,42 +87,6 @@ Objective and tone go into the system prompt. The disclaimer is appended verbati
 verified replies by code, so the model never rewrites it. The wording is yours to
 supply; none is built in.
 
-## Run the demo
-
-Works with **no API key**: without `ANTHROPIC_API_KEY` the assistant runs in mock mode, an
-offline stand-in that still goes through the real tool call, number check and audit log.
-
-```bash
-pip install -e ".[dev,llm,ui]"
-streamlit run src/advisor_engine/ui/app.py
-```
-
-The app opens at http://localhost:8501. A banner shows the mode (MOCK or LIVE) and that the
-data is synthetic. Pick or upload a portfolio in the sidebar (uploads are validated and saved
-to a per-session folder under `data/uploads/`, which is gitignored, so visitors never see
-each other's files), ask questions, and open "How this was checked" under
-any reply to see the engine output and the verification result. "Simulate invented number"
-makes the mock add a figure the engine never produced, so you can watch the reply get
-withheld. "Draft client explanation" produces an editable DRAFT; Approve records it in the
-audit log and sends nothing.
-
-Mode is chosen by `ADVISOR_LLM=mock|anthropic`. If unset, it is `mock` without an API key
-and `anthropic` with one (a key in `.env` counts). `ADVISOR_LLM=mock` forces the offline mode.
-The terminal assistant (`python -m advisor_engine.assistant`) uses the same setting and
-prints the active mode.
-
-### Share a demo link (Streamlit Community Cloud)
-
-Vercel and other serverless hosts can't run Streamlit (it needs a long-running server with
-WebSockets). Streamlit Community Cloud can:
-
-1. At https://share.streamlit.io, choose **Create app** and pick this repo and branch.
-2. Main file path: `src/advisor_engine/ui/app.py`. It installs `requirements.txt`.
-3. Leave the secrets empty to run in mock mode. Adding `ANTHROPIC_API_KEY` there turns on
-   live mode for anyone with the link, and there is no sign-in yet.
-
-The audit log and uploads are written to the app's disk, which is wiped on restart.
-
 ## API (for the React app, in progress)
 
 ```bash
@@ -139,7 +108,7 @@ src/advisor_engine/
     risk.py        the risk profile
     demo.py        end-to-end run on the sample portfolio
     assistant/     LLM layer: tools, prompts, numcheck, audit, chat loop, CLI, mock client
-    ui/            Streamlit demo app
+    api/           FastAPI backend for the React app in web/
 data/sample/       small synthetic portfolios, safe to commit
 tests/
 ```

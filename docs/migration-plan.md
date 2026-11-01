@@ -96,4 +96,4 @@ optionally `ADVISOR_LLM`, `ADVISOR_MODEL`, `ADVISOR_DAILY_TURN_LIMIT`, `ADVISOR_
 disk is wiped on deploy, so it waits for Phase 2.
 
 ### Phase 6: tidy up
-Retire Streamlit or keep it internal. Update CLAUDE.md and README.
+Done: the Streamlit demo has been removed; CLAUDE.md and README updated.

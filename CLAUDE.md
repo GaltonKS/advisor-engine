@@ -9,7 +9,8 @@ when extending it.
 A prototype decision-support engine for financial advisors. Given a holdings CSV it
 computes a risk profile (effective independent bets, market-adjusted and sector-level
 concentration, sector exposure, drawdown sensitivity, per-position risk). An LLM layer
-explains those results in plain language, and a Streamlit app wraps both for demos.
+explains those results in plain language. A FastAPI backend and a React app in `web/`
+wrap both for advisers.
 
 **The core rule: the engine computes every number; the LLM never does.** The model only
 calls engine tools and explains their output. Code enforces this (see "Number check"
@@ -26,19 +27,18 @@ and questionnaire scoring are drafts pending compliance review.
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"            # engine + pytest
-pip install -e ".[dev,llm,ui,api]" # everything (anthropic, streamlit, fastapi)
+pip install -e ".[dev,llm,api]"    # everything (anthropic, fastapi)
 
 pytest                             # full suite; never calls the real API
 pytest tests/test_risk.py -q       # one file
 python -m advisor_engine.demo      # print the sample risk profile as JSON
 python -m advisor_engine.assistant [--holdings data/<file>.csv]   # terminal chat
-streamlit run src/advisor_engine/ui/app.py                         # demo UI, :8501
 uvicorn advisor_engine.api.main:app --reload                       # API, :8000 (dev auth)
 cd web && npm install && VITE_DEV_USER=alice npm run dev           # React app, :5173
 cd web && npm test && npm run build                                # web tests, typecheck + bundle
 ```
 
-Requires Python >= 3.10. `tests/test_ui.py` is skipped if Streamlit isn't installed.
+Requires Python >= 3.10.
 
 ## Layout
 
@@ -70,8 +70,6 @@ src/advisor_engine/
         mock_client.py offline stand-in for the Anthropic client (templated replies)
         scenario.py    AI-suggested stress shocks for a described scenario (+ MockSuggester)
         cli.py         terminal REPL (`python -m advisor_engine.assistant`)
-    ui/app.py          Streamlit demo; lays out engine output, computes nothing
-    ui/theme.py        KVS stylesheet + escaped HTML builders (cards, bars, audit panel)
     api/
         settings.py    env config; dev auth forces mock and refuses to run on Render
         auth.py        current_user(): Supabase access token (JWKS/HS256) or X-Dev-User; aal/amr
@@ -90,7 +88,6 @@ docs/migration-plan.md React + FastAPI + Supabase plan and the decisions behind 
 docs/mfa-plan.md       two-step sign-in: decisions, what was built, how to switch it on
 supabase/migrations/   Postgres schema, row-level security, append-only audit (see supabase/README.md)
 data/sample/           synthetic portfolios, the only committed data
-.streamlit/config.toml KVS palette when running `streamlit run` from the repo root
 tests/                 one test file per module area
 ```
 
@@ -202,17 +199,6 @@ every turn --append_audit--> data/audit/audit.jsonl
   anthropic with one. Model name comes from `ADVISOR_MODEL` (default in `chat.py`).
 - The audit log must never contain API keys; `audit._redact` is the safety net, but
   don't put secrets in records in the first place.
-
-### UI (`ui/app.py`)
-- Displays engine output only. Any figure shown goes through the same
-  `get_risk_profile` tool (so the path rules and audit log apply). Uploads are
-  validated and saved to `data/uploads/<random session id>/`; a session lists only
-  the samples and its own uploads.
-- Styling lives in `ui/theme.py`. Its builders take strings already formatted from
-  engine output and HTML-escape them (tickers and sectors can come from uploads). Model
-  replies are rendered with plain `st.markdown`, never with `unsafe_allow_html`.
-- Mockup sections the engine can't back yet (strategy options, client risk level,
-  adviser sign-in, named risk factors) are left out rather than filled with placeholders.
 
 ### API (`api/`)
 - Routes move engine output around; they compute nothing. Model replies only come from
@@ -451,8 +437,7 @@ Client report (not yet charted):
   the same footer disclaimer wording as the screens.
 
 ### Tests
-- Tests never hit the network. Assistant tests use a scripted `FakeClient`; UI tests
-  use Streamlit's `AppTest` with `ADVISOR_LLM=mock` and a temp `AUDIT_PATH`. API tests use
+- Tests never hit the network. Assistant tests use a scripted `FakeClient`. API tests use
   `create_app(Settings(auth="dev", store_dir=tmp_path), store=...)` and FastAPI's
   `TestClient`, once per store; token tests sign HS256 tokens with a test secret.
 - The `supabase_db` fixture (conftest.py) makes a fresh Postgres database with
@@ -541,8 +526,6 @@ changes, since the audit log records it; tag releases in git (`git tag v0.1.0`).
 
 - README mentions `cp .env.example .env`, but `.env.example` is not in the repo yet.
   `.env` needs `ANTHROPIC_API_KEY` (and optionally `ADVISOR_LLM`, `ADVISOR_MODEL`).
-- `ui/app.py` imports `altair`, which arrives through Streamlit rather than being
-  listed in the `ui` extra.
 - Number check limits: spelled-out numbers aren't detected, coarse figures can match
   nearby values, and numbers the user typed aren't allowed unless a tool returned them.
 - Methodology provenance and data ownership are not yet documented.
