@@ -34,6 +34,7 @@ applied.
 | `20261101000000_questionnaire_and_versions.sql` | `clients.questionnaire`, `portfolios.label` / `source` |
 | `20261102000000_client_soft_delete.sql` | `clients.deleted_at` / `deleted_by` (deleting a client hides it; nothing is removed) |
 | `20261103000000_market_price_cache.sql` | `market.prices` / `market.fetches`: shared month-end price cache, private to the API |
+| `20261104000000_adviser_approval.sql` | New sign-ups start `pending`; `app.submit_registration` (name, CRD, firm) and operator-only `app.approve_adviser` |
 
 Apply a new migration **before** merging the code that uses it: Render redeploys the API
 from `main`, and the new API reads the new columns.
@@ -74,3 +75,32 @@ Set these on Render (or in `.env` for a local run against the project). Never co
 
 With `SUPABASE_URL` set, sign-in is real and the assistant may go live
 (`ANTHROPIC_API_KEY`); with `SUPABASE_DB_URL` set, data lives in Supabase.
+
+
+## Approving advisers
+
+New sign-ups wait as `pending`: they can sign in, but see only a registration form
+(name, CRD number, firm name) until you approve them. Existing advisers are not affected.
+
+1. List who is waiting, in the SQL Editor:
+
+   ```sql
+   select a.email, a.full_name, a.crd, f.requested_name as firm, a.registration_submitted_at
+     from public.advisers a join public.firms f on f.id = a.firm_id
+    where a.status = 'pending' order by a.registration_submitted_at nulls last;
+   ```
+
+2. Look the CRD number up on FINRA BrokerCheck (https://brokercheck.finra.org) and check
+   the name and firm match.
+3. Approve, either in their own new firm or as a member of an existing one:
+
+   ```sql
+   select * from app.approve_adviser('name@firm.com');
+   ```
+
+   ```sql
+   select * from app.approve_adviser('name@firm.com', '<existing firm id>');
+   ```
+
+The same from a terminal with `SUPABASE_DB_URL` set: `python -m advisor_engine.api.admin
+pending` and `python -m advisor_engine.api.admin approve name@firm.com [--firm <id>]`.

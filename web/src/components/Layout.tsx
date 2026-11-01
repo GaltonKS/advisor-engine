@@ -5,6 +5,7 @@ import { useAuth } from "../lib/auth";
 import { useInstallPrompt } from "../lib/install";
 import type { Me } from "../lib/types";
 import { Logo } from "./Logo";
+import PendingApproval from "../pages/PendingApproval";
 
 export function Brand({ onDark = true }: { onDark?: boolean }) {
   return (
@@ -55,7 +56,7 @@ export default function Layout() {
         </div>
       </header>
       <main className="mx-auto max-w-[1240px] px-4 py-6">
-        <Outlet />
+        {me.data?.adviser.status === "pending" ? <PendingApproval me={me.data} /> : me.data || me.error ? <Outlet /> : null}
       </main>
       <footer className="no-print mx-auto max-w-[1240px] border-t border-rule px-4 py-4 text-xs text-muted">
         Decision support for registered advisers. Not investment advice. Every figure is computed by the

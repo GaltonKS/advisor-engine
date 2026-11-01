@@ -5,7 +5,11 @@ export interface Adviser {
   email: string;
   firm_id: string;
   role: string;
+  /** "active", or "pending" until the operator approves a new sign-up. */
   status?: string;
+  full_name?: string | null;
+  crd?: string | null;
+  registration_submitted_at?: string | null;
 }
 
 export interface Me {

@@ -78,6 +78,7 @@ src/advisor_engine/
         store.py       LocalStore: firm-scoped clients, portfolios, drafts, audit (dev, tests)
         supabase_store.py SupabaseStore: same methods on Postgres (RLS) + Storage
         main.py        FastAPI routes over execute_tool / run_turn / verify
+        admin.py       operator commands: list pending sign-ups, approve (`python -m advisor_engine.api.admin`)
 web/                   React app (see web/README.md); formats engine output, computes nothing
 desktop/               Electron shell that loads the web app (see desktop/README.md); no figures, no Node in the page
 web/src/components/charts.tsx  draws chart specs (see "Charts" below)
@@ -224,6 +225,15 @@ every turn --append_audit--> data/audit/audit.jsonl
   highlights that exchange. Turns logged before turn ids existed fall back to
   `&question=<text>`, which only matches messages that have no `turn_id`. Keep the id
   on any new conversation message.
+- New sign-ups are `pending` until the operator approves them (`app.ensure_adviser`
+  creates them so; `LocalStore(require_approval=True)` mirrors it, off for dev). Pending
+  advisers resolve to no firm, so RLS shows them nothing, and every route except `/me`
+  and `POST /me/registration` answers 403 "Your account is awaiting approval" (the `ctx`
+  dependency; `any_ctx` is for those two only). Registration records name, CRD number
+  (digits, up to 8) and firm name through `app.submit_registration`, own row, pending
+  only. `app.approve_adviser(email, firm_id?)` activates them, optionally as a member of
+  an existing firm; only the owner connection can run it (`api/admin.py` or the SQL
+  Editor), never an adviser. Verify the CRD on FINRA BrokerCheck before approving.
 - Live model calls require `auth == "supabase"` (`Settings.llm`). Don't add another path to
   the real client.
 - Responses never include server file paths (see `_tool_view`).
@@ -389,7 +399,8 @@ Client report (not yet charted):
   `create_app(Settings(auth="dev", store_dir=tmp_path), store=...)` and FastAPI's
   `TestClient`, once per store; token tests sign HS256 tokens with a test secret.
 - The `supabase_db` fixture (conftest.py) makes a fresh Postgres database with
-  `tests/supabase_shim.sql` and the migrations applied; it skips without Postgres
+  `tests/supabase_shim.sql` and the migrations applied, signs up and approves the dev
+  users (alice, bob, carol; dave stays a never-approved sign-up); it skips without Postgres
   (`TEST_DATABASE_URL`). CI runs a Postgres service and fails if those tests skip.
 - Write audit output to `tmp_path` in tests (monkeypatch `audit.AUDIT_PATH` or pass
   `audit_path=`), never to the real `data/audit/`.
