@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { Brand } from "../components/Layout";
 import { Field } from "../components/ui";
 import { useAuth } from "../lib/auth";
@@ -71,7 +72,8 @@ export default function SignIn() {
             {mode === "in" ? "New here? Request access" : "Already registered? Sign in"}
           </button>
           <p className="mt-5 text-[11px] text-faint">
-            GaltonKS is decision support for registered advisers. It is not investment advice and does not hold or move client money.
+            GaltonKS is decision support for registered advisers. It is not investment advice and does not hold or move client money.{" "}
+            <Link to="/privacy" className="underline">Privacy Policy</Link>
           </p>
         </form>
       </main>

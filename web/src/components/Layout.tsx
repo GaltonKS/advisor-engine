@@ -62,7 +62,8 @@ export default function Layout() {
         engine{me.data ? ` (v${me.data.engine_version})` : ""};{" "}
         {!me.data?.returns_source || me.data.returns_source === "synthetic"
           ? "returns are synthetic and illustrative until licensed market data is connected."
-          : `returns are monthly, from ${me.data.returns_source} price history.`}
+          : `returns are monthly, from ${me.data.returns_source} price history.`}{" "}
+        <Link to="/privacy" className="underline hover:text-navy">Privacy Policy</Link>
       </footer>
     </div>
   );
