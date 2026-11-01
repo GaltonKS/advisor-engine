@@ -1,0 +1,85 @@
+name: Nightly backup
+
+# Backs up the production Supabase data (database tables + holdings files), restores the
+# backup into a scratch database and checks every row, then encrypts it and keeps it as
+# a workflow artifact. A backup that doesn't restore fails the run, and GitHub emails
+# the failure. Setup and restore steps: docs/backups.md.
+
+on:
+  schedule:
+    - cron: "41 7 * * *"   # 07:41 UTC daily: overnight in US time zones
+  workflow_dispatch:
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    # The `backup` environment holds the production secrets, so only this job sees them.
+    environment: backup
+    timeout-minutes: 30
+    services:
+      # Scratch database for the restore drill; thrown away with the runner.
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[api]"
+      - run: sudo apt-get update -q && sudo apt-get install -y -q age
+
+      - name: Check the encryption key is set
+        env:
+          BACKUP_AGE_RECIPIENT: ${{ vars.BACKUP_AGE_RECIPIENT }}
+        run: |
+          # Never keep an unencrypted backup: stop before reading any data.
+          [[ "$BACKUP_AGE_RECIPIENT" == age1* ]] || {
+            echo "::error::Set the BACKUP_AGE_RECIPIENT variable (an age public key) on the backup environment."; exit 1; }
+
+      - name: Back up production
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: |
+          stamp="$(date -u +%Y-%m-%dT%H%MZ)"
+          echo "STAMP=$stamp" >> "$GITHUB_ENV"
+          python -m advisor_engine.api.backup create "$RUNNER_TEMP/galtonks-backup-$stamp"
+
+      - name: Restore into a scratch database and verify
+        env:
+          DRILL_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: scripts/restore_drill.sh "$RUNNER_TEMP/galtonks-backup-$STAMP"
+
+      - name: Encrypt
+        env:
+          BACKUP_AGE_RECIPIENT: ${{ vars.BACKUP_AGE_RECIPIENT }}
+        run: |
+          cd "$RUNNER_TEMP"
+          tar -czf - "galtonks-backup-$STAMP" | age -r "$BACKUP_AGE_RECIPIENT" \
+            -o "galtonks-backup-$STAMP.tar.gz.age"
+          rm -rf "galtonks-backup-$STAMP"
+          sha256sum "galtonks-backup-$STAMP.tar.gz.age" | tee "galtonks-backup-$STAMP.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: galtonks-backup-${{ env.STAMP }}
+          path: |
+            ${{ runner.temp }}/galtonks-backup-${{ env.STAMP }}.tar.gz.age
+            ${{ runner.temp }}/galtonks-backup-${{ env.STAMP }}.sha256
+          retention-days: 90
+          if-no-files-found: error
+          compression-level: 0   # already compressed and encrypted

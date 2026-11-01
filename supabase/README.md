@@ -105,3 +105,11 @@ New sign-ups wait as `pending`: they can sign in, but see only a registration fo
 
 The same from a terminal with `SUPABASE_DB_URL` set: `python -m advisor_engine.api.admin
 pending` and `python -m advisor_engine.api.admin approve name@firm.com [--firm <id>]`.
+
+
+## Backups
+
+Supabase's daily backups (Pro, 7 days) cover the database but not the holdings files in
+Storage. A nightly GitHub Actions job (`.github/workflows/backup.yml`) also takes our own
+encrypted backup of the tables and the files, restores it into a scratch database, and
+checks every row. Setup, restore runbooks and the drill log: `docs/backups.md`.

@@ -79,6 +79,7 @@ src/advisor_engine/
         supabase_store.py SupabaseStore: same methods on Postgres (RLS) + Storage
         main.py        FastAPI routes over execute_tool / run_turn / verify
         admin.py       operator commands: list pending sign-ups, approve (`python -m advisor_engine.api.admin`)
+        backup.py      our backups: create / restore / verify (tables + holdings files); see docs/backups.md
         metrics.py     pilot metrics definitions (weekly active, feature use, funnel) for the operator page
 web/                   React app (see web/README.md); formats engine output, computes nothing
 desktop/               Electron shell that loads the web app (see desktop/README.md); no figures, no Node in the page
@@ -86,6 +87,8 @@ web/src/components/charts.tsx  draws chart specs (see "Charts" below)
 web/src/components/Logo.tsx    GaltonKS logo as SVG (see "Brand" below)
 web/public/brand/      source logo artwork (light logo, dark app icon)
 docs/migration-plan.md React + FastAPI + Supabase plan and the decisions behind it
+docs/backups.md        backup layers, setup, restore runbooks, restore drills and their log
+scripts/restore_drill.sh restore a backup into a scratch Postgres built from the migrations, verify
 supabase/migrations/   Postgres schema, row-level security, append-only audit (see supabase/README.md)
 data/sample/           synthetic portfolios, the only committed data
 .streamlit/config.toml KVS palette when running `streamlit run` from the repo root
@@ -253,6 +256,16 @@ every turn --append_audit--> data/audit/audit.jsonl
   Supabase that session runs every query as `authenticated` with the caller's claims, so
   row-level security applies to the API itself. Audit records go through
   `db.write_audit` (`run_turn(audit_sink=...)`), never straight to a file.
+- Backups (`api/backup.py`, nightly `.github/workflows/backup.yml`): every table in
+  `public` / `app` is included automatically, plus `auth.users` / `identities` /
+  `mfa_factors` and every holdings file (hash-checked). `market` is left out on purpose
+  (licensed, rebuildable); a new schema needs a decision either way, recorded in
+  `docs/backups.md`. The schema itself comes from the migrations: restore refuses a target
+  with data or a schema that differs, and loads all tables in one transaction. Every
+  nightly backup is restored and compared row by row before it is kept; the archive is
+  age-encrypted with a public key (the private key never goes near GitHub). Keep the
+  restore drill passing whenever a migration changes, and log quarterly drills in
+  `docs/backups.md`.
 - Schema changes are new files in `supabase/migrations/` (never edit an applied one).
   Every table gets RLS keyed on `app.current_firm_id()`; add tests to
   `tests/test_supabase_store.py` that query without a firm filter.

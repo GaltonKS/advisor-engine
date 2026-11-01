@@ -150,6 +150,8 @@ tests/
   licensed price or fundamentals data until commercial-use licensing is confirmed.
 - Methodology provenance and ownership are not yet written down.
 
+Backups and restore (what is kept, for how long, and how to restore it): `docs/backups.md`.
+
 ## Versioning
 
 `advisor_engine.__version__` is the engine version the audit log will record.
