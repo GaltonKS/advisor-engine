@@ -433,3 +433,72 @@ def test_audit_sink_gets_the_built_redacted_record_instead_of_the_file(tmp_path,
     (rec,) = got
     assert rec["engine_version"] and rec["timestamp"]
     assert "sk-ant-secret-value-123" not in json.dumps(rec)
+
+
+# --- older tool results are not resent ---------------------------------------------------
+
+def _results(history):
+    return [b for m in history if m["role"] == "user" and isinstance(m["content"], list)
+            for b in m["content"] if b.get("type") == "tool_result"]
+
+
+def _turn(question, history, client, tmp_path):
+    return chat.run_turn(question, history, client, model="m", audit_path=tmp_path / "a.jsonl")
+
+
+def test_only_the_newest_result_of_each_tool_is_resent(tmp_path):
+    first = _turn("Risk?", [], FakeClient([[tool_block(1)], [text_block(good_reply())]]), tmp_path)
+    assert "_full" not in json.dumps(first.history)  # one profile so far: kept in full
+    client = FakeClient([[tool_block(2)], [text_block(good_reply())]])
+    second = _turn("And now?", first.history, client, tmp_path)
+    old, new = _results(second.history)
+    assert old["content"].startswith("[Earlier get_risk_profile result")
+    assert json.loads(old["_full"])["concentration"]  # full text kept for the number check
+    assert "_full" not in new and json.loads(new["content"])["concentration"]
+    # The private copy never reaches the API.
+    third = FakeClient([[text_block("Fine.")]])
+    _turn("Thanks", second.history, third, tmp_path)
+    assert "_full" not in json.dumps(third.calls[0]["messages"])
+    # One full profile sent instead of two.
+    assert len(json.dumps(third.calls[0]["messages"])) < 0.6 * len(json.dumps(second.history))
+
+
+def test_figures_from_a_left_out_result_still_pass_the_number_check(tmp_path):
+    full = json.dumps({"effective_bets": 7.77})
+    history = [
+        {"role": "user", "content": "Risk?"},
+        {"role": "assistant", "content": [{"type": "tool_use", "id": "t1", "name": "get_risk_profile", "input": {}}]},
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1",
+                                       "content": chat._compacted_note("get_risk_profile"), "_full": full}]},
+        {"role": "assistant", "content": [{"type": "text", "text": "About 7.77 bets."}]},
+    ]
+    ok = _turn("Remind me?", history, FakeClient([[text_block("It was 7.77.")]]), tmp_path)
+    assert not ok.blocked
+    bad = _turn("Remind me?", history, FakeClient([[text_block("It was 8.42.")]]), tmp_path)
+    assert bad.blocked
+
+
+def test_short_and_error_results_are_kept(tmp_path):
+    history = [
+        {"role": "assistant", "content": [{"type": "tool_use", "id": "a", "name": "x", "input": {}},
+                                          {"type": "tool_use", "id": "b", "name": "y", "input": {}}]},
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "a", "content": "short"},
+                                     {"type": "tool_result", "tool_use_id": "b", "content": "E" * 999,
+                                      "is_error": True}]},
+        {"role": "assistant", "content": [{"type": "tool_use", "id": "c", "name": "x", "input": {}},
+                                          {"type": "tool_use", "id": "d", "name": "y", "input": {}}]},
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "c", "content": "short"},
+                                     {"type": "tool_result", "tool_use_id": "d", "content": "ok"}]},
+    ]
+    assert chat.compact_history(history) == history
+
+
+def test_requests_only_append_within_a_turn_and_across_turns(tmp_path):
+    # The prompt cache only pays if each request starts with the previous one.
+    c1 = FakeClient([[tool_block(1)], [text_block(good_reply())]])
+    first = _turn("Risk?", [], c1, tmp_path)
+    c2 = FakeClient([[text_block("Fine.")]])
+    _turn("Thanks", first.history, c2, tmp_path)
+    calls = [c["messages"] for c in c1.calls + c2.calls]
+    for before, after in zip(calls, calls[1:]):
+        assert after[:len(before)] == before

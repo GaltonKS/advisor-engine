@@ -172,6 +172,13 @@ every turn --append_audit--> data/audit/audit.jsonl
   (dates, ids) in the system prompt. Each audit record carries `usage` (API calls and
   input / output / cache-read / cache-write tokens summed over the turn), or `null` for
   clients that report none (mock, test fakes).
+- Older tool results are not resent. When a turn ends, `chat.compact_history` keeps the
+  newest result of each tool in full and replaces older ones (≥ `COMPACT_MIN_CHARS`, not
+  errors) with a short note telling the model to call the tool again. The full text stays
+  on the block as `_full`; `_wire` strips `_`-prefixed keys from every request, and the
+  number check reads `_full`, so figures from earlier results still verify. Compacting
+  only between turns keeps each turn's requests append-only for the cache. Never send
+  `_full` to the API or drop it from saved history.
 - The firm disclaimer is appended verbatim by code in `chat.py`, never given to the
   model and never run through the number check.
 - Mode: `ADVISOR_LLM=mock|anthropic`. Unset means mock without `ANTHROPIC_API_KEY`,
