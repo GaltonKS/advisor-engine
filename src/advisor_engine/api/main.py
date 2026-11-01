@@ -14,6 +14,7 @@ import hashlib
 import json
 import logging
 import re
+import uuid
 from dataclasses import dataclass
 
 import pandas as pd
@@ -450,6 +451,9 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
             raise HTTPException(429, "Daily assistant limit reached; try again tomorrow.")
         client = c.db.get_client(fid, portfolio["client_id"]) or {}
         conversation = c.db.get_conversation(fid, portfolio_id)
+        # One id per turn, on the audit record and on both chat messages, so an audit
+        # entry can link back to the exact exchange in the conversation.
+        turn_id = uuid.uuid4().hex
         try:
             result = run_turn(
                 question, conversation["history"],
@@ -459,7 +463,8 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
                 data_dir=c.db.firm_dir(fid),
                 audit_sink=lambda record: c.db.write_audit(fid, record),
                 audit_extra={"event": "turn", "adviser_id": c.adv["id"], "firm_id": fid,
-                             "client_id": portfolio["client_id"], "portfolio_id": portfolio_id},
+                             "client_id": portfolio["client_id"], "portfolio_id": portfolio_id,
+                             "turn_id": turn_id},
             )
         except Exception as e:  # missing package, model API error, ...
             # The raw error can carry request ids and account details; keep it server-side.
@@ -473,9 +478,10 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
                 "original": result.reply, "tool_calls": result.tool_calls})["id"]
         reply = {"role": "assistant", "content": result.reply, "blocked": result.blocked,
                  "verification": result.verification,
-                 "tool_calls": [_tool_view(call) for call in result.tool_calls], "draft_id": draft_id}
+                 "tool_calls": [_tool_view(call) for call in result.tool_calls], "draft_id": draft_id,
+                 "turn_id": turn_id}
         conversation["history"] = result.history
-        conversation["messages"] += [{"role": "user", "content": question}, reply]
+        conversation["messages"] += [{"role": "user", "content": question, "turn_id": turn_id}, reply]
         c.db.save_conversation(fid, portfolio_id, conversation)
         return reply
 
@@ -516,7 +522,8 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
         if portfolio_id:
             rows = [r for r in rows if r.get("portfolio_id") == portfolio_id]
         keys = ("timestamp", "event", "engine_version", "model", "adviser_id", "client_id",
-                "portfolio_id", "draft_id", "user_message", "blocked", "block_reason", "edited")
+                "portfolio_id", "draft_id", "turn_id", "user_message", "blocked", "block_reason",
+                "edited")
         return [{**{k: r.get(k) for k in keys},
                  "verified": (r.get("verification") or {}).get("ok")} for r in reversed(rows)]
 

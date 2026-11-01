@@ -21,8 +21,9 @@ export interface Workspace {
   portfolios: Portfolio[];
   portfolio: Portfolio;
   profile: RiskProfile;
-  /** Switch tab, optionally sending a question to Galton AI (the assistant). */
-  go: (tab: TabId, ask?: string) => void;
+  /** Switch tab, optionally sending a question to Galton AI (the assistant), or with
+   *  extra URL parameters (e.g. `turn` / `draft` to show one exchange in the chat). */
+  go: (tab: TabId, ask?: string, extra?: Record<string, string>) => void;
 }
 
 const TABS = [
@@ -90,8 +91,8 @@ export default function ClientWorkspace() {
     },
   });
 
-  function go(next: TabId, ask?: string) {
-    const nextParams: Record<string, string> = { tab: next };
+  function go(next: TabId, ask?: string, extra?: Record<string, string>) {
+    const nextParams: Record<string, string> = { ...extra, tab: next };
     if (portfolio) nextParams.p = portfolio.id;
     if (ask) nextParams.ask = ask;
     setParams(nextParams);

@@ -190,6 +190,9 @@ export interface ChatMessage {
   verification?: { ok: boolean; checked?: number; unmatched?: string[] };
   tool_calls?: ToolCall[];
   draft_id?: string | null;
+  /** Shared by a question and its reply, and by the turn's audit record. Absent on
+   *  messages saved before turn ids existed. */
+  turn_id?: string;
 }
 
 export interface Draft {
@@ -210,6 +213,8 @@ export interface AuditRow {
   model: string | null;
   adviser_id: string | null;
   portfolio_id: string | null;
+  draft_id?: string | null;
+  turn_id?: string | null;
   user_message: string | null;
   blocked: boolean | null;
   verified: boolean | null;

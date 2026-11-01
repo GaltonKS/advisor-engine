@@ -16,6 +16,27 @@ const SUGGESTIONS = [
   "Why is the largest risk contributor a concern?",
 ];
 
+const FOCUS_PARAMS = ["turn", "draft", "question"] as const;
+
+/** Indexes of the messages an audit-trail link points at: the question and its reply.
+ *  `turn` and `draft` are exact ids; `question` (turns logged before turn ids existed)
+ *  matches the question's text, so a question asked twice marks both exchanges. */
+export function focusedIndexes(messages: ChatMessage[], focus: { turn?: string | null; draft?: string | null; question?: string | null }): number[] {
+  const out = new Set<number>();
+  messages.forEach((m, i) => {
+    if (focus.turn && m.turn_id === focus.turn) out.add(i);
+    if (focus.draft && m.draft_id === focus.draft) {
+      out.add(i);
+      if (messages[i - 1]?.role === "user") out.add(i - 1);
+    }
+    if (focus.question && !m.turn_id && m.role === "user" && m.content === focus.question) {
+      out.add(i);
+      if (messages[i + 1]?.role === "assistant") out.add(i + 1);
+    }
+  });
+  return [...out].sort((a, b) => a - b);
+}
+
 export default function AssistantTab({ ws }: { ws: Workspace }) {
   const api = useApi();
   const qc = useQueryClient();
@@ -25,9 +46,19 @@ export default function AssistantTab({ ws }: { ws: Workspace }) {
   const [text, setText] = useState("");
   const [draft, setDraft] = useState<{ id: string; text: string; original: string } | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
+  const chat = useRef<HTMLDivElement>(null);
+  const focus = { turn: params.get("turn"), draft: params.get("draft"), question: params.get("question") };
+  const focusing = Boolean(focus.turn || focus.draft || focus.question);
+  const focused = focusing && messages.data ? focusedIndexes(messages.data, focus) : [];
+
+  function clearFocus() {
+    FOCUS_PARAMS.forEach((k) => params.delete(k));
+    setParams(params, { replace: true });
+  }
 
   const ask = useMutation({
     mutationFn: (body: { message?: string; draft?: boolean }) => api<ChatMessage>(`/portfolios/${pid}/turns`, { json: body }),
+    onMutate: () => { if (focusing) clearFocus(); },
     onSuccess: (reply) => {
       qc.invalidateQueries({ queryKey: ["messages", pid] });
       if (reply.draft_id) setDraft({ id: reply.draft_id, text: reply.content, original: reply.content });
@@ -50,7 +81,17 @@ export default function AssistantTab({ ws }: { ws: Workspace }) {
   }, [handed]);
   // Braces matter: newer browsers return a Promise from scrollIntoView, and an effect may
   // only return a clean-up function.
-  useEffect(() => { bottom.current?.scrollIntoView({ block: "end" }); }, [messages.data, ask.isPending]);
+  // An audit-trail link scrolls to its exchange; otherwise the newest message is shown.
+  useEffect(() => {
+    if (focusing) {
+      // Scroll the chat panel only, so the page (and its tabs) stays where it is.
+      const el = chat.current?.querySelector<HTMLElement>(`[data-msg="${focused[0]}"]`);
+      if (el && chat.current) chat.current.scrollTop = el.offsetTop - 12;
+    } else {
+      bottom.current?.scrollIntoView({ block: "end" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.data, ask.isPending, focusing, focused.join(",")]);
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -65,14 +106,27 @@ export default function AssistantTab({ ws }: { ws: Workspace }) {
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
       <div>
-        <div className="max-h-[78vh] min-h-[320px] space-y-5 overflow-y-auto border border-rule bg-card p-5">
+        {focusing && messages.data && (
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 border-l-[3px] border-navy bg-navy-soft px-3 py-2 text-sm">
+            <span>
+              {focused.length > 0
+                ? "Showing the exchange you opened from the audit trail."
+                : "That exchange isn't in this version's conversation."}
+            </span>
+            <button className="text-xs underline" onClick={clearFocus}>Show latest</button>
+          </div>
+        )}
+        <div ref={chat} className="relative max-h-[78vh] min-h-[320px] space-y-5 overflow-y-auto border border-rule bg-card p-5">
           {messages.isLoading && <Loading />}
           {messages.data?.length === 0 && !ask.isPending && (
             <p className="text-sm text-muted">Ask <GaltonName /> about this portfolio. Every figure in a reply is checked against the engine's output before you see it.</p>
           )}
           {messages.data?.map((m, i) => (
-            <Message key={i} m={m}
-                     onOpenStress={() => ws.go("stress", messages.data?.[i - 1]?.role === "user" ? messages.data[i - 1].content : "")} />
+            <div key={i} data-msg={i}
+                 className={focused.includes(i) ? "-mx-3 border-l-[3px] border-navy bg-navy-soft px-3 py-2" : ""}>
+              <Message m={m}
+                       onOpenStress={() => ws.go("stress", messages.data?.[i - 1]?.role === "user" ? messages.data[i - 1].content : "")} />
+            </div>
           ))}
           {ask.isPending && <div className="text-sm text-faint">Checking with the engine…</div>}
           <div ref={bottom} />
