@@ -9,6 +9,10 @@ import { date, dateTime, num } from "../lib/format";
 import type { AdviserReview, PilotMetrics as Metrics } from "../lib/types";
 
 type Pending = Metrics["pending"][number];
+
+/** FINRA BrokerCheck, where every CRD number is verified. */
+export const BROKERCHECK_URL = "https://brokercheck.finra.org/";
+export const brokerCheckFor = (crd: string) => `https://brokercheck.finra.org/individual/summary/${crd}`;
 type Presets = Metrics["review_presets"];
 
 /** Audit events in plain words. Unknown events show their code. */
@@ -109,6 +113,10 @@ export default function PilotMetrics() {
       </Panel>
 
       <Panel title="Approval audit trail" tag="every decision · can't be edited or deleted">
+        <p className="mb-3 text-sm text-muted">
+          Every approval is checked against FINRA BrokerCheck:{" "}
+          <a className="underline" href={BROKERCHECK_URL} target="_blank" rel="noreferrer">{BROKERCHECK_URL}</a>
+        </p>
         {d.reviews.length === 0 ? <Empty>No approvals or rejections yet.</Empty> : (
           <div className="overflow-x-auto">
             <table className="data w-full">
@@ -136,7 +144,16 @@ function ReviewRow({ r }: { r: AdviserReview }) {
       <td>{r.adviser_name ?? "—"}<div className="text-xs text-muted">{r.adviser_email}</div></td>
       <td><span className={`text-sm font-semibold ${approved ? "text-good" : "text-bad"}`}>{approved ? "Approved" : "Rejected"}</span></td>
       <td className="text-sm">{r.reviewed_by}</td>
-      <td className="text-sm">{r.summary}{r.note && <div className="mt-1 text-xs text-muted">Note: {r.note}</div>}</td>
+      <td className="text-sm">
+        {r.summary}
+        {r.note && <div className="mt-1 text-xs text-muted">Note: {r.note}</div>}
+        <div className="mt-1 text-xs">
+          <a className="underline" target="_blank" rel="noreferrer"
+             href={r.crd ? brokerCheckFor(r.crd) : BROKERCHECK_URL}>
+            {r.crd ? `View CRD ${r.crd} on BrokerCheck ↗` : "Search BrokerCheck ↗"}
+          </a>
+        </div>
+      </td>
     </tr>
   );
 }
@@ -173,7 +190,7 @@ function QueueRow({ p, presets }: { p: Pending; presets: Presets }) {
         <div className="flex items-center gap-3">
           {p.crd && (
             <a className="figure text-sm underline" target="_blank" rel="noreferrer"
-               href={`https://brokercheck.finra.org/individual/summary/${p.crd}`}>CRD {p.crd} on BrokerCheck ↗</a>
+               href={brokerCheckFor(p.crd)}>CRD {p.crd} on BrokerCheck ↗</a>
           )}
           {p.submitted_at && (
             <button className="btn" onClick={() => setOpen(!open)}>{open ? "Close" : "Review"}</button>
