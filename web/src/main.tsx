@@ -5,6 +5,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
 import { Loading } from "./components/ui";
 import "./index.css";
+import "./lib/install"; // listen for the browser's install offer before React mounts
 import { AuthProvider, useAuth } from "./lib/auth";
 import ClientWorkspace from "./pages/ClientWorkspace";
 import Clients from "./pages/Clients";

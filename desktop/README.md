@@ -6,6 +6,10 @@ native features. It computes nothing and adds no API of its own: the page gets a
 read-only `window.advisorDesktop` (`isDesktop`, `platform`, `shellVersion`) and no
 Node access (context isolation, sandbox, no node integration).
 
+Most users don't need this: the web app is installable from the browser (see
+`web/README.md`, "Install as an app") with its own window and icon and no installer.
+Keep the shell for when a native feature or a firm's managed install calls for it.
+
 ## Try it locally
 
 Three terminals, from the repo root. Requires Python >= 3.10 and Node 22.

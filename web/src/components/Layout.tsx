@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { useApi } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { useInstallPrompt } from "../lib/install";
 import type { Me } from "../lib/types";
 import { Logo } from "./Logo";
 
@@ -21,6 +22,7 @@ export function useMe() {
 export default function Layout() {
   const { email, signOut, dev } = useAuth();
   const me = useMe();
+  const install = useInstallPrompt();
   const initials = (email ?? "?").slice(0, 2).toUpperCase();
   return (
     <div className="min-h-screen">
@@ -33,6 +35,12 @@ export default function Layout() {
             </NavLink>
           </nav>
           <div className="ml-auto flex items-center gap-3 text-xs">
+            {install && (
+              <button className="border border-gold-bright px-2 py-1 text-gold-bright hover:bg-gold-bright hover:text-navy" onClick={() => install()}
+                      title="Install GaltonKS as an app with its own window">
+                Install app
+              </button>
+            )}
             {me.data && (
               <span className={`border px-2 py-1 ${me.data.llm === "mock" ? "border-on-navy-muted/40 text-on-navy-muted" : "border-gold-bright text-gold-bright"}`}>
                 Galton AI: {me.data.llm === "mock" ? "mock (scripted)" : "live"}

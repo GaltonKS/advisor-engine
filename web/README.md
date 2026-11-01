@@ -45,6 +45,22 @@ npm test        # unit tests (vitest)
 npm run build   # typecheck + production bundle in dist/
 ```
 
+## Install as an app
+
+The site is an installable web app (`public/manifest.webmanifest`): installed, it opens
+in its own window with a GaltonKS icon in the Dock or taskbar, and it updates with
+every deploy, since it is the same site.
+
+- **Chrome / Edge:** the header shows **Install app** (from `src/lib/install.ts`),
+  or use the install icon in the address bar.
+- **Safari (macOS):** File → Add to Dock. **Firefox** doesn't install web apps.
+
+The button hides when already installed or inside the desktop shell (`desktop/`).
+There is deliberately no service worker: nothing is cached for offline use, so client
+data never sits in a browser cache and nobody sees a stale version. Icons are the dark
+app icon (`brand/galtonks-icon-dark.webp`) at 192 and 512px, plus a maskable 512px copy
+with the icon inside the centre 80% safe zone.
+
 ## Deploy on Render (static site)
 
 **New → Static Site**, repo `GaltonKS/advisor-engine`, branch `main`:
