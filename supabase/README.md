@@ -72,6 +72,7 @@ Set these on Render (or in `.env` for a local run against the project). Never co
 | `SUPABASE_DB_URL` | **Connect → Transaction pooler** (port 6543), with the database password filled in | yes |
 | `SUPABASE_SECRET_KEY` | **Project Settings → API Keys → Secret keys** (`sb_secret_…`); used only for the `holdings` bucket | yes |
 | `ALLOWED_ORIGINS` | the React app's address, e.g. `http://localhost:5173` for now | no |
+| `ADVISOR_OPERATORS` | your own sign-in email(s), comma-separated: they see the **Pilot metrics** page (usage across every firm, and the approval queue) | no |
 
 With `SUPABASE_URL` set, sign-in is real and the assistant may go live
 (`ANTHROPIC_API_KEY`); with `SUPABASE_DB_URL` set, data lives in Supabase.

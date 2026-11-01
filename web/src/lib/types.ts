@@ -21,6 +21,21 @@ export interface Me {
   engine_version: string;
   /** Where return history comes from: "synthetic", or a vendor such as "FMP". */
   returns_source?: string;
+  /** True for the platform operators (ADVISOR_OPERATORS): shows the Pilot metrics page. */
+  operator?: boolean;
+}
+
+/** GET /operator/metrics: usage across every firm, counts only (api/metrics.py). */
+export interface PilotMetrics {
+  weeks: number;
+  feature_days: number;
+  totals: { firms: number; active_advisers: number; pending_advisers: number; clients: number; questions: number };
+  weekly_active: { week: string; advisers: number }[];
+  features: { event: string; uses: number; advisers: number }[];
+  funnel: { signed_up: number; registered: number; approved: number; added_client: number; ran_analysis: number };
+  avg_approval_hours: number | null;
+  pending: { email: string; full_name: string | null; crd: string | null; firm_name: string | null;
+             submitted_at: string | null; signed_up_at: string }[];
 }
 
 export interface Portfolio {

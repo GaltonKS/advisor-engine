@@ -79,6 +79,8 @@ Environment (none of these are secret; they ship to the browser):
 | `VITE_API_URL` | your API service, e.g. `https://advisor-engine-api.onrender.com` |
 | `VITE_SUPABASE_URL` | `https://znkwkvcnxtahwinrxbvn.supabase.co` |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_…` |
+| `VITE_PLAUSIBLE_DOMAIN` | optional: the site's domain as registered in Plausible (e.g. `app.galtonks.com`); turns on page-view analytics |
+| `VITE_PLAUSIBLE_SCRIPT` | optional: Plausible script URL (default `https://plausible.io/js/script.manual.js`) |
 
 Then **Redirects/Rewrites**: add a rewrite from `/*` to `/index.html` so links like
 `/clients/<id>` load the app. After the first deploy, add the site's address to the API's

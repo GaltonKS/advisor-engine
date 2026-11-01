@@ -104,6 +104,65 @@ class SupabaseStore:
     def as_user(self, user_id: str, email: str) -> "SupabaseSession":
         return SupabaseSession(self, user_id, email)
 
+    def pilot_metrics(self) -> dict:
+        """Usage across every firm, for the operator (see api/metrics.py).
+
+        Runs on the owner connection, not as an adviser: row-level security would limit it
+        to one firm. Only routes gated on Settings.is_operator may call this.
+        """
+        from .metrics import ANALYSIS_EVENTS, FEATURE_DAYS, WEEKS
+
+        def q(conn, sql, params=()):
+            return [_plain(r) for r in conn.execute(sql, params).fetchall()]
+
+        with psycopg.connect(self.db_url, prepare_threshold=None, row_factory=dict_row) as conn:
+            weekly = q(conn, """
+                select w.week::date as week, count(distinct e.record->>'adviser_id') as advisers
+                  from generate_series(date_trunc('week', now()) - make_interval(weeks => %s - 1),
+                                       date_trunc('week', now()), interval '1 week') as w(week)
+                  left join public.audit_events e
+                    on e.recorded_at >= w.week and e.recorded_at < w.week + interval '1 week'
+                   and e.record->>'adviser_id' is not null
+                 group by w.week order by w.week""", [WEEKS])
+            features = q(conn, """
+                select event, count(*) as uses, count(distinct record->>'adviser_id') as advisers
+                  from public.audit_events
+                 where recorded_at > now() - make_interval(days => %s) and event is not null
+                 group by event order by uses desc, event""", [FEATURE_DAYS])
+            funnel = q(conn, """
+                select count(*) as signed_up,
+                       count(a.registration_submitted_at) as registered,
+                       count(*) filter (where a.status = 'active') as approved,
+                       count(*) filter (where exists (select 1 from public.clients c
+                                                      where c.created_by = a.id)) as added_client,
+                       count(*) filter (where exists (
+                           select 1 from public.audit_events e
+                            where e.record->>'adviser_id' = a.id::text
+                              and e.event = any(%s))) as ran_analysis,
+                       extract(epoch from avg(a.approved_at - a.registration_submitted_at))
+                           / 3600 as avg_approval_hours
+                  from public.advisers a""", [list(ANALYSIS_EVENTS)])[0]
+            totals = q(conn, """
+                select (select count(distinct firm_id) from public.advisers
+                         where status = 'active') as firms,
+                       (select count(*) from public.advisers where status = 'active') as active_advisers,
+                       (select count(*) from public.advisers where status = 'pending') as pending_advisers,
+                       (select count(*) from public.clients where deleted_at is null) as clients,
+                       (select count(*) from public.audit_events where event = 'turn'
+                         and recorded_at > now() - make_interval(days => %s)) as questions""",
+                       [FEATURE_DAYS])[0]
+            pending = q(conn, """
+                select a.email, a.full_name, a.crd, f.requested_name as firm_name,
+                       a.registration_submitted_at as submitted_at, a.created_at as signed_up_at
+                  from public.advisers a join public.firms f on f.id = a.firm_id
+                 where a.status = 'pending'
+                 order by a.registration_submitted_at nulls last, a.created_at""")
+        hours = funnel.pop("avg_approval_hours")
+        return {"weeks": WEEKS, "feature_days": FEATURE_DAYS, "totals": totals,
+                "weekly_active": weekly, "features": features, "funnel": funnel,
+                "avg_approval_hours": float(hours) if hours is not None else None,
+                "pending": pending}
+
 
 class SupabaseSession:
     def __init__(self, store: SupabaseStore, user_id: str, email: str):

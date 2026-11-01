@@ -39,6 +39,7 @@ const TABS = [
   ["audit", "Audit trail"],
 ] as const;
 export type TabId = (typeof TABS)[number][0];
+export const TAB_IDS: TabId[] = TABS.map(([id]) => id);
 
 /** Holdings with no sector make the sector figures incomplete; point to the editor. */
 function SectorGapNote({ profile, go }: { profile: RiskProfile; go: (tab: TabId) => void }) {

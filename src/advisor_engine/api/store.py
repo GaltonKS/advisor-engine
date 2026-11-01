@@ -129,6 +129,62 @@ class LocalStore:
             self._write(path, advisers)
             return adv
 
+    def pilot_metrics(self) -> dict:
+        """The same report as SupabaseStore.pilot_metrics, from the local files."""
+        from datetime import timedelta
+
+        from .metrics import ANALYSIS_EVENTS, FEATURE_DAYS, WEEKS
+
+        now = datetime.now(timezone.utc)
+        advisers = list(self._read(self.root / "advisers.json", {}).values())
+        firm_ids = sorted({a["firm_id"] for a in advisers})
+        records, clients = [], []
+        for fid in firm_ids:
+            records += self.read_audit(fid)
+            clients += self._state(fid)["clients"].values()
+        for r in records:
+            r["_at"] = datetime.fromisoformat(r["timestamp"])
+        this_week = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0,
+                                                                  microsecond=0)
+        weekly = []
+        for i in range(WEEKS - 1, -1, -1):
+            start = this_week - timedelta(weeks=i)
+            ids = {r.get("adviser_id") for r in records
+                   if r.get("adviser_id") and start <= r["_at"] < start + timedelta(weeks=1)}
+            weekly.append({"week": start.date().isoformat(), "advisers": len(ids)})
+        recent = [r for r in records if r["_at"] > now - timedelta(days=FEATURE_DAYS) and r.get("event")]
+        events = sorted({r["event"] for r in recent})
+        features = sorted(({"event": e, "uses": sum(r["event"] == e for r in recent),
+                            "advisers": len({r.get("adviser_id") for r in recent if r["event"] == e})}
+                           for e in events), key=lambda f: (-f["uses"], f["event"]))
+        active = [a for a in advisers if a.get("status", "active") == "active"]
+        analysed = {r.get("adviser_id") for r in records if r.get("event") in ANALYSIS_EVENTS}
+        creators = {c.get("created_by") for c in clients}
+        waits = [(datetime.fromisoformat(a["approved_at"])
+                  - datetime.fromisoformat(a["registration_submitted_at"])).total_seconds() / 3600
+                 for a in advisers if a.get("approved_at") and a.get("registration_submitted_at")]
+        pending = sorted(({"email": a["email"], "full_name": a.get("full_name"), "crd": a.get("crd"),
+                           "firm_name": self.get_firm(a["firm_id"]).get("requested_name"),
+                           "submitted_at": a.get("registration_submitted_at"),
+                           "signed_up_at": a["created_at"]}
+                          for a in advisers if a.get("status") == "pending"),
+                         key=lambda p: (p["submitted_at"] is None, p["submitted_at"] or "", p["signed_up_at"]))
+        return {
+            "weeks": WEEKS, "feature_days": FEATURE_DAYS,
+            "totals": {"firms": len({a["firm_id"] for a in active}),
+                       "active_advisers": len(active), "pending_advisers": len(pending),
+                       "clients": sum(not c.get("deleted_at") for c in clients),
+                       "questions": sum(r["event"] == "turn" for r in recent)},
+            "weekly_active": weekly, "features": features,
+            "funnel": {"signed_up": len(advisers),
+                       "registered": sum(bool(a.get("registration_submitted_at")) for a in advisers),
+                       "approved": len(active),
+                       "added_client": sum(a["id"] in creators for a in advisers),
+                       "ran_analysis": sum(a["id"] in analysed for a in advisers)},
+            "avg_approval_hours": sum(waits) / len(waits) if waits else None,
+            "pending": pending,
+        }
+
     def get_firm(self, firm_id: str) -> dict:
         return self._read(self.firm_dir(firm_id) / "firm.json", {"id": firm_id})
 
