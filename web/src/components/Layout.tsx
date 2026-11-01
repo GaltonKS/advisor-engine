@@ -51,8 +51,10 @@ export default function Layout() {
       </main>
       <footer className="no-print mx-auto max-w-[1240px] border-t border-rule px-4 py-4 text-xs text-muted">
         Decision support for registered advisers. Not investment advice. Every figure is computed by the
-        engine{me.data ? ` (v${me.data.engine_version})` : ""}; returns are synthetic and illustrative until
-        licensed market data is connected.
+        engine{me.data ? ` (v${me.data.engine_version})` : ""};{" "}
+        {!me.data?.returns_source || me.data.returns_source === "synthetic"
+          ? "returns are synthetic and illustrative until licensed market data is connected."
+          : `returns are monthly, from ${me.data.returns_source} price history.`}
       </footer>
     </div>
   );

@@ -32,6 +32,7 @@ from ..assistant.mock_client import MockClient
 from ..assistant.numcheck import verify
 from ..assistant.tools import engine_profile, execute_tool
 from ..compare import compare_profiles
+from ..data import get_market_data
 from ..holdings import COLUMNS, load_holdings, validate_holdings
 from ..stress import run_scenario, scenario_list, stress_test
 from .auth import User, current_user
@@ -117,6 +118,14 @@ def _assumptions(body: StressIn) -> dict:
 
 class QuestionnaireIn(BaseModel):
     answers: dict[str, int]
+
+
+def market_data_label() -> str:
+    """The configured data source's label, or the reason it can't be built."""
+    try:
+        return get_market_data().returns_source
+    except Exception:  # misconfigured (e.g. no key): profiles will say why
+        return "unavailable"
 
 
 def _frame(rows: list[HoldingRow]) -> pd.DataFrame:
@@ -253,7 +262,7 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
     def me(c: Ctx = Depends(ctx)) -> dict:
         return {"adviser": c.adv, "firm": c.db.get_firm(c.adv["firm_id"]), "auth": settings.auth,
                 "llm": settings.llm, "daily_turn_limit": settings.daily_turn_limit,
-                "engine_version": __version__}
+                "engine_version": __version__, "returns_source": market_data_label()}
 
     # --- clients and portfolios ------------------------------------------------------
 

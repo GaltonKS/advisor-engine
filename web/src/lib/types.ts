@@ -15,6 +15,8 @@ export interface Me {
   llm: "mock" | "anthropic";
   daily_turn_limit: number;
   engine_version: string;
+  /** Where return history comes from: "synthetic", or a vendor such as "FMP". */
+  returns_source?: string;
 }
 
 export interface Portfolio {

@@ -28,7 +28,8 @@ from ..compare import compare_profiles
 from ..holdings import COLUMNS, load_holdings, validate_holdings
 from ..risk import risk_profile
 from ..stress import SCENARIOS, run_scenario, stress_test
-from ..synthetic import synthetic_market, synthetic_returns
+from ..data import as_of as returns_as_of
+from ..data import DataSourceError, get_market_data
 from ._paths import DATA_DIR, REPO_ROOT
 
 _PATH = {"type": "string",
@@ -161,9 +162,9 @@ REFER_TO_STRESS_TEST = {
 TOOLS = [GET_RISK_PROFILE, GET_HOLDINGS, RUN_WHAT_IF, RUN_STRESS_TEST, SHOW_CHART,
          REFER_TO_STRESS_TEST]
 
-# Labels where the returns came from, so the model can say so in its answer.
+# Labels for the synthetic data (the default source). With real data the labels come from
+# the configured source: see `data.get_market_data()`.
 RETURNS_SOURCE = "synthetic"
-# Names the market series `get_market_returns` supplies (reported as market_proxy).
 MARKET_SOURCE = "synthetic market factor"
 
 
@@ -175,21 +176,15 @@ class ToolResult:
 
 
 def get_returns(holdings: pd.DataFrame) -> pd.DataFrame:
-    """Return history for every holdings ticker. One of the two places real data plugs in.
-
-    TODO: replace with real price data once licensing is confirmed, and update
-    RETURNS_SOURCE to match. Contract: columns cover every `holdings["ticker"]`.
-    """
-    classes = list(holdings["asset_class"]) if "asset_class" in holdings else None
-    return synthetic_returns(list(holdings["ticker"]), list(holdings["sector"]),
-                             asset_classes=classes)
+    """Return history for every holdings ticker, from the configured market data source
+    (`data.get_market_data()`: synthetic by default, or a vendor such as FMP).
+    Contract: columns cover every `holdings["ticker"]`."""
+    return get_market_data().returns(holdings)
 
 
 def get_market_returns(returns: pd.DataFrame) -> pd.Series:
-    """A market index return series aligned with `returns`. The other place real data
-    plugs in: with licensed data, return a broad index here and update MARKET_SOURCE.
-    """
-    return synthetic_market(len(returns)).set_axis(returns.index)
+    """The market index return series aligned with `returns`, from the same source."""
+    return get_market_data().market(returns)
 
 
 def engine_profile(holdings: pd.DataFrame, returns_fn=None) -> dict:
@@ -198,13 +193,17 @@ def engine_profile(holdings: pd.DataFrame, returns_fn=None) -> dict:
     Market sensitivity needs a market series on the same periods; with an injected
     `returns_fn` (tests, custom data) there is none, so those figures are left out.
     """
-    returns = (returns_fn or get_returns)(holdings)
-    if returns_fn is None:
-        profile = risk_profile(holdings, returns, market=get_market_returns(returns),
-                               market_name=MARKET_SOURCE)
-    else:
-        profile = risk_profile(holdings, returns)
-    return {"returns_source": RETURNS_SOURCE, **profile.to_dict()}
+    if returns_fn is not None:
+        returns = returns_fn(holdings)
+        return {"returns_source": RETURNS_SOURCE, **risk_profile(holdings, returns).to_dict()}
+    data = get_market_data()
+    returns = data.returns(holdings)
+    profile = risk_profile(holdings, returns, market=data.market(returns),
+                           market_name=data.market_source)
+    out = {"returns_source": data.returns_source, **profile.to_dict()}
+    if (last := returns_as_of(returns)) is not None:
+        out["returns_as_of"] = last  # dated (real) data only
+    return out
 
 
 def resolve_holdings_path(raw: str, data_dir: Path | None = None) -> Path:
@@ -331,7 +330,7 @@ def execute_tool(
         elif name == "run_what_if":
             before = engine_profile(holdings, returns_fn)
             after = engine_profile(apply_changes(holdings, tool_input), returns_fn)
-            payload = {"returns_source": RETURNS_SOURCE,
+            payload = {"returns_source": after["returns_source"],
                        "changes": {k: tool_input[k] for k in ("remove", "set_shares", "add")
                                    if tool_input.get(k)},
                        "comparison": compare_profiles(before, after), "after": after}
@@ -345,7 +344,7 @@ def execute_tool(
                            **stress_test(holdings, tool_input.get("sector_shocks") or {},
                                          float(tool_input.get("default_shock") or 0.0),
                                          tool_input.get("asset_class_shocks"))}
-    except (ValueError, OSError, pd.errors.ParserError) as e:
+    except (ValueError, OSError, pd.errors.ParserError, DataSourceError) as e:
         return ToolResult(f"Error: {e}", is_error=True)
     except Exception as e:  # keep the loop alive; the type name helps debugging
         return ToolResult(f"Error ({type(e).__name__}): {e}", is_error=True)
