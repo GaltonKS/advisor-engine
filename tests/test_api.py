@@ -525,3 +525,25 @@ def test_another_firm_cannot_rename_or_delete_a_client(api):
     assert client.patch(f"/clients/{c['id']}", json={"name": "Mine now"}, headers=bob).status_code == 404
     assert client.delete(f"/clients/{c['id']}", headers=bob).status_code == 404
     assert client.get(f"/clients/{c['id']}", headers=as_("alice")).json()["name"] == "Sample Household A"
+
+
+def test_audit_entries_link_back_to_their_exchange_in_the_conversation(api):
+    client, _ = api
+    alice = as_("alice")
+    _, p = setup_portfolio(client)
+    reply = client.post(f"/portfolios/{p['id']}/turns", json={"message": "How risky is this portfolio?"},
+                        headers=alice).json()
+    draft = client.post(f"/portfolios/{p['id']}/turns", json={"draft": True}, headers=alice).json()
+    client.post(f"/drafts/{draft['draft_id']}/approve", json={"text": draft["content"]}, headers=alice)
+
+    messages = client.get(f"/portfolios/{p['id']}/messages", headers=alice).json()
+    audit = client.get(f"/audit?portfolio_id={p['id']}", headers=alice).json()
+    turns = [r for r in reversed(audit) if r["event"] == "turn"]
+    assert [r["turn_id"] for r in turns] == [reply["turn_id"], draft["turn_id"]]
+    # Each turn id marks exactly the question and the reply it produced.
+    for r in turns:
+        exchange = [m for m in messages if m.get("turn_id") == r["turn_id"]]
+        assert [m["role"] for m in exchange] == ["user", "assistant"]
+        assert exchange[0]["content"] == r["user_message"]
+    approved = next(r for r in audit if r["event"] == "draft_approved")
+    assert any(m.get("draft_id") == approved["draft_id"] for m in messages)

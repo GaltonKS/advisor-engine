@@ -198,6 +198,12 @@ every turn --append_audit--> data/audit/audit.jsonl
   the model to that firm, and its audit path (`<firm dir>/audit/`) so logs stay per firm.
 - Audit records from the API carry `adviser_id`, `firm_id` and, where relevant,
   `client_id` / `portfolio_id` (via `run_turn(audit_extra=...)`).
+- Each Galton AI turn gets a `turn_id`. It is stored on the audit record and on both chat
+  messages (question and reply). The audit trail's "What" column links to
+  `?tab=assistant&turn=<id>`, or `&draft=<id>` for an approval, and the Galton AI tab
+  highlights that exchange. Turns logged before turn ids existed fall back to
+  `&question=<text>`, which only matches messages that have no `turn_id`. Keep the id
+  on any new conversation message.
 - Live model calls require `auth == "supabase"` (`Settings.llm`). Don't add another path to
   the real client.
 - Responses never include server file paths (see `_tool_view`).
