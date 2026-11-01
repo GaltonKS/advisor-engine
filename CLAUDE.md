@@ -257,6 +257,13 @@ every turn --append_audit--> data/audit/audit.jsonl
   API; the browser never calls the model.
 - `VITE_*` variables ship to the browser: only the Supabase publishable key, never the
   secret key.
+- Analytics is Plausible page views only (`lib/analytics.ts`), on when
+  `VITE_PLAUSIBLE_DOMAIN` is set and never with the dev sign-in. Plausible gets a page
+  *type* from `pageType` (e.g. `/clients/:client/assistant`), never the real address:
+  no client or portfolio ids, no query text (audit links carry questions in `?question=`).
+  Public pages report `/sign-in` and `/privacy`, pending advisers `/awaiting-approval`.
+  No custom events, props, user ids or session recording: the Privacy Policy describes
+  page views only, so anything more needs an approved policy update first.
 - `/privacy` (`pages/Privacy.tsx`) is the approved Privacy Policy, public (shown before the
   auth gate in `main.tsx`) and linked from the sign-in page and the app footer. It is legal
   text: change it only from a new approved version, together with
