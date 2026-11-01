@@ -11,7 +11,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 ADMIN_URL = os.environ.get("TEST_DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/postgres")
 DEV_USERS = ("alice", "bob", "carol")  # approved advisers, as most tests need
-NEW_USERS = ("dave",)                  # signed up but never approved (stays pending)
+NEW_USERS = ("dave", "erin")           # signed up but never approved (stay pending)
 
 
 def _with_db(url: str, name: str) -> str:

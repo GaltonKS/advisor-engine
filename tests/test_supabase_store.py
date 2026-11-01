@@ -258,3 +258,23 @@ def test_admin_command_lists_and_approves(supabase_db, store, monkeypatch, capsy
     assert "Approved dave@dev.local" in capsys.readouterr().out
     monkeypatch.delenv("SUPABASE_DB_URL")
     assert admin.main(["pending"]) == 2
+
+
+# --- approval audit trail ---------------------------------------------------------------------
+
+def test_approval_audit_trail_is_append_only_and_private(supabase_db, store):
+    from advisor_engine.api import admin
+
+    as_(store, "dave").get_or_create_adviser(None, None)
+    admin.approve(supabase_db, "dave@dev.local")
+    with psycopg.connect(supabase_db, autocommit=True) as conn:  # even the owner can't edit
+        assert conn.execute("select reviewed_by from public.adviser_reviews").fetchone()[0].startswith("sql:")
+        for sql in ("update public.adviser_reviews set decision = 'rejected'",
+                    "delete from public.adviser_reviews", "truncate public.adviser_reviews"):
+            with pytest.raises(psycopg.errors.RaiseException, match="append-only"):
+                conn.execute(sql)
+    for user in ("alice", "dave"):
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            raw(supabase_db, user, "select count(*) from public.adviser_reviews")
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        raw(supabase_db, "alice", "select app.review_adviser('erin@dev.local', 'approved', 'me', '{}', null, 'x')")

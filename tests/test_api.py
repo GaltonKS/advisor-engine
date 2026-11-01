@@ -645,3 +645,78 @@ def test_pilot_metrics_show_the_approval_queue_and_wait(approval_api, tmp_path):
     approve("dave@dev.local")
     m = ops.get("/operator/metrics", headers=as_("alice")).json()
     assert m["pending"] == [] and m["avg_approval_hours"] is not None
+
+
+# --- approval reviews (operator) --------------------------------------------------------------
+
+ALL_CHECKS = ["name_matches", "currently_registered", "firm_matches", "email_verified",
+              "disclosures_reviewed"]
+
+
+def reviews_app(approval_api, tmp_path):
+    client, _ = approval_api
+    store = client.app.state.store
+    ops = operator_app(store, tmp_path)
+    if isinstance(store, LocalStore):  # with Supabase, alice and bob are approved by the fixture
+        for user in ("alice", "bob"):
+            ops.get("/me", headers=as_(user))
+            store.approve_adviser(f"{user}@dev.local")
+    for user, crd in (("dave", "1234567"), ("erin", "7654321")):
+        ops.get("/me", headers=as_(user))
+        ops.post("/me/registration", headers=as_(user),
+                 json={"full_name": user.title(), "crd": crd, "firm_name": f"{user.title()} Wealth"})
+    return ops
+
+
+def test_approval_is_recorded_with_reviewer_checks_and_summary(approval_api, tmp_path):
+    ops = reviews_app(approval_api, tmp_path)
+    alice = as_("alice")
+    assert ops.post("/operator/reviews", headers=as_("bob"),
+                    json={"email": "dave@dev.local", "decision": "approved", "checks": ALL_CHECKS}
+                    ).status_code == 404  # bob isn't an operator
+    partial = ops.post("/operator/reviews", headers=alice,
+                       json={"email": "dave@dev.local", "decision": "approved", "checks": ALL_CHECKS[:3]})
+    assert partial.status_code == 422 and "every BrokerCheck check" in partial.json()["detail"]
+    r = ops.post("/operator/reviews", headers=alice,
+                 json={"email": "dave@dev.local", "decision": "approved", "checks": ALL_CHECKS,
+                       "note": "IAR at Dave Wealth since 2019"})
+    assert r.status_code == 200, r.text
+    rec = r.json()
+    assert rec["reviewed_by"] == "alice@dev.local" and rec["decision"] == "approved"
+    assert rec["summary"] == ("Approved. BrokerCheck CRD 1234567: name matches; currently registered; "
+                              "firm matches; email/employment verified; disclosures reviewed.")
+    assert ops.get("/clients", headers=as_("dave")).status_code == 200
+    again = ops.post("/operator/reviews", headers=alice,
+                     json={"email": "dave@dev.local", "decision": "approved", "checks": ALL_CHECKS})
+    assert again.status_code == 404  # no longer pending
+
+
+def test_rejection_needs_a_reason_and_locks_the_account(approval_api, tmp_path):
+    ops = reviews_app(approval_api, tmp_path)
+    alice = as_("alice")
+    base = {"email": "erin@dev.local", "decision": "rejected"}
+    assert ops.post("/operator/reviews", headers=alice, json=base).status_code == 422
+    assert ops.post("/operator/reviews", headers=alice, json={**base, "reason": "other"}).status_code == 422
+    r = ops.post("/operator/reviews", headers=alice, json={**base, "reason": "not_registered"})
+    assert r.status_code == 200 and r.json()["summary"] == (
+        "Rejected. BrokerCheck CRD 7654321: Not currently registered.")
+    erin = as_("erin")
+    blocked = ops.get("/clients", headers=erin)
+    assert blocked.status_code == 403 and blocked.json()["detail"] == "Your registration wasn't approved."
+    assert ops.get("/me", headers=erin).json()["adviser"]["status"] == "rejected"
+    assert ops.post("/me/registration", headers=erin,
+                    json={"full_name": "E", "crd": "1", "firm_name": "F"}).status_code == 409
+
+
+def test_metrics_show_the_audit_trail_newest_first_including_sql_approvals(approval_api, tmp_path):
+    client, approve = approval_api
+    ops = reviews_app(approval_api, tmp_path)
+    alice = as_("alice")
+    ops.post("/operator/reviews", headers=alice,
+             json={"email": "erin@dev.local", "decision": "rejected", "reason": "duplicate"})
+    approve("dave@dev.local")  # the SQL Editor / admin command path
+    m = ops.get("/operator/metrics", headers=alice).json()
+    trail = [(r["adviser_email"], r["decision"], r["reviewed_by"].split(":")[0]) for r in m["reviews"]]
+    assert trail[:2] == [("dave@dev.local", "approved", "sql"), ("erin@dev.local", "rejected", "alice@dev.local")]
+    assert [c["key"] for c in m["review_presets"]["checks"]] == ALL_CHECKS
+    assert "other" in [r["key"] for r in m["review_presets"]["reject_reasons"]]

@@ -16,6 +16,7 @@ import logging
 import re
 import uuid
 from dataclasses import dataclass
+from typing import Literal
 
 import pandas as pd
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
@@ -36,6 +37,7 @@ from ..data import get_market_data
 from ..holdings import COLUMNS, load_holdings, validate_holdings
 from ..stress import run_scenario, scenario_list, stress_test
 from .auth import User, current_user
+from .metrics import REJECT_REASONS, REVIEW_CHECKS, review_presets, review_summary
 from .settings import Settings, load_settings
 from .store import LocalStore
 from .supabase_store import SupabaseStorage, SupabaseStore
@@ -63,6 +65,14 @@ class RegistrationIn(BaseModel):
     full_name: str = Field(min_length=1, max_length=200)
     crd: str = Field(pattern=r"^[0-9]{1,8}$")  # FINRA CRD numbers are digits only
     firm_name: str = Field(min_length=1, max_length=200)
+
+
+class ReviewIn(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    decision: Literal["approved", "rejected"]
+    checks: list[str] = Field(default_factory=list, max_length=10)
+    reason: str | None = Field(default=None, max_length=40)
+    note: str = Field(default="", max_length=1000)
 
 
 class TurnIn(BaseModel):
@@ -232,7 +242,10 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
     def ctx(c: Ctx = Depends(any_ctx)) -> Ctx:
         """An approved adviser. New sign-ups wait as pending until the operator verifies
         them; row-level security already shows them nothing, and this says why."""
-        if c.adv.get("status", "active") != "active":
+        status = c.adv.get("status", "active")
+        if status == "rejected":
+            raise HTTPException(403, "Your registration wasn't approved.")
+        if status != "active":
             raise HTTPException(403, "Your account is awaiting approval.")
         return c
 
@@ -297,7 +310,40 @@ def create_app(settings: Settings | None = None, store=None) -> FastAPI:
         Anyone else gets 404, so the route's existence isn't revealed."""
         if not settings.is_operator(c.adv.get("email")):
             raise HTTPException(404, "Not found.")
-        return store.pilot_metrics()
+        return {**store.pilot_metrics(), "review_presets": review_presets()}
+
+    @app.post("/operator/reviews")
+    def review(body: ReviewIn, c: Ctx = Depends(ctx)) -> dict:
+        """Approve or reject a pending sign-up. Who decided (the operator's signed-in email)
+        and when are recorded automatically, with the checks and a one-line summary, in the
+        append-only approval audit trail."""
+        if not settings.is_operator(c.adv.get("email")):
+            raise HTTPException(404, "Not found.")
+        known = {k for k, _ in REVIEW_CHECKS}
+        checks = [k for k, _ in REVIEW_CHECKS if k in set(body.checks)]
+        if set(body.checks) - known:
+            raise HTTPException(422, "Unknown check.")
+        reason = None
+        if body.decision == "approved":
+            if len(checks) != len(REVIEW_CHECKS):
+                raise HTTPException(422, "Confirm every BrokerCheck check before approving.")
+        else:
+            reason = body.reason
+            if reason not in dict(REJECT_REASONS):
+                raise HTTPException(422, "Choose a reason for rejecting.")
+            if reason == "other" and not body.note.strip():
+                raise HTTPException(422, "Add a note explaining the rejection.")
+            checks = []
+        pending = {p["email"].lower(): p for p in store.pilot_metrics()["pending"]}
+        target = pending.get(body.email.strip().lower())
+        if target is None:
+            raise HTTPException(404, "No pending sign-up with that email.")
+        summary = review_summary(body.decision, target.get("crd"), checks, reason)
+        try:
+            return store.review_adviser(body.email.strip(), body.decision, c.adv["email"], checks,
+                                        reason, summary, body.note.strip() or None)
+        except LookupError as e:
+            raise HTTPException(404, "No pending sign-up with that email.") from e
 
     # --- clients and portfolios ------------------------------------------------------
 

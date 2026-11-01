@@ -28,6 +28,19 @@ export default function PendingApproval({ me }: { me: Me }) {
   }
 
   const submitted = Boolean(a.registration_submitted_at);
+  if (a.status === "rejected") {
+    return (
+      <div className="mx-auto max-w-xl py-6">
+        <div className="eyebrow mb-2">Registration not approved</div>
+        <h1 className="mb-3 text-3xl">We couldn't approve this account</h1>
+        <p className="text-muted">
+          GaltonKS is for registered advisers, and we weren't able to verify your registration on FINRA
+          BrokerCheck. If you think this is a mistake, email us from {a.email} with your CRD number and
+          we'll take another look.
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="mx-auto max-w-xl py-6">
       <div className="eyebrow mb-2">Account awaiting approval</div>
