@@ -101,7 +101,10 @@ table.data td.num, table.data th.num { text-align: right; font-family: var(--fon
 @media print {
   .no-print { display: none !important; }
   body { background: #fff; }
+  /* Keep the logo's gradients and the gold rule when printing to PDF. */
+  .report-masthead { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+@page { margin: 0.6in 0.7in; }
 
 /* Chart tokens (KVS mockup). Ramp checked with the dataviz validator as an ordered
    scale on --viz-surface: darkest = largest source / main emphasis. The two light

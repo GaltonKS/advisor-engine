@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Logo } from "../../components/Logo";
 import { Empty, Loading } from "../../components/ui";
 import { useMe } from "../../components/Layout";
 import { useApi } from "../../lib/api";
@@ -13,6 +15,12 @@ export default function ReportTab({ ws }: { ws: Workspace }) {
   const api = useApi();
   const me = useMe();
   const drafts = useQuery({ queryKey: ["drafts", ws.portfolio.id], queryFn: () => api<Draft[]>(`/portfolios/${ws.portfolio.id}/drafts`) });
+  // The page title becomes the PDF's file name and the browser's print header.
+  useEffect(() => {
+    const before = document.title;
+    document.title = `${ws.client.name} · Portfolio risk review · GaltonKS`;
+    return () => { document.title = before; };
+  }, [ws.client.name]);
   if (drafts.isLoading) return <Loading />;
   const approved = drafts.data?.find((d) => d.approved);
   if (!approved) {
@@ -31,9 +39,21 @@ export default function ReportTab({ ws }: { ws: Workspace }) {
         <button className="btn btn-primary" onClick={() => window.print()}>Print / save as PDF</button>
       </div>
       <article className="mx-auto max-w-3xl border border-rule bg-white p-10 print:border-0 print:p-0">
-        <div className="eyebrow">Portfolio risk review · {date(approved.approved_at ?? approved.created_at)}</div>
-        <h1 className="mt-1 text-4xl">{ws.client.name}</h1>
-        {ws.client.objective && <p className="text-muted">{ws.client.objective}</p>}
+        <header className="report-masthead flex items-end justify-between gap-6 border-b-2 border-gold pb-4">
+          <Logo markWidth={44} />
+          <div className="text-right">
+            <div className="eyebrow">Portfolio risk review</div>
+            <div className="mt-1 font-mono text-xs text-muted">{date(approved.approved_at ?? approved.created_at)}</div>
+          </div>
+        </header>
+
+        <div className="mt-8">
+          <h1 className="text-4xl">{ws.client.name}</h1>
+          <p className="mt-1 text-muted">
+            {[ws.client.objective, `${p.concentration.n_positions} holdings`,
+              `${p.returns_source} returns, illustrative`].filter(Boolean).join(" · ")}
+          </p>
+        </div>
 
         <Markdown text={approved.approved_text ?? ""} className="my-6" />
 

@@ -107,7 +107,8 @@ export default function ClientWorkspace() {
   return (
     <div>
       <div className="no-print mb-2 text-sm"><Link to="/" className="text-muted">← Clients</Link></div>
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      {/* The report has its own masthead, so this header stays off the printed report. */}
+      <div className={`flex flex-wrap items-end justify-between gap-4 ${tab === "report" ? "no-print" : ""}`}>
         <div>
           <div className="eyebrow">
             Client analysis{profile.data ? ` · ${profile.data.returns_source} returns, illustrative` : ""}
