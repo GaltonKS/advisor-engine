@@ -263,6 +263,13 @@ every turn --append_audit--> data/audit/audit.jsonl
   refuses changes to `deleted_at` / `deleted_by` by `authenticated` without a fresh code
   (`app.mfa_fresh_ok()`, the same rule and 300 s window as `require_fresh_code`; keep
   them in step). Both raise SQLSTATE `PT403` (HTTP 403 in Supabase's REST API).
+- Client explanations (drafts) stay editable after approval. `POST /drafts/{id}/approve`
+  on an approved draft re-runs `verify` on the new text and logs `draft_revised` with
+  `previous_text`; identical text answers 409. The report only prints approved text.
+  In the web app the open draft is derived from the conversation (the last reply's
+  `draft_id`), so it stays in Galton AI until the next question; the Client report tab
+  lists every draft for the portfolio (`?report=<draft id>`) and edits them with the
+  same `DraftEditor`.
 - Responses never include server file paths (see `_tool_view`).
 - Clients can be renamed (`PATCH /clients/{id}`) and deleted (`DELETE /clients/{id}`).
   Deleting is a soft delete (`deleted_at`): `get_client` / `list_clients` skip the row and

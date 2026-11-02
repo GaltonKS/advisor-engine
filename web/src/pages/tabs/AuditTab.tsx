@@ -45,7 +45,7 @@ export function conversationLink(r: AuditRow): Record<string, string> | null {
     if (r.turn_id) return { turn: r.turn_id };
     return r.user_message ? { question: r.user_message } : null;
   }
-  if (r.event === "draft_approved" && r.draft_id) return { draft: r.draft_id };
+  if ((r.event === "draft_approved" || r.event === "draft_revised") && r.draft_id) return { draft: r.draft_id };
   return null;
 }
 
