@@ -276,6 +276,15 @@ every turn --append_audit--> data/audit/audit.jsonl
   when there was something to clear). Old turns are not kept in the conversation:
   their full records stay in the audit log, and drafts stay in the Client report.
   Audit-trail links to a cleared turn show "isn't in this chat".
+- Stress runs get a `run_id` (on the result and the `stress` audit record). The Stress
+  test tab's scenario (fields, AI suggestion, result) lives in the query cache per
+  portfolio, so it survives tab switches; after a reload it starts from
+  `GET /portfolios/{id}/stress/current`, the latest run read back from the audit log,
+  until **Reset scenario** (`POST .../stress/reset`, logged as `stress_reset`).
+  `GET .../stress/runs/{run_id}` reopens a logged run; the audit trail links to it
+  (`?tab=stress&run=<id>`). `/audit` rows for stress carry `scenario` (preset name, or a
+  custom scenario's description and shocks, which are inputs, not results), and the "What"
+  column spells them out (`AuditTab.describeScenario`).
 - Responses never include server file paths (see `_tool_view`).
 - Clients can be renamed (`PATCH /clients/{id}`) and deleted (`DELETE /clients/{id}`).
   Deleting is a soft delete (`deleted_at`): `get_client` / `list_clients` skip the row and

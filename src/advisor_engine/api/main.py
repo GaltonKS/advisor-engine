@@ -127,6 +127,22 @@ class SuggestIn(BaseModel):
     description: str = Field(min_length=1, max_length=1000)
 
 
+def _stress_summary(record: dict) -> dict:
+    """What a logged stress run assumed, for the audit trail: the preset's name, or a
+    custom scenario's description and shocks (the adviser's inputs, not results)."""
+    inputs = record.get("inputs") or {}
+    result = record.get("result") or {}
+    scenario = result.get("scenario") or {}
+    out = {"id": inputs.get("scenario_id") or "custom", "label": scenario.get("label"),
+           "source": (result.get("assumptions") or {}).get("source")}
+    if not inputs.get("scenario_id"):
+        out.update(description=inputs.get("description") or "",
+                   sector_shocks=inputs.get("sector_shocks") or {},
+                   asset_class_shocks=inputs.get("asset_class_shocks") or {},
+                   default_shock=inputs.get("default_shock", 0.0))
+    return out
+
+
 def _assumptions(body: StressIn) -> dict:
     """Where a stress run's assumptions came from: a preset, the adviser, or an AI
     suggestion (kept as suggested, or edited by the adviser before running)."""
@@ -603,9 +619,52 @@ def create_app(settings: Settings | None = None, store=None, auth_admin=None) ->
         except ValueError as e:
             raise HTTPException(422, str(e)) from e
         result["assumptions"] = _assumptions(body)
+        # One id per run, on the audit record and the result, so the audit trail can
+        # link back to it and the Stress test tab can reopen it.
+        result["run_id"] = uuid.uuid4().hex
         log(c, "stress", client_id=p["client_id"], portfolio_id=portfolio_id,
-            holdings_sha256=p["sha256"], inputs=body.model_dump(), result=result)
+            holdings_sha256=p["sha256"], run_id=result["run_id"], inputs=body.model_dump(),
+            result=result)
         return result
+
+    def stress_runs(c: Ctx, portfolio_id: str) -> list[dict]:
+        """This portfolio's stress runs and resets from the audit log, oldest first.
+        The log is the record of what was run, so reopening a run shows exactly what the
+        engine returned then (holdings versions never change)."""
+        return [r for r in c.db.read_audit(c.adv["firm_id"])
+                if r.get("portfolio_id") == portfolio_id
+                and r.get("event") in ("stress", "stress_reset")]
+
+    def run_view(r: dict) -> dict:
+        return {"run_id": r.get("run_id"), "timestamp": r.get("timestamp"),
+                "inputs": r.get("inputs") or {}, "result": {**(r.get("result") or {}),
+                                                            "run_id": r.get("run_id")}}
+
+    @app.get("/portfolios/{portfolio_id}/stress/current")
+    def stress_current(portfolio_id: str, c: Ctx = Depends(ctx)) -> dict:
+        """The scenario the Stress test tab should show: the latest run, unless the
+        adviser has reset the scenario since."""
+        own_portfolio(c, portfolio_id)
+        runs = stress_runs(c, portfolio_id)
+        last = runs[-1] if runs else None
+        return {"run": run_view(last) if last and last["event"] == "stress" else None}
+
+    @app.get("/portfolios/{portfolio_id}/stress/runs/{run_id}")
+    def stress_run(portfolio_id: str, run_id: str, c: Ctx = Depends(ctx)) -> dict:
+        own_portfolio(c, portfolio_id)
+        for r in stress_runs(c, portfolio_id):
+            if r["event"] == "stress" and r.get("run_id") == run_id:
+                return {"run": run_view(r)}
+        raise HTTPException(404, "Stress test not found.")
+
+    @app.post("/portfolios/{portfolio_id}/stress/reset")
+    def stress_reset(portfolio_id: str, c: Ctx = Depends(ctx)) -> dict:
+        """Clear the Stress test tab's scenario. Earlier runs stay in the audit log."""
+        p = own_portfolio(c, portfolio_id)
+        runs = stress_runs(c, portfolio_id)
+        if runs and runs[-1]["event"] == "stress":
+            log(c, "stress_reset", client_id=p["client_id"], portfolio_id=portfolio_id)
+        return {"run": None}
 
     @app.post("/portfolios/{portfolio_id}/stress/suggest")
     def suggest(portfolio_id: str, body: SuggestIn, c: Ctx = Depends(ctx)) -> dict:
@@ -772,9 +831,11 @@ def create_app(settings: Settings | None = None, store=None, auth_admin=None) ->
             rows = [r for r in rows if r.get("portfolio_id") == portfolio_id]
         keys = ("timestamp", "event", "engine_version", "model", "adviser_id", "client_id",
                 "portfolio_id", "draft_id", "turn_id", "user_message", "blocked", "block_reason",
-                "edited")
+                "edited", "run_id")
         return [{**{k: r.get(k) for k in keys},
-                 "verified": (r.get("verification") or {}).get("ok")} for r in reversed(rows)]
+                 "verified": (r.get("verification") or {}).get("ok"),
+                 **({"scenario": _stress_summary(r)} if r.get("event") == "stress" else {})}
+                for r in reversed(rows)]
 
     return app
 
