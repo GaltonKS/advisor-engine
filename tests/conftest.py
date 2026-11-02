@@ -8,6 +8,9 @@ from pathlib import Path
 
 import pytest
 
+# Never read a developer's own .env (API keys, market data vendor) into the tests.
+os.environ["ADVISOR_NO_DOTENV"] = "1"
+
 ROOT = Path(__file__).resolve().parents[1]
 ADMIN_URL = os.environ.get("TEST_DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/postgres")
 DEV_USERS = ("alice", "bob", "carol")  # approved advisers, as most tests need

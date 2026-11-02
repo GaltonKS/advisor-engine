@@ -45,19 +45,25 @@ check and audit log. The assistant prints the active mode.
 
 ### Market data
 
-Returns are synthetic by default. To use real prices from Financial Modeling Prep, set:
+Returns are synthetic by default. To use real prices from Twelve Data or Financial
+Modeling Prep, set
+these environment variables, either on the host (Render: Environment settings) or
+locally in `.env` (`cp .env.example .env`; the real environment wins over the file):
 
 | Variable | Value |
 |---|---|
-| `ADVISOR_MARKET_DATA` | `fmp` (default `synthetic`) |
-| `FMP_API_KEY` | your FMP key (secret: `.env` or the host's settings, never git) |
+| `ADVISOR_MARKET_DATA` | `td` (Twelve Data; `twelvedata` also works) or `fmp` (default `synthetic`) |
+| `TWELVE_DATA_API_KEY` | your Twelve Data key, for `td` (secret: `.env` or the host's settings, never git) |
+| `FMP_API_KEY` | your FMP key, for `fmp` (secret, as above) |
 | `ADVISOR_MARKET_INDEX` | the market index symbol (default `SPY`) |
 | `ADVISOR_MARKET_CACHE` | where month-end prices are cached: `supabase` (default when `SUPABASE_DB_URL` is set), `disk`, or a directory (default `data/market_cache`) |
 
 The engine uses monthly returns from dividend-adjusted closes: up to 120 months, over
-the window every holding shares (at least 24). Profiles then say `returns_source: FMP`
+the window every holding shares (at least 24). Profiles then say `returns_source: Twelve Data` (or `FMP`)
 and carry `returns_as_of`, the last month-end used. Another vendor plugs in by adding
-one adapter in `src/advisor_engine/data/` (see `fmp.py`).
+one adapter in `src/advisor_engine/data/` (see `fmp.py`, `twelvedata.py`).
+Twelve Data's free tier allows 8 requests a minute: a first load of a large portfolio
+can hit that limit (prices are cached for 24 hours afterwards).
 
 ### Number-check guardrail
 
