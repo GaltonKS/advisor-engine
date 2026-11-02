@@ -4,7 +4,8 @@ import { useSearchParams } from "react-router-dom";
 import { ChartView } from "../../components/charts";
 import { Markdown } from "../../lib/markdown";
 import { Chip, ErrorNote, GaltonName, Loading, Panel } from "../../components/ui";
-import { ApiError, useApi } from "../../lib/api";
+import { DraftEditor } from "./DraftEditor";
+import { useApi } from "../../lib/api";
 import { shortHash } from "../../lib/format";
 import type { ChartSpec, ChatMessage, Draft, RiskProfile } from "../../lib/types";
 import type { Workspace } from "../ClientWorkspace";
@@ -17,6 +18,13 @@ const SUGGESTIONS = [
 ];
 
 const FOCUS_PARAMS = ["turn", "draft", "question"] as const;
+
+/** The draft the conversation currently ends on: the client explanation stays open in
+ *  Galton AI (across tab switches and reloads) until the adviser asks another question. */
+export function currentDraftId(messages: ChatMessage[] | undefined): string | null {
+  const last = messages?.filter((m) => m.role === "assistant").at(-1);
+  return last?.draft_id ?? null;
+}
 
 /** Indexes of the messages an audit-trail link points at: the question and its reply.
  *  `turn` and `draft` are exact ids; `question` (turns logged before turn ids existed)
@@ -43,8 +51,11 @@ export default function AssistantTab({ ws }: { ws: Workspace }) {
   const [params, setParams] = useSearchParams();
   const pid = ws.portfolio.id;
   const messages = useQuery({ queryKey: ["messages", pid], queryFn: () => api<ChatMessage[]>(`/portfolios/${pid}/messages`) });
+  const drafts = useQuery({ queryKey: ["drafts", pid], queryFn: () => api<Draft[]>(`/portfolios/${pid}/drafts`) });
   const [text, setText] = useState("");
-  const [draft, setDraft] = useState<{ id: string; text: string; original: string } | null>(null);
+  // Derived from the saved conversation, not local state, so leaving the tab doesn't lose it.
+  const draftId = currentDraftId(messages.data);
+  const draft = draftId ? drafts.data?.find((d) => d.id === draftId) : undefined;
   const bottom = useRef<HTMLDivElement>(null);
   const chat = useRef<HTMLDivElement>(null);
   const focus = { turn: params.get("turn"), draft: params.get("draft"), question: params.get("question") };
@@ -61,12 +72,8 @@ export default function AssistantTab({ ws }: { ws: Workspace }) {
     onMutate: () => { if (focusing) clearFocus(); },
     onSuccess: (reply) => {
       qc.invalidateQueries({ queryKey: ["messages", pid] });
-      if (reply.draft_id) setDraft({ id: reply.draft_id, text: reply.content, original: reply.content });
+      if (reply.draft_id) qc.invalidateQueries({ queryKey: ["drafts", pid] });
     },
-  });
-  const approve = useMutation({
-    mutationFn: () => api<Draft>(`/drafts/${draft!.id}/approve`, { json: { text: draft!.text } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["drafts", pid] }),
   });
 
   // A question handed over from another tab (e.g. "Ask Galton AI about BBB").
@@ -99,9 +106,6 @@ export default function AssistantTab({ ws }: { ws: Workspace }) {
     ask.mutate({ message: text.trim() });
     setText("");
   }
-
-  const unmatched = approve.error instanceof ApiError
-    ? ((approve.error.detail as { unmatched?: string[] })?.unmatched ?? []) : [];
 
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
@@ -149,23 +153,22 @@ export default function AssistantTab({ ws }: { ws: Workspace }) {
       <div className="self-start">
         {draft ? (
           <Panel title="Draft explanation for the client" tag="Editable · yours to approve">
-            <textarea className="input min-h-[300px] font-serif text-[15px] leading-relaxed" value={draft.text}
-                      disabled={approve.isSuccess}
-                      onChange={(e) => { setDraft({ ...draft, text: e.target.value }); approve.reset(); }} />
-            {unmatched.length > 0 && (
-              <div className="mt-2 text-sm text-bad">Not approved: these figures are not from the engine: {unmatched.join(", ")}.</div>
+            <DraftEditor key={draft.id} draft={draft} />
+            {draft.approved && (
+              <button className="btn mt-3" onClick={() => ws.go("report", undefined, { report: draft.id })}>Open the client report →</button>
             )}
-            {approve.error && unmatched.length === 0 && <ErrorNote error={approve.error} />}
-            {approve.isSuccess ? (
-              <p className="mt-3 text-sm text-good">Approved and logged with your name. Nothing was sent. It now appears in the client report.</p>
-            ) : (
-              <button className="btn btn-dark mt-3" onClick={() => approve.mutate()} disabled={approve.isPending}>Approve</button>
-            )}
-            <p className="mt-3 text-xs text-muted">Edits are re-checked: you can reword freely, but a figure the engine didn't produce blocks approval.</p>
           </Panel>
+        ) : draftId && drafts.isLoading ? (
+          <Panel title="Draft explanation for the client"><Loading /></Panel>
         ) : (
           <Panel title="Client explanation">
             <p className="text-sm text-muted">"Draft the client explanation" writes a plain-language summary from the engine's figures for you to edit and approve.</p>
+            {(drafts.data?.length ?? 0) > 0 && (
+              <p className="mt-2 text-sm text-muted">
+                Earlier explanations stay in the{" "}
+                <button className="underline" onClick={() => ws.go("report")}>Client report</button> tab, where you can reopen and edit them.
+              </p>
+            )}
           </Panel>
         )}
       </div>

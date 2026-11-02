@@ -74,6 +74,7 @@ export function describe(a: AuditRow): string {
   switch (a.event) {
     case "turn": return a.blocked ? `${ASSISTANT_NAME} reply withheld: “${a.user_message}”` : `${ASSISTANT_NAME}: “${a.user_message}”`;
     case "draft_approved": return "Client explanation approved";
+    case "draft_revised": return "Client explanation edited and re-approved";
     case "what_if": return "What-if run";
     case "compare": return "Versions compared";
     case "stress": return "Stress scenario run";
