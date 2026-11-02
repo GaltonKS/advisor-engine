@@ -213,18 +213,25 @@ def classify_asset_class(label: object) -> str:
     """Map a free-text asset class label to one of `ASSET_CLASSES`.
 
     First match wins, on the lower-cased label: "cash" / "money market" -> cash;
-    "preferred" -> preferred; "fixed income" / "bond" / "treasur" / "muni" ->
-    fixed_income; "equity" / "equities" / "stock" -> equity. Blank -> equity (files
-    without the column are treated as before). Anything else -> other.
+    "preferred" -> preferred; "fixed income" / "bond" / "treasur" / "muni" /
+    "inflation" / the word "tips" -> fixed_income; "equity" / "equities" / "stock" ->
+    equity. Blank -> equity (files without the column are treated as before). Anything
+    else -> other, which is modelled and stress-tested as equity, so profiles list those
+    holdings in `asset_class_coverage`.
+
+    TIPS are inflation-protected Treasuries: an unrecognised "TIPS" label would put
+    them in "other" and give them a stock's shock in a sell-off.
     """
     s = re.sub(r"[\s_-]+", " ", str(label)).strip().lower()
     if s in ("", "nan"):
         return "equity"
     for words, cls in ((("cash", "money market"), "cash"),
                        (("preferred",), "preferred"),
-                       (("fixed income", "bond", "treasur", "muni"), "fixed_income"),
+                       (("fixed income", "bond", "treasur", "muni", "inflation"), "fixed_income"),
                        (("equity", "equities", "stock"), "equity")):
         if any(w in s for w in words):
+            return cls
+        if cls == "fixed_income" and re.search(r"\btips\b", s):
             return cls
     return "other"
 

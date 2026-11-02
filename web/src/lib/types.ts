@@ -142,10 +142,15 @@ export interface RiskProfile {
   sector_risk?: Record<string, { weight: number; risk_share: number }>;
   asset_class_risk?: Record<string, { weight: number; risk_share: number }>;
   sector_coverage?: { unclassified_weight: number; n_unclassified: number; unclassified_tickers: string[] };
+  /** Holdings whose asset class wasn't recognised; modelled and stress-tested as equity. */
+  asset_class_coverage?: { other_weight: number; n_other: number; other_tickers: string[] };
   drawdown: {
+    /** Largest fall from a peak to a later low; can span several periods. */
     historical_max_drawdown: number;
     period_volatility: number;
+    /** Calculated: -stress_loss_z x period_volatility (normal distribution), not observed. */
     stress_loss_1_in_100: number;
+    stress_loss_z?: number;
     period_label: string;
   };
   positions: Position[];

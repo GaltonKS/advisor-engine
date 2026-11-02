@@ -66,7 +66,7 @@ export default function ProfileTab({ ws }: { ws: Workspace }) {
           </>
         ) : (
           <Panel title="Not scored yet">
-            <p className="text-sm text-muted">The engine scores the answers to a risk level from 1 to 10 and checks the portfolio's worst historical drop against the largest fall the client says they could accept.</p>
+            <p className="text-sm text-muted">The engine scores the answers to a risk level from 1 to 10 and checks the portfolio's largest fall from a peak against the largest fall the client says they could accept.</p>
           </Panel>
         )}
         {save.isSuccess && <p className="text-xs text-good">Saved and recorded in the audit trail.</p>}

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { RiskSourceBars } from "../../components/charts";
 import { Bar, Panel, StatCard } from "../../components/ui";
 import { useApi } from "../../lib/api";
-import { assetClassLabel, lossPct, num, pct } from "../../lib/format";
+import { assetClassLabel, lossPct, num, pct, stressLossMethod } from "../../lib/format";
 import type { QuestionnaireResult, SuitabilityCheck } from "../../lib/types";
 import type { Workspace } from "../ClientWorkspace";
 
@@ -69,11 +69,13 @@ export default function OverviewTab({ ws }: { ws: Workspace }) {
 
       <Panel title="Downside" tag={`${dd.period_label} basis`}>
         <div className="grid gap-4 sm:grid-cols-3">
-          <Figure label="Worst historical drop" value={lossPct(dd.historical_max_drawdown)} note="Largest peak-to-trough loss in the history analysed." />
-          <Figure label="1-in-100 stress loss" value={lossPct(dd.stress_loss_1_in_100)} note={`Estimated loss over one ${dd.period_label} period in a severe scenario.`} />
+          <Figure label="Largest fall from a peak" value={lossPct(dd.historical_max_drawdown)}
+                  note={`From a high point to a later low in the history analysed. It can span several ${dd.period_label} periods, so it isn't the worst single period.`} />
+          <Figure label="1-in-100 stress loss" value={lossPct(dd.stress_loss_1_in_100)}
+                  note={stressLossMethod(dd.stress_loss_z, dd.period_label)} />
           <Figure label={`Typical ${dd.period_label} volatility`} value={pct(dd.period_volatility)} note="How much the value usually moves in one period." />
         </div>
-        <p className="mt-3 text-xs text-muted">These describe history and a stress scenario. They are not forecasts.</p>
+        <p className="mt-3 text-xs text-muted">The largest fall is observed in the history; the 1-in-100 loss is calculated. Neither is a forecast.</p>
       </Panel>
     </div>
   );
@@ -101,7 +103,7 @@ function SuitabilityBanner({ ws }: { ws: Workspace }) {
       {s.data.checks.map((c) => (
         <div key={c.id} className={`border-l-4 px-4 py-3 text-sm ${c.within ? "border-good bg-good/5" : "border-bad bg-bad/5"}`}>
           <b>{c.within ? "Within the client's stated tolerance." : "Outside the client's stated tolerance."}</b>{" "}
-          {c.label}: the portfolio's worst historical drop was {lossPct(c.portfolio_value)}; the client said they could accept {pct(c.client_limit, 0)}.
+          {c.label}: the portfolio's largest fall from a peak was {lossPct(c.portfolio_value)}; the client said they could accept {pct(c.client_limit, 0)}.
         </div>
       ))}
     </div>

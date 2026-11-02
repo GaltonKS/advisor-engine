@@ -370,10 +370,12 @@ def _drawdown(d: dict, concise: bool) -> str:
     dd = d["drawdown"]
     label = dd["period_label"]
     out = [
-        f"In the history analysed, the portfolio's worst peak-to-trough drop was "
+        f"In the history analysed, the portfolio's largest fall from a peak was "
         f"{_pct(abs(dd['historical_max_drawdown']))} on a {label} basis.",
-        f"A 1-in-100 stress {label} period would bring a loss of "
-        f"{_pct(abs(dd['stress_loss_1_in_100']))}.",
+        f"A 1-in-100 stress {label} period would bring an estimated loss of "
+        f"{_pct(abs(dd['stress_loss_1_in_100']))}. That is calculated, not observed: "
+        f"{dd['stress_loss_z']} times the {label} volatility, assuming normally "
+        f"distributed returns, so a real crisis can be worse.",
         f"Typical {label} volatility is {_pct(dd['period_volatility'])}.",
     ]
     if not concise:
@@ -395,7 +397,7 @@ def _client_draft(d: dict, concise: bool) -> str:
         "",
         *([f"The largest share of your money is in {sectors[0][0]}, at "
            f"{_pct(sectors[0][1])} of the portfolio.", ""] if sectors else []),
-        f"Looking at the history we analysed, the worst peak-to-trough drop was "
+        f"Looking at the history we analysed, the largest fall from a peak was "
         f"{_pct(abs(dd['historical_max_drawdown']))} on a {label} basis. In a severe "
         f"1-in-100 {label} period, we would expect a loss of about "
         f"{_pct(abs(dd['stress_loss_1_in_100']))}.",

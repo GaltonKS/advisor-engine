@@ -19,7 +19,7 @@ HEADLINE = [
     (("concentration", "sector_level", "sector_effective_bets"), "Independent sector bets", "number"),
     (("drawdown", "period_volatility"), "Volatility per period", "fraction"),
     (("drawdown", "stress_loss_1_in_100"), "1-in-100 stress loss", "loss"),
-    (("drawdown", "historical_max_drawdown"), "Worst historical drop", "loss"),
+    (("drawdown", "historical_max_drawdown"), "Largest fall from a peak", "loss"),
     (("concentration", "n_positions"), "Positions", "count"),
 ]
 
