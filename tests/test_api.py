@@ -362,6 +362,51 @@ def test_stress_preset_and_custom(api):
                        json={"scenario_id": "meteor"}).status_code == 422
 
 
+def test_stress_scenario_stays_until_reset_and_runs_reopen_from_the_audit_trail(api):
+    client, _ = api
+    _, p = setup_portfolio(client)
+    alice, url = as_("alice"), f"/portfolios/{p['id']}/stress"
+    assert client.get(f"{url}/current", headers=alice).json() == {"run": None}
+    preset = client.post(url, headers=alice, json={"scenario_id": "broad_selloff"}).json()
+    body = {"sector_shocks": {"Technology": -0.3}, "default_shock": -0.05,
+            "asset_class_shocks": {}, "description": "Chip supply shock"}
+    custom = client.post(url, headers=alice, json=body).json()
+    assert preset["run_id"] and custom["run_id"] and preset["run_id"] != custom["run_id"]
+
+    # The latest run is the current scenario, with the inputs to refill the fields.
+    current = client.get(f"{url}/current", headers=alice).json()["run"]
+    assert current["run_id"] == custom["run_id"] and current["inputs"]["sector_shocks"] == {"Technology": -0.3}
+    assert current["result"]["portfolio_return"] == custom["portfolio_return"]
+
+    # The audit trail says what each scenario was and links to the run.
+    rows = client.get(f"/audit?portfolio_id={p['id']}", headers=alice).json()
+    stress_rows = [r for r in rows if r["event"] == "stress"]
+    assert [r["run_id"] for r in stress_rows] == [custom["run_id"], preset["run_id"]]
+    assert stress_rows[0]["scenario"] == {
+        "id": "custom", "label": "Custom scenario", "source": "adviser",
+        "description": "Chip supply shock", "sector_shocks": {"Technology": -0.3},
+        "asset_class_shocks": {}, "default_shock": -0.05}
+    assert stress_rows[1]["scenario"]["id"] == "broad_selloff" and stress_rows[1]["scenario"]["label"]
+    assert "sector_shocks" not in stress_rows[1]["scenario"]
+    opened = client.get(f"{url}/runs/{preset['run_id']}", headers=alice).json()["run"]
+    assert opened["inputs"]["scenario_id"] == "broad_selloff"
+    assert opened["result"]["portfolio_return"] == preset["portfolio_return"]
+    assert client.get(f"{url}/runs/nope", headers=alice).status_code == 404
+
+    # Reset clears the current scenario (logged once); runs stay reopenable.
+    assert client.post(f"{url}/reset", headers=alice).json() == {"run": None}
+    client.post(f"{url}/reset", headers=alice)
+    assert client.get(f"{url}/current", headers=alice).json() == {"run": None}
+    rows = client.get(f"/audit?portfolio_id={p['id']}", headers=alice).json()
+    assert [r["event"] for r in rows].count("stress_reset") == 1
+    assert "scenario" not in rows[0] and rows[0]["event"] == "stress_reset"
+    assert client.get(f"{url}/runs/{custom['run_id']}", headers=alice).status_code == 200
+    bob = as_("bob")
+    assert client.get(f"{url}/current", headers=bob).status_code == 404
+    assert client.get(f"{url}/runs/{custom['run_id']}", headers=bob).status_code == 404
+    assert client.post(f"{url}/reset", headers=bob).status_code == 404
+
+
 def test_questionnaire_scores_on_save_and_checks_the_portfolio(api):
     client, _ = api
     c, p = setup_portfolio(client)

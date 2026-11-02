@@ -1,57 +1,127 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Bar, ErrorNote, Field, Loading, Panel, StatCard } from "../../components/ui";
 import { useApi } from "../../lib/api";
-import { assetClassLabel, lossPct, money, pct, signed } from "../../lib/format";
-import type { Scenario, ScenarioSuggestion, StressResult } from "../../lib/types";
+import { assetClassLabel, dateTime, lossPct, money, pct, signed } from "../../lib/format";
+import type { Scenario, ScenarioSuggestion, StressResult, StressRun } from "../../lib/types";
 import type { Workspace } from "../ClientWorkspace";
+
+/** Everything the Stress test tab shows: the custom scenario's fields, any AI suggestion
+ *  and the last result. It lives in the query cache per portfolio, so it stays put when
+ *  the adviser switches tabs, and starts from the latest logged run after a reload, until
+ *  the adviser resets the scenario. */
+export interface StressState {
+  custom: Record<string, string>;
+  classCustom: Record<string, string>;
+  other: string;
+  description: string;
+  open: boolean;
+  suggestion: ScenarioSuggestion | null;
+  result: StressResult | null;
+  /** When the scenario was reopened from the audit trail, that run's time. */
+  openedFrom?: string | null;
+}
+
+export const EMPTY_STRESS: StressState = {
+  custom: {}, classCustom: {}, other: "-10", description: "", open: false, suggestion: null, result: null,
+};
+
+// Fractions from the API shown as editable percentages (display only).
+const asInput = (v: number) => String(+(v * 100).toFixed(2));
+const asInputs = (d: Record<string, number> | undefined) =>
+  Object.fromEntries(Object.entries(d ?? {}).map(([k, v]) => [k, asInput(v)]));
+
+/** The tab's state for a logged run: a preset shows its result with the fields as they
+ *  were; a custom run refills the fields (and its AI suggestion) it was run with. */
+export function stateFromRun(run: StressRun, base: StressState = EMPTY_STRESS): StressState {
+  const i = run.inputs;
+  if (i.scenario_id) return { ...base, result: run.result };
+  return {
+    custom: asInputs(i.sector_shocks), classCustom: asInputs(i.asset_class_shocks),
+    other: asInput(i.default_shock ?? 0), description: i.description ?? "", open: true,
+    suggestion: i.suggested ?? null, result: run.result,
+  };
+}
 
 export default function StressTab({ ws }: { ws: Workspace }) {
   const api = useApi();
+  const qc = useQueryClient();
+  const pid = ws.portfolio.id;
   const scenarios = useQuery({ queryKey: ["scenarios"], queryFn: () => api<Scenario[]>("/stress/scenarios") });
+  const current = useQuery({
+    queryKey: ["stress-current", pid], staleTime: Infinity,
+    queryFn: () => api<{ run: StressRun | null }>(`/portfolios/${pid}/stress/current`),
+  });
+  const ui = useQuery<StressState>({ queryKey: ["stress-ui", pid], queryFn: () => EMPTY_STRESS, enabled: false, staleTime: Infinity });
+  const state: StressState = ui.data ?? (current.data?.run ? stateFromRun(current.data.run) : EMPTY_STRESS);
+  const update = (patch: Partial<StressState>) =>
+    qc.setQueryData<StressState>(["stress-ui", pid], (prev) => ({ ...(prev ?? state), ...patch }));
+  const { custom, classCustom, other, description, open, suggestion } = state;
+
   const run = useMutation({
     mutationFn: (body: { scenario_id?: string; sector_shocks?: Record<string, number>; default_shock?: number;
                          asset_class_shocks?: Record<string, number>; description?: string;
                          suggested?: ScenarioSuggestion | null }) =>
-      api<StressResult>(`/portfolios/${ws.portfolio.id}/stress`, { json: body }),
+      api<StressResult>(`/portfolios/${pid}/stress`, { json: body }),
+    onSuccess: (result) => {
+      update({ result, openedFrom: null });
+      qc.invalidateQueries({ queryKey: ["audit", pid] });
+    },
+  });
+  const [confirmReset, setConfirmReset] = useState(false);
+  const reset = useMutation({
+    mutationFn: () => api<{ run: null }>(`/portfolios/${pid}/stress/reset`, { json: {} }),
+    onSuccess: () => {
+      setConfirmReset(false);
+      run.reset();
+      suggest.reset();
+      qc.setQueryData(["stress-current", pid], { run: null });
+      qc.setQueryData<StressState>(["stress-ui", pid], EMPTY_STRESS);
+      qc.invalidateQueries({ queryKey: ["audit", pid] });
+    },
   });
   // Holdings with no sector take the "all other sectors" shock; "Unclassified" isn't a sector to shock.
   const sectors = Object.keys(ws.profile.sector_exposure).filter((s) => s !== "Unclassified");
-  // Custom shocks are typed as percentages and sent as fractions; the engine applies them.
-  const [custom, setCustom] = useState<Record<string, string>>({});
-  const [other, setOther] = useState("-10");
   // Bonds and preferreds held in this portfolio can be given their own move; cash holds
   // its value unless given one. Blank means "use the sector / all other value".
   const classes = Object.keys(ws.profile.asset_class_exposure ?? {}).filter((c) => ["fixed_income", "preferred", "cash"].includes(c));
-  const [classCustom, setClassCustom] = useState<Record<string, string>>({});
 
   // A described scenario: the AI suggests shocks into the fields below, the adviser edits
   // them, and the engine computes the result from whatever is in the fields at Run.
   const [params, setParams] = useSearchParams();
-  const [description, setDescription] = useState("");
-  const [open, setOpen] = useState(false);
-  const [suggestion, setSuggestion] = useState<ScenarioSuggestion | null>(null);
   useEffect(() => {
     // A question handed over from the Assistant ("Open in Stress test").
     const handed = params.get("ask");
     if (handed) {
-      setDescription(handed);
-      setOpen(true);
+      update({ description: handed, open: true });
       params.delete("ask");
       setParams(params, { replace: true });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params, setParams]);
-  // Fractions from the API shown as editable percentages (display only).
-  const asInput = (v: number) => String(+(v * 100).toFixed(2));
+
+  // A run opened from the audit trail replaces what's on screen with that run.
+  const wanted = params.get("run");
+  const opened = useQuery({
+    queryKey: ["stress-run", pid, wanted], enabled: Boolean(wanted), staleTime: Infinity,
+    queryFn: () => api<{ run: StressRun }>(`/portfolios/${pid}/stress/runs/${wanted}`),
+  });
+  useEffect(() => {
+    if (!wanted || !opened.data) return;
+    qc.setQueryData<StressState>(["stress-ui", pid], { ...stateFromRun(opened.data.run, state), openedFrom: opened.data.run.timestamp });
+    run.reset();
+    params.delete("run");
+    setParams(params, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wanted, opened.data]);
+
   const suggest = useMutation({
-    mutationFn: () => api<ScenarioSuggestion>(`/portfolios/${ws.portfolio.id}/stress/suggest`, { json: { description } }),
-    onSuccess: (s) => {
-      setSuggestion(s);
-      setCustom(Object.fromEntries(Object.entries(s.sector_shocks).map(([k, v]) => [k, asInput(v)])));
-      setClassCustom(Object.fromEntries(Object.entries(s.asset_class_shocks).map(([k, v]) => [k, asInput(v)])));
-      setOther(asInput(s.default_shock));
-    },
+    mutationFn: () => api<ScenarioSuggestion>(`/portfolios/${pid}/stress/suggest`, { json: { description } }),
+    onSuccess: (s) => update({
+      suggestion: s, custom: asInputs(s.sector_shocks), classCustom: asInputs(s.asset_class_shocks),
+      other: asInput(s.default_shock),
+    }),
   });
 
   const runCustom = () => run.mutate({
@@ -63,26 +133,50 @@ export default function StressTab({ ws }: { ws: Workspace }) {
     description,
     suggested: suggestion,
   });
+  const result = state.result;
+  const changed = JSON.stringify({ ...state, openedFrom: undefined }) !== JSON.stringify({ ...EMPTY_STRESS, openedFrom: undefined });
 
-  if (scenarios.isLoading) return <Loading />;
+  if (scenarios.isLoading || current.isLoading || opened.isLoading) return <Loading />;
   return (
     <div className="space-y-5">
+      <ErrorNote error={opened.error ?? current.error} />
+      {(state.openedFrom || changed) && (
+        confirmReset ? (
+          <div className="border border-rule bg-card px-3 py-2 text-sm" role="alertdialog" aria-label="Reset the scenario">
+            <div>Reset the scenario? The fields, any AI suggestion and the result are cleared. Every run stays in the audit trail.</div>
+            <ErrorNote error={reset.error} />
+            <div className="mt-2 flex gap-2">
+              <button className="btn btn-dark" disabled={reset.isPending} onClick={() => reset.mutate()}>
+                {reset.isPending ? "Resetting…" : "Reset scenario"}
+              </button>
+              <button className="btn" onClick={() => { reset.reset(); setConfirmReset(false); }}>Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-sm text-muted">
+              {state.openedFrom ? `Showing the stress test run ${dateTime(state.openedFrom)}, opened from the audit trail.` : ""}
+            </span>
+            <button className="btn" disabled={run.isPending} onClick={() => setConfirmReset(true)}>↺ Reset scenario</button>
+          </div>
+        )
+      )}
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {scenarios.data?.map((s) => (
           <button key={s.id} onClick={() => run.mutate({ scenario_id: s.id })}
-                  className={`border bg-card p-4 text-left hover:border-gold ${run.data?.scenario.id === s.id ? "border-gold bg-gold-soft" : "border-rule"}`}>
+                  className={`border bg-card p-4 text-left hover:border-gold ${result?.scenario.id === s.id ? "border-gold bg-gold-soft" : "border-rule"}`}>
             <div className="font-serif text-lg">{s.label}</div>
             <div className="mt-1 text-xs text-muted">{s.description}</div>
           </button>
         ))}
       </div>
 
-      <details className="border border-rule bg-card p-4" open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
+      <details className="border border-rule bg-card p-4" open={open} onToggle={(e) => { const o = (e.target as HTMLDetailsElement).open; if (o !== open) update({ open: o }); }}>
         <summary className="cursor-pointer font-serif text-lg">Custom scenario</summary>
         <Field label="Describe a scenario (optional)">
           <textarea className="input min-h-[80px]" value={description} maxLength={1000}
                     placeholder="e.g. China blockades Taiwan; chip supply shock and a flight to safety."
-                    onChange={(e) => setDescription(e.target.value)} />
+                    onChange={(e) => update({ description: e.target.value })} />
         </Field>
         <button className="btn mt-2" disabled={!description.trim() || suggest.isPending} onClick={() => suggest.mutate()}>
           {suggest.isPending ? "Suggesting…" : "Suggest shocks with AI"}
@@ -94,17 +188,17 @@ export default function StressTab({ ws }: { ws: Workspace }) {
           {sectors.map((s) => (
             <Field key={s} label={s}>
               <input className="input" inputMode="decimal" placeholder="%" value={custom[s] ?? ""}
-                     onChange={(e) => setCustom({ ...custom, [s]: e.target.value })} />
+                     onChange={(e) => update({ custom: { ...custom, [s]: e.target.value } })} />
             </Field>
           ))}
           {classes.map((c) => (
             <Field key={c} label={`${assetClassLabel(c)} (all)`}>
               <input className="input" inputMode="decimal" placeholder={c === "cash" ? "0 (holds value)" : "%"}
-                     value={classCustom[c] ?? ""} onChange={(e) => setClassCustom({ ...classCustom, [c]: e.target.value })} />
+                     value={classCustom[c] ?? ""} onChange={(e) => update({ classCustom: { ...classCustom, [c]: e.target.value } })} />
             </Field>
           ))}
           <Field label="All other holdings">
-            <input className="input" inputMode="decimal" value={other} onChange={(e) => setOther(e.target.value)} />
+            <input className="input" inputMode="decimal" value={other} onChange={(e) => update({ other: e.target.value })} />
           </Field>
         </div>
         <button className="btn btn-dark mt-3" onClick={runCustom} disabled={run.isPending}>Run custom scenario</button>
@@ -112,7 +206,7 @@ export default function StressTab({ ws }: { ws: Workspace }) {
 
       <ErrorNote error={run.error} />
       {run.isPending && <Loading what="Applying the scenario" />}
-      {run.data && <Result r={run.data} />}
+      {result && !run.isPending && <Result r={result} />}
     </div>
   );
 }

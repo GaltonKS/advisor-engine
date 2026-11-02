@@ -202,9 +202,29 @@ export interface StressResult {
   asset_classes?: { asset_class: string; weight: number; shock: number; contribution: number }[];
   positions: { ticker: string; sector: string; asset_class?: string; weight: number; shock: number; contribution: number; value_change: number }[];
   basis: string;
+  run_id?: string | null;
   /** Where the assumptions came from; results are always engine output. */
   assumptions?: { source: "preset" | "adviser" | "ai_suggested" | "ai_suggested_edited";
                   description?: string; label?: string; model?: string };
+}
+
+export interface StressScenarioSummary {
+  id: string;
+  label: string | null;
+  source: "preset" | "adviser" | "ai_suggested" | "ai_suggested_edited" | null;
+  description?: string;
+  sector_shocks?: Record<string, number>;
+  asset_class_shocks?: Record<string, number>;
+  default_shock?: number;
+}
+
+/** A logged stress run: what was entered and what the engine returned. */
+export interface StressRun {
+  run_id: string | null;
+  timestamp: string;
+  inputs: { scenario_id?: string | null; sector_shocks?: Record<string, number>; default_shock?: number;
+            asset_class_shocks?: Record<string, number>; description?: string; suggested?: ScenarioSuggestion | null };
+  result: StressResult;
 }
 
 /** AI-suggested shocks for a described scenario: assumptions to review, never results. */
@@ -275,6 +295,10 @@ export interface AuditRow {
   portfolio_id: string | null;
   draft_id?: string | null;
   turn_id?: string | null;
+  /** Stress runs: the run's id (absent on runs logged before ids existed) and what the
+   *  scenario assumed: a preset's name, or a custom scenario's description and shocks. */
+  run_id?: string | null;
+  scenario?: StressScenarioSummary;
   user_message: string | null;
   blocked: boolean | null;
   verified: boolean | null;

@@ -23,6 +23,7 @@ const EVENT_LABELS: Record<string, string> = {
   stress: "Stress tests",
   scenario_suggested: "AI scenario suggestions",
   draft_approved: "Client explanations approved",
+  stress_reset: "Stress scenarios reset",
   chat_cleared: "New Galton AI chats started",
   draft_revised: "Client explanations edited after approval",
   questionnaire_saved: "Risk questionnaires saved",

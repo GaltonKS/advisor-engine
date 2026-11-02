@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { ASSISTANT_NAME, Empty, ErrorNote, Loading, Panel } from "../../components/ui";
 import { useApi } from "../../lib/api";
-import { dateTime } from "../../lib/format";
-import type { AuditRow } from "../../lib/types";
-import type { Workspace } from "../ClientWorkspace";
+import { assetClassLabel, dateTime, shockPct } from "../../lib/format";
+import type { AuditRow, StressScenarioSummary } from "../../lib/types";
+import type { TabId, Workspace } from "../ClientWorkspace";
 
 export default function AuditTab({ ws }: { ws: Workspace }) {
   const api = useApi();
@@ -48,17 +48,46 @@ export function conversationLink(r: AuditRow): Record<string, string> | null {
   return null;
 }
 
-/** An audit entry's description, linked to its place in the Galton AI conversation
- *  when it has one (used by the Audit trail and Review prep's Recent activity). */
+/** Where an audit entry can be reopened: its exchange in Galton AI, or its run in the
+ *  Stress test tab. Stress runs logged before run ids existed have no link. */
+export function activityLink(r: AuditRow): { tab: TabId; params: Record<string, string>; title: string } | null {
+  if (r.event === "stress") {
+    return r.run_id ? { tab: "stress", params: { run: r.run_id }, title: "Reopen this scenario in the Stress test tab" } : null;
+  }
+  const params = conversationLink(r);
+  return params ? { tab: "assistant", params, title: `Show this in the ${ASSISTANT_NAME} conversation` } : null;
+}
+
+/** An audit entry's description, linked to where it happened when it can be reopened
+ *  (used by the Audit trail and Review prep's Recent activity). */
 export function ActivityLink({ r, ws }: { r: AuditRow; ws: Workspace }) {
-  const link = conversationLink(r);
+  const link = activityLink(r);
   if (!link) return <>{describe(r)}</>;
   return (
     <button className="text-left underline decoration-rule underline-offset-2 hover:text-navy hover:decoration-navy"
-            title="Show this in the Galton AI conversation" onClick={() => ws.go("assistant", undefined, link)}>
+            title={link.title} onClick={() => ws.go(link.tab, undefined, link.params)}>
       {describe(r)} <span aria-hidden className="text-faint">→</span>
     </button>
   );
+}
+
+const SOURCE_NOTE: Record<string, string> = {
+  ai_suggested: "AI-suggested", ai_suggested_edited: "AI-suggested, edited",
+};
+
+/** A stress run in words: a preset's name, or a custom scenario's description and every
+ *  shock the adviser entered (assumptions, formatted; no results). */
+export function describeScenario(s: StressScenarioSummary): string {
+  if (s.id !== "custom") return `Stress test: ${s.label ?? s.id} (preset)`;
+  const kind = ["custom", s.source && SOURCE_NOTE[s.source]].filter(Boolean).join(", ");
+  const name = s.label && s.label !== "Custom scenario" ? ` ${s.label}` : "";
+  const shocks = [
+    ...Object.entries(s.sector_shocks ?? {}).map(([k, v]) => `${k} ${shockPct(v)}`),
+    ...Object.entries(s.asset_class_shocks ?? {}).map(([k, v]) => `${assetClassLabel(k)} ${shockPct(v)}`),
+    `all other ${shockPct(s.default_shock ?? 0)}`,
+  ];
+  const desc = s.description?.trim() ? ` “${s.description.trim()}”` : "";
+  return `Stress test (${kind}):${name}${desc} · ${shocks.join(", ")}`;
 }
 
 /** One line describing an audit entry. */
@@ -70,7 +99,8 @@ export function describe(a: AuditRow): string {
     case "draft_revised": return "Client explanation edited and re-approved";
     case "what_if": return "What-if run";
     case "compare": return "Versions compared";
-    case "stress": return "Stress scenario run";
+    case "stress": return a.scenario ? describeScenario(a.scenario) : "Stress scenario run";
+    case "stress_reset": return "Stress test scenario reset";
     case "questionnaire_saved": return "Risk questionnaire saved";
     case "portfolio_saved": return "Edited holdings saved as a new version";
     default: return a.event ?? "Event";

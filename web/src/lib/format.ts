@@ -13,6 +13,9 @@ export const num = (x: number, digits = 1): string => x.toFixed(digits);
 export const signed = (text: string, x: number): string =>
   x > 0 ? `+${text}` : x < 0 ? `−${text.replace("-", "")}` : text;
 
+/** A scenario's assumed move, as entered (up to two decimals, sign shown): −30%, +2.5%. */
+export const shockPct = (x: number): string => signed(`${+(x * 100).toFixed(2)}%`, x);
+
 export const money = (x: number): string =>
   x.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
