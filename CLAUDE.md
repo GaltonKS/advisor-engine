@@ -270,6 +270,11 @@ every turn --append_audit--> data/audit/audit.jsonl
   `draft_id`), so it stays in Galton AI until the next question; the Client report tab
   lists every draft for the portfolio (`?report=<draft id>`) and edits them with the
   same `DraftEditor`.
+- **New chat** (`DELETE /portfolios/{id}/messages`) clears the portfolio's conversation,
+  both the messages shown and the model's `history`, and logs `chat_cleared` (only
+  when there was something to clear). Old turns are not kept in the conversation:
+  their full records stay in the audit log, and drafts stay in the Client report.
+  Audit-trail links to a cleared turn show "isn't in this chat".
 - Responses never include server file paths (see `_tool_view`).
 - Clients can be renamed (`PATCH /clients/{id}`) and deleted (`DELETE /clients/{id}`).
   Deleting is a soft delete (`deleted_at`): `get_client` / `list_clients` skip the row and
