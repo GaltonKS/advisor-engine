@@ -53,6 +53,7 @@ export default function AssistantTab({ ws }: { ws: Workspace }) {
   const messages = useQuery({ queryKey: ["messages", pid], queryFn: () => api<ChatMessage[]>(`/portfolios/${pid}/messages`) });
   const drafts = useQuery({ queryKey: ["drafts", pid], queryFn: () => api<Draft[]>(`/portfolios/${pid}/drafts`) });
   const [text, setText] = useState("");
+  const [confirmNew, setConfirmNew] = useState(false);
   // Derived from the saved conversation, not local state, so leaving the tab doesn't lose it.
   const draftId = currentDraftId(messages.data);
   const draft = draftId ? drafts.data?.find((d) => d.id === draftId) : undefined;
@@ -73,6 +74,19 @@ export default function AssistantTab({ ws }: { ws: Workspace }) {
     onSuccess: (reply) => {
       qc.invalidateQueries({ queryKey: ["messages", pid] });
       if (reply.draft_id) qc.invalidateQueries({ queryKey: ["drafts", pid] });
+    },
+  });
+
+  // A new chat clears the conversation (and what the model remembers). Every question and
+  // reply stays in the audit trail, and drafts stay in the Client report.
+  const newChat = useMutation({
+    mutationFn: () => api<{ cleared: number }>(`/portfolios/${pid}/messages`, { method: "DELETE" }),
+    onSuccess: () => {
+      setConfirmNew(false);
+      if (focusing) clearFocus();
+      qc.setQueryData<ChatMessage[]>(["messages", pid], []);
+      qc.invalidateQueries({ queryKey: ["messages", pid] });
+      qc.invalidateQueries({ queryKey: ["audit", pid] });
     },
   });
 
@@ -110,12 +124,31 @@ export default function AssistantTab({ ws }: { ws: Workspace }) {
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
       <div>
+        {(messages.data?.length ?? 0) > 0 && (
+          confirmNew ? (
+            <div className="mb-2 border border-rule bg-card px-3 py-2 text-sm" role="alertdialog" aria-label="Start a new chat">
+              <div>Start a new chat? This conversation is cleared from <GaltonName />, which starts again with no memory of it.
+                Every question and reply stays in the audit trail, and drafts stay in the Client report.</div>
+              <ErrorNote error={newChat.error} />
+              <div className="mt-2 flex gap-2">
+                <button className="btn btn-dark" disabled={newChat.isPending} onClick={() => newChat.mutate()}>
+                  {newChat.isPending ? "Clearing…" : "Start new chat"}
+                </button>
+                <button className="btn" onClick={() => { newChat.reset(); setConfirmNew(false); }}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <div className="mb-2 flex justify-end">
+              <button className="btn" disabled={ask.isPending} onClick={() => setConfirmNew(true)}>+ New chat</button>
+            </div>
+          )
+        )}
         {focusing && messages.data && (
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2 border-l-[3px] border-navy bg-navy-soft px-3 py-2 text-sm">
             <span>
               {focused.length > 0
                 ? "Showing the exchange you opened."
-                : "That exchange isn't in this version's conversation."}
+                : "That exchange isn't in this chat (it may have been cleared with New chat). Its record is in the audit trail."}
             </span>
             <button className="text-xs underline" onClick={clearFocus}>Show latest</button>
           </div>

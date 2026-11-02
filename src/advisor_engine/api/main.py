@@ -667,6 +667,20 @@ def create_app(settings: Settings | None = None, store=None, auth_admin=None) ->
         own_portfolio(c, portfolio_id)
         return c.db.get_conversation(c.adv["firm_id"], portfolio_id)["messages"]
 
+    @app.delete("/portfolios/{portfolio_id}/messages")
+    def new_chat(portfolio_id: str, c: Ctx = Depends(ctx)) -> dict:
+        """Start a new Galton AI chat: clear the conversation and the model's history.
+        Nothing is lost: every turn's question, reply and tool calls are already in the
+        audit log, and drafts stay in the Client report."""
+        portfolio = own_portfolio(c, portfolio_id)
+        conversation = c.db.get_conversation(c.adv["firm_id"], portfolio_id)
+        n = len(conversation["messages"])
+        if n or conversation["history"]:
+            c.db.save_conversation(c.adv["firm_id"], portfolio_id, {"history": [], "messages": []})
+            log(c, "chat_cleared", client_id=portfolio["client_id"], portfolio_id=portfolio_id,
+                inputs={"messages": n})
+        return {"cleared": n}
+
     @app.post("/portfolios/{portfolio_id}/turns")
     def ask(portfolio_id: str, body: TurnIn, c: Ctx = Depends(ctx)) -> dict:
         fid = c.adv["firm_id"]

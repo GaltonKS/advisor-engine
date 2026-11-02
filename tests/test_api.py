@@ -198,6 +198,30 @@ def test_edited_draft_with_invented_figure_is_not_approved(api):
     assert bad.status_code == 422 and "91.2%" in bad.json()["detail"]["unmatched"]
 
 
+def test_new_chat_clears_the_conversation_but_keeps_drafts_and_audit(api):
+    client, store = api
+    r = make_draft(client)
+    portfolio = next(d for d in client.get("/clients", headers=as_("alice")).json())
+    pid = client.get(f"/clients/{portfolio['id']}", headers=as_("alice")).json()["portfolios"][-1]["id"]
+    client.post(f"/portfolios/{pid}/turns", json={"message": "risk?"}, headers=as_("alice"))
+    assert len(client.get(f"/portfolios/{pid}/messages", headers=as_("alice")).json()) == 4
+    out = client.delete(f"/portfolios/{pid}/messages", headers=as_("alice"))
+    assert out.status_code == 200 and out.json() == {"cleared": 4}
+    assert client.get(f"/portfolios/{pid}/messages", headers=as_("alice")).json() == []
+    assert [d["id"] for d in client.get(f"/portfolios/{pid}/drafts", headers=as_("alice")).json()] == [r["draft_id"]]
+    audit = client.get(f"/audit?portfolio_id={pid}", headers=as_("alice")).json()
+    assert audit[0]["event"] == "chat_cleared"
+    assert sum(a["event"] == "turn" for a in audit) == 2  # the cleared turns stay on record
+    # The model starts fresh too, and an empty chat clears without another audit row.
+    again = client.post(f"/portfolios/{pid}/turns", json={"message": "risk?"}, headers=as_("alice")).json()
+    assert again["content"]
+    client.delete(f"/portfolios/{pid}/messages", headers=as_("alice"))
+    client.delete(f"/portfolios/{pid}/messages", headers=as_("alice"))
+    audit = client.get(f"/audit?portfolio_id={pid}", headers=as_("alice")).json()
+    assert sum(a["event"] == "chat_cleared" for a in audit) == 2
+    assert client.delete(f"/portfolios/{pid}/messages", headers=as_("bob")).status_code == 404
+
+
 # --- firm isolation ------------------------------------------------------------------------
 
 def test_another_firm_cannot_see_or_use_anything(api):
