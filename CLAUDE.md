@@ -60,6 +60,7 @@ src/advisor_engine/
         cache.py       PriceCache: month-end closes per vendor/symbol on disk, 24h freshness
         supabase_cache.py SupabasePriceCache: same interface in Postgres (market schema), shared
         fmp.py         FMPSource: dividend-adjusted daily closes from FMP's stable API
+        twelvedata.py  TwelveDataSource: split- and dividend-adjusted daily closes (time_series, adjust=all)
     assistant/
         _paths.py      REPO_ROOT, DATA_DIR, DEFAULT_HOLDINGS, AUDIT_PATH
         tools.py       tool schemas (TOOLS: risk profile, holdings, what-if, stress, show_chart), execute_tool(),
@@ -149,7 +150,7 @@ every turn --append_audit--> data/audit/audit.jsonl
   `data/audit/`. Keep all file access going through `resolve_holdings_path`.
 - Market data comes only from `data.get_market_data()` (used by `get_returns`,
   `get_market_returns` and `engine_profile` in `tools.py`). It is synthetic unless
-  `ADVISOR_MARKET_DATA=fmp` (see "Real market data" below). Every profile carries its
+  `ADVISOR_MARKET_DATA=fmp` or `td` (see "Real market data" below). Every profile carries its
   `returns_source`, a market series (the synthetic factor, or `ADVISOR_MARKET_INDEX`) so
   beta and correlation to the market are always present, and with real data
   `returns_as_of`. The API uses `engine_profile` too, so tool and screen figures agree.
@@ -512,7 +513,11 @@ Client report (not yet charted):
   test it with `httpx.MockTransport` (tests never hit the network). Error messages are
   shown to advisers: never include the API key or the request URL (FMP puts the key in
   the query string), and raise from `None` so the httpx cause isn't chained.
-- Config: `ADVISOR_MARKET_DATA` (synthetic | fmp), `FMP_API_KEY`, `ADVISOR_MARKET_INDEX`
+- Twelve Data (`twelvedata.py`) reports errors as HTTP 200 with `{"status": "error",
+  "code": ...}`: 401 bad key, 403 `NotInPlan`, 400/404 `SymbolNotFound`, 429 rate limit.
+  Symbols use a dot for share classes (BRK.B); FMP uses a dash.
+- Config: `ADVISOR_MARKET_DATA` (synthetic | fmp | twelvedata, alias `td`), `FMP_API_KEY`,
+  `TWELVE_DATA_API_KEY` (the key for the selected vendor only), `ADVISOR_MARKET_INDEX`
   (default SPY), `ADVISOR_MARKET_CACHE` (default `data/market_cache`). The key is a
   secret: Render/`.env` only, never `VITE_*`, never logged. `_env.load_env()` reads a
   local `.env` (cwd, then repo root) once per process without overriding real variables;

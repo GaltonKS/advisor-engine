@@ -402,3 +402,99 @@ def test_env_file_configures_market_data(monkeypatch, tmp_path):
     md = data.get_market_data()
     assert md.returns_source == "FMP" and md.market_source == "SPY"
     assert md.source._key == "from-file"
+
+
+# --- Twelve Data adapter ------------------------------------------------------------------
+
+from advisor_engine.data.base import NotInPlan  # noqa: E402
+from advisor_engine.data.twelvedata import TwelveDataSource, td_symbol  # noqa: E402
+
+
+def td(handler):
+    return TwelveDataSource(KEY, client=httpx.Client(transport=httpx.MockTransport(handler)))
+
+
+def td_body(rows):
+    return {"meta": {"symbol": "X", "interval": "1day"}, "status": "ok",
+            "values": [{"datetime": d, "close": str(c)} for d, c in rows]}
+
+
+def test_td_request_and_response():
+    seen = {}
+
+    def handler(request):
+        seen.update(path=request.url.path, params=dict(request.url.params))
+        return httpx.Response(200, json=td_body([("2026-10-31", 101.5), ("2026-10-30", 100.0)]))
+
+    s = td(handler).daily_closes("brk-b", date(2016, 1, 1))
+    assert seen["path"] == "/time_series"
+    assert seen["params"] == {"symbol": "BRK.B", "interval": "1day", "start_date": "2016-01-01",
+                              "adjust": "all", "outputsize": "5000", "apikey": KEY}
+    assert list(s) == [100.0, 101.5]  # adjusted closes as floats, oldest first
+
+
+@pytest.mark.parametrize("body, exc", [
+    ({"status": "error", "code": 404, "message": "symbol not found"}, SymbolNotFound),
+    ({"status": "error", "code": 400, "message": "**symbol** not found: ZZZ"}, SymbolNotFound),
+    ({"status": "error", "code": 403, "message": "available starting with Grow plan"}, NotInPlan),
+    ({"status": "ok", "values": []}, SymbolNotFound),
+])
+def test_td_symbol_errors(body, exc):
+    with pytest.raises(exc):
+        td(lambda r: httpx.Response(200, json=body)).daily_closes("ZZZ", date(2016, 1, 1))
+
+
+@pytest.mark.parametrize("response, match", [
+    (httpx.Response(200, json={"status": "error", "code": 401,
+                               "message": f"apikey {KEY} is incorrect"}), "check TWELVE_DATA_API_KEY"),
+    (httpx.Response(401), "check TWELVE_DATA_API_KEY"),
+    (httpx.Response(200, json={"status": "error", "code": 429, "message": "credits"}), "rate limit"),
+    (httpx.Response(500), "code 500"),
+    (httpx.Response(200, text="<html>"), "isn't JSON"),
+])
+def test_td_errors_never_show_the_key(response, match):
+    with pytest.raises(data.DataSourceError, match=match) as e:
+        td(lambda r: response).daily_closes("AAA", date(2016, 1, 1))
+    assert KEY not in str(e.value)
+
+
+def test_td_network_error_never_shows_the_key():
+    def handler(request):
+        raise httpx.ConnectError(f"failed for {request.url}")
+
+    with pytest.raises(data.DataSourceError, match="Couldn't reach Twelve Data") as e:
+        td(handler).daily_closes("AAA", date(2016, 1, 1))
+    assert KEY not in str(e.value) and e.value.__cause__ is None
+
+
+def test_td_symbols():
+    assert [td_symbol(t) for t in ("aapl", "BRK-B", "BF/B", " spy ")] == ["AAPL", "BRK.B", "BF.B", "SPY"]
+
+
+def test_td_end_to_end_profile(tmp_path, monkeypatch):
+    histories = {s: daily(s) for s in ("AAA", "BBB", "SPY")}
+
+    def handler(request):
+        sym = request.url.params["symbol"]
+        rows = [(d.strftime("%Y-%m-%d"), float(v))
+                for d, v in histories.get(sym, pd.Series(dtype=float)).items()]
+        return httpx.Response(200, json=td_body(rows[::-1]))
+
+    md = PriceHistoryData(td(handler), PriceCache(tmp_path), "SPY", today=lambda: TODAY)
+    monkeypatch.setattr(tools, "get_market_data", lambda: md)
+    p = engine_profile(frame("AAA", "BBB"))
+    assert p["returns_source"] == "Twelve Data" and p["returns_as_of"] == "2026-10-31"
+    json.dumps(p)
+
+
+@pytest.mark.parametrize("mode", ["td", "TD", "twelvedata"])
+def test_td_configuration(monkeypatch, tmp_path, mode):
+    monkeypatch.setenv("ADVISOR_MARKET_DATA", mode)
+    monkeypatch.setenv("ADVISOR_MARKET_CACHE", str(tmp_path))
+    monkeypatch.delenv("TWELVE_DATA_API_KEY", raising=False)
+    monkeypatch.setenv("FMP_API_KEY", "not-this-one")
+    with pytest.raises(data.DataSourceError, match="TWELVE_DATA_API_KEY is not set"):
+        data.get_market_data()
+    monkeypatch.setenv("TWELVE_DATA_API_KEY", "k")
+    md = data.get_market_data()
+    assert md.returns_source == "Twelve Data" and md.source._key == "k"
