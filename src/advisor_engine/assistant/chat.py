@@ -11,6 +11,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .._env import load_env
 from . import prompts
 from .audit import append_audit, build_record
 from .numcheck import verify
@@ -60,11 +61,7 @@ class TurnResult:
 
 
 def _load_env() -> None:
-    try:
-        from dotenv import load_dotenv
-    except ImportError:
-        return
-    load_dotenv()
+    load_env()
 
 
 def llm_mode() -> str:

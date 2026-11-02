@@ -45,7 +45,9 @@ check and audit log. The assistant prints the active mode.
 
 ### Market data
 
-Returns are synthetic by default. To use real prices from Financial Modeling Prep, set:
+Returns are synthetic by default. To use real prices from Financial Modeling Prep, set
+these environment variables, either on the host (Render: Environment settings) or
+locally in `.env` (`cp .env.example .env`; the real environment wins over the file):
 
 | Variable | Value |
 |---|---|

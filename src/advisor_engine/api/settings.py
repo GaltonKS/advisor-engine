@@ -18,6 +18,7 @@ from datetime import date
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .._env import load_env
 from ..assistant._paths import DATA_DIR
 from ..assistant.chat import llm_mode
 
@@ -63,6 +64,7 @@ class Settings:
 
 
 def load_settings() -> Settings:
+    load_env()
     supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
     auth = os.environ.get("ADVISOR_AUTH", "").strip().lower() or (
         "supabase" if supabase_url else "dev"

@@ -7,7 +7,7 @@
     returns(holdings) -> DataFrame    returns per holding; columns = holdings tickers
     market(returns) -> Series         market index returns on the same periods
 
-Configured by environment variables:
+Configured by environment variables (from the host, or a local `.env`; see _env.py):
     ADVISOR_MARKET_DATA   synthetic (default) | fmp
     FMP_API_KEY           required for fmp; never logged or returned
     ADVISOR_MARKET_INDEX  market index symbol for real data (default SPY)
@@ -26,6 +26,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from .._env import load_env
 from ..synthetic import synthetic_market, synthetic_returns
 from .base import DataSourceError, PriceHistoryData, PriceSource, SymbolNotFound, as_of
 from .cache import PriceCache
@@ -51,6 +52,7 @@ class SyntheticData:
 
 
 def _settings() -> tuple[str, str, str, str, str]:
+    load_env()
     return (os.environ.get("ADVISOR_MARKET_DATA", "synthetic").strip().lower() or "synthetic",
             os.environ.get("FMP_API_KEY", "").strip(),
             os.environ.get("ADVISOR_MARKET_INDEX", DEFAULT_INDEX).strip().upper() or DEFAULT_INDEX,

@@ -382,3 +382,23 @@ def test_fmp_plan_limits_are_reported_per_symbol(response):
 
     with pytest.raises(NotInPlan):
         fmp(lambda r: response).daily_closes("SPY", date(2016, 1, 1))
+
+
+def test_env_file_configures_market_data(monkeypatch, tmp_path):
+    """FMP_API_KEY and friends can come from a local .env; the real environment wins."""
+    pytest.importorskip("dotenv")
+    from advisor_engine import _env
+
+    (tmp_path / ".env").write_text("ADVISOR_MARKET_DATA=fmp\nFMP_API_KEY=from-file\n"
+                                   f"ADVISOR_MARKET_CACHE={tmp_path}\nADVISOR_MARKET_INDEX=voo\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(_env, "REPO_ROOT", tmp_path / "none")
+    monkeypatch.setattr(_env, "_loaded", False)
+    monkeypatch.delenv("ADVISOR_NO_DOTENV")
+    for k in ("ADVISOR_MARKET_DATA", "FMP_API_KEY", "ADVISOR_MARKET_CACHE"):
+        monkeypatch.setenv(k, "")  # records the old value, so load_dotenv's writes are undone
+        monkeypatch.delenv(k)
+    monkeypatch.setenv("ADVISOR_MARKET_INDEX", "SPY")  # already set: the file can't override
+    md = data.get_market_data()
+    assert md.returns_source == "FMP" and md.market_source == "SPY"
+    assert md.source._key == "from-file"

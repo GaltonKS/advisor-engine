@@ -45,6 +45,7 @@ Requires Python >= 3.10.
 ```
 src/advisor_engine/
     __init__.py        __version__ (engine version recorded in every audit line)
+    _env.py            load_env(): local .env into os.environ, once, never overriding
     holdings.py        load/validate holdings CSV -> adds value and weight columns
     synthetic.py       market + sector (+ rates) factor model by asset class (stand-in for real data)
     risk.py            all risk math; risk_profile() -> RiskProfile.to_dict()
@@ -513,7 +514,11 @@ Client report (not yet charted):
   the query string), and raise from `None` so the httpx cause isn't chained.
 - Config: `ADVISOR_MARKET_DATA` (synthetic | fmp), `FMP_API_KEY`, `ADVISOR_MARKET_INDEX`
   (default SPY), `ADVISOR_MARKET_CACHE` (default `data/market_cache`). The key is a
-  secret: Render/`.env` only, never `VITE_*`, never logged.
+  secret: Render/`.env` only, never `VITE_*`, never logged. `_env.load_env()` reads a
+  local `.env` (cwd, then repo root) once per process without overriding real variables;
+  `data._settings`, `api.settings.load_settings` and `chat.llm_mode` call it. Tests set
+  `ADVISOR_NO_DOTENV=1` (conftest) so a developer's keys never reach the suite.
+  `.env.example` lists every variable.
 - `returns_as_of` is quoted as month and year ("to the end of October 2026"): years are
   not figures to the number check, days are. The prompt says so; keep it that way.
 - Caches implement `get_many(source, symbols)` / `put_many(source, {symbol: closes})`,
@@ -546,8 +551,6 @@ changes, since the audit log records it; tag releases in git (`git tag v0.1.0`).
 
 ## Known gaps
 
-- README mentions `cp .env.example .env`, but `.env.example` is not in the repo yet.
-  `.env` needs `ANTHROPIC_API_KEY` (and optionally `ADVISOR_LLM`, `ADVISOR_MODEL`).
 - Number check limits: spelled-out numbers aren't detected, coarse figures can match
   nearby values, and numbers the user typed aren't allowed unless a tool returned them.
 - Methodology provenance and data ownership are not yet documented.
