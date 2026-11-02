@@ -173,6 +173,23 @@ def test_approving_a_draft_records_who_approved(api):
     assert again.status_code == 409
 
 
+def test_an_approved_draft_can_be_revised_and_each_revision_is_checked_and_logged(api):
+    client, store = api
+    r = make_draft(client)
+    client.post(f"/drafts/{r['draft_id']}/approve", json={"text": r["content"]}, headers=as_("alice"))
+    revised = r["content"] + "\n\nWe will go through this together at our next meeting."
+    ok = client.post(f"/drafts/{r['draft_id']}/approve", json={"text": revised}, headers=as_("alice"))
+    assert ok.status_code == 200 and ok.json()["approved_text"] == revised
+    rec = audit_records(store, "alice", ok.json()["firm_id"])[-1]
+    assert rec["event"] == "draft_revised" and rec["previous_text"] == r["content"] and rec["edited"]
+    bad = client.post(f"/drafts/{r['draft_id']}/approve",
+                      json={"text": revised + " Expect 91.2% next year."}, headers=as_("alice"))
+    assert bad.status_code == 422
+    portfolio = ok.json()["portfolio_id"]
+    kept = client.get(f"/portfolios/{portfolio}/drafts", headers=as_("alice")).json()[0]
+    assert kept["approved_text"] == revised  # the rejected edit changed nothing
+
+
 def test_edited_draft_with_invented_figure_is_not_approved(api):
     client, _ = api
     r = make_draft(client)

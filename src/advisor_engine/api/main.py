@@ -722,8 +722,12 @@ def create_app(settings: Settings | None = None, store=None, auth_admin=None) ->
         p = c.db.get_portfolio(fid, draft["portfolio_id"])
         if p is None or c.db.get_client(fid, p["client_id"]) is None:  # client deleted
             raise HTTPException(404, "Draft not found.")
-        if draft["approved"]:
-            raise HTTPException(409, "This draft is already approved.")
+        # An approved report can be edited again later (from Galton AI or the Client
+        # report tab). Each revision is re-checked, re-approved and logged on its own as
+        # `draft_revised`, with the text it replaced; nothing is overwritten silently.
+        revising = bool(draft["approved"])
+        if revising and body.text == draft.get("approved_text"):
+            raise HTTPException(409, "This draft is already approved with this text.")
         # Edits are re-checked: an adviser can reword, but not add a figure the engine
         # never produced.
         check = verify(body.text, [call["output"] for call in draft["tool_calls"]])
@@ -731,11 +735,13 @@ def create_app(settings: Settings | None = None, store=None, auth_admin=None) ->
             raise HTTPException(422, {"message": "These figures are not from the engine.",
                                       "unmatched": check["unmatched"]})
         record = c.db.write_audit(fid, {
-            "event": "draft_approved", "model": None, "adviser_id": c.adv["id"],
+            "event": "draft_revised" if revising else "draft_approved", "model": None,
+            "adviser_id": c.adv["id"],
             "approved_by_email": c.adv["email"], "firm_id": fid,
             "portfolio_id": draft["portfolio_id"], "draft_id": draft_id,
             "user_message": DRAFT_REQUEST, "tool_calls": draft["tool_calls"],
             "reply": draft["original"], "approved_text": body.text,
+            **({"previous_text": draft.get("approved_text")} if revising else {}),
             "edited": body.text != draft["original"], "verification": check, "blocked": False,
             **session_fields(c),
         })
