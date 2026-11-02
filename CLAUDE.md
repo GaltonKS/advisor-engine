@@ -209,7 +209,8 @@ every turn --append_audit--> data/audit/audit.jsonl
 - Audit records from the API carry `adviser_id`, `firm_id` and, where relevant,
   `client_id` / `portfolio_id` (via `run_turn(audit_extra=...)`).
 - Each Galton AI turn gets a `turn_id`. It is stored on the audit record and on both chat
-  messages (question and reply). The audit trail's "What" column links to
+  messages (question and reply). The audit trail's "What" column and Review prep's
+  Recent activity (both `AuditTab.ActivityLink`) link to
   `?tab=assistant&turn=<id>`, or `&draft=<id>` for an approval, and the Galton AI tab
   highlights that exchange. Turns logged before turn ids existed fall back to
   `&question=<text>`, which only matches messages that have no `turn_id`. Keep the id

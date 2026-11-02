@@ -1,9 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { ASSISTANT_NAME, ComparisonTable, Loading, Panel } from "../../components/ui";
+import { ComparisonTable, Loading, Panel } from "../../components/ui";
 import { useApi } from "../../lib/api";
 import { dateTime, lossPct, pct } from "../../lib/format";
 import type { AuditRow, CompareResult, Draft, QuestionnaireResult, SuitabilityCheck } from "../../lib/types";
 import { versionName, type Workspace } from "../ClientWorkspace";
+import { ActivityLink } from "./AuditTab";
+
+// Kept here too: older imports read the activity wording from this module.
+export { describe } from "./AuditTab";
 
 // One page to prepare a client review: what changed since the previous version, whether
 // the portfolio still fits the client's stated tolerance, and what's been done lately.
@@ -61,26 +65,11 @@ export default function ReviewTab({ ws }: { ws: Workspace }) {
           {activity.data?.length === 0 && <p className="text-sm text-muted">Nothing recorded yet.</p>}
           <ul className="space-y-1 text-sm">
             {activity.data?.slice(0, 6).map((a, i) => (
-              <li key={i} className="flex justify-between gap-3"><span>{describe(a)}</span><span className="text-xs text-faint">{dateTime(a.timestamp)}</span></li>
+              <li key={i} className="flex justify-between gap-3"><span><ActivityLink r={a} ws={ws} /></span><span className="shrink-0 text-xs text-faint">{dateTime(a.timestamp)}</span></li>
             ))}
           </ul>
         </Panel>
       </div>
     </div>
   );
-}
-
-export function describe(a: AuditRow): string {
-  switch (a.event) {
-    case "turn": return a.blocked ? `${ASSISTANT_NAME} reply withheld: “${a.user_message}”` : `${ASSISTANT_NAME}: “${a.user_message}”`;
-    case "draft_approved": return "Client explanation approved";
-    case "chat_cleared": return `New ${ASSISTANT_NAME} chat started (earlier conversation cleared)`;
-    case "draft_revised": return "Client explanation edited and re-approved";
-    case "what_if": return "What-if run";
-    case "compare": return "Versions compared";
-    case "stress": return "Stress scenario run";
-    case "questionnaire_saved": return "Risk questionnaire saved";
-    case "portfolio_saved": return "Edited holdings saved as a new version";
-    default: return a.event ?? "Event";
-  }
 }

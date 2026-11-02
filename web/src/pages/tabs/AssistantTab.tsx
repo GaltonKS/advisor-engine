@@ -147,7 +147,7 @@ export default function AssistantTab({ ws }: { ws: Workspace }) {
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2 border-l-[3px] border-navy bg-navy-soft px-3 py-2 text-sm">
             <span>
               {focused.length > 0
-                ? "Showing the exchange you opened from the audit trail."
+                ? "Showing the exchange you opened."
                 : "That exchange isn't in this chat (it may have been cleared with New chat). Its record is in the audit trail."}
             </span>
             <button className="text-xs underline" onClick={clearFocus}>Show latest</button>

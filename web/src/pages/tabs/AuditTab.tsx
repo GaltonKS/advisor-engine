@@ -1,10 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { Empty, ErrorNote, Loading, Panel } from "../../components/ui";
+import { ASSISTANT_NAME, Empty, ErrorNote, Loading, Panel } from "../../components/ui";
 import { useApi } from "../../lib/api";
 import { dateTime } from "../../lib/format";
 import type { AuditRow } from "../../lib/types";
 import type { Workspace } from "../ClientWorkspace";
-import { describe } from "./ReviewTab";
 
 export default function AuditTab({ ws }: { ws: Workspace }) {
   const api = useApi();
@@ -23,7 +22,7 @@ export default function AuditTab({ ws }: { ws: Workspace }) {
               {rows.data?.map((r, i) => (
                 <tr key={i}>
                   <td className="whitespace-nowrap">{dateTime(r.timestamp)}</td>
-                  <td><What r={r} ws={ws} /></td>
+                  <td><ActivityLink r={r} ws={ws} /></td>
                   <td className="figure">v{r.engine_version}</td>
                   <td className="figure">{r.model ?? "—"}</td>
                   <td>{r.verified === null || r.verified === undefined ? "—" : r.verified ? "✓ verified" : "✗ withheld"}</td>
@@ -49,7 +48,9 @@ export function conversationLink(r: AuditRow): Record<string, string> | null {
   return null;
 }
 
-function What({ r, ws }: { r: AuditRow; ws: Workspace }) {
+/** An audit entry's description, linked to its place in the Galton AI conversation
+ *  when it has one (used by the Audit trail and Review prep's Recent activity). */
+export function ActivityLink({ r, ws }: { r: AuditRow; ws: Workspace }) {
   const link = conversationLink(r);
   if (!link) return <>{describe(r)}</>;
   return (
@@ -58,4 +59,20 @@ function What({ r, ws }: { r: AuditRow; ws: Workspace }) {
       {describe(r)} <span aria-hidden className="text-faint">→</span>
     </button>
   );
+}
+
+/** One line describing an audit entry. */
+export function describe(a: AuditRow): string {
+  switch (a.event) {
+    case "turn": return a.blocked ? `${ASSISTANT_NAME} reply withheld: “${a.user_message}”` : `${ASSISTANT_NAME}: “${a.user_message}”`;
+    case "draft_approved": return "Client explanation approved";
+    case "chat_cleared": return `New ${ASSISTANT_NAME} chat started (earlier conversation cleared)`;
+    case "draft_revised": return "Client explanation edited and re-approved";
+    case "what_if": return "What-if run";
+    case "compare": return "Versions compared";
+    case "stress": return "Stress scenario run";
+    case "questionnaire_saved": return "Risk questionnaire saved";
+    case "portfolio_saved": return "Edited holdings saved as a new version";
+    default: return a.event ?? "Event";
+  }
 }
