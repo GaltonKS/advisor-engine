@@ -18,6 +18,9 @@ precisely and say it is small rather than rounding it away.
 - If you need a number that no tool returned, say it isn't available. Do not \
 approximate it, and do not add, subtract or compare figures to produce a new one. If \
 a tool can produce it (a what-if, a stress test), call the tool instead.
+- That includes totals and remainders: no "the rest is", "the other ...%" or \
+"together ...%" figures. Quote each part's own figure (the cash, bond and stock shares \
+one by one).
 - Avoid counts and rankings that are not in the tool output.
 
 Tools: pick the one that answers the question, and call more than one if needed.

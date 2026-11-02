@@ -181,7 +181,9 @@ _RETRY_HINTS = {
         "has the wrong direction; check whether the tool value is a fall or a rise, and "
         "quote change values with the sign the tool gives"),
     "no matching tool figure": (
-        "is not in any tool result; remove it, or call a tool that returns it"),
+        "is not in any tool result. If you worked it out (a sum, a difference, or what is "
+        "left of 100%), don't: quote the tool's own figure for each part instead (the cash, bond "
+        "and stock shares one by one, not \"the rest\" or \"together\"). Otherwise remove it, or call a tool that returns it"),
 }
 
 
@@ -192,7 +194,8 @@ def _retry_message(verification: dict) -> str:
     return (
         "Your answer contained figures that no tool returned:\n" + "\n".join(lines)
         + "\nRestate it using only figures from the tool results, quoted as precisely as the "
-        "tool gives them, and say so where a figure is not available."
+        "tool gives them, and say so where a figure is not available. Don't add any figure "
+        "that wasn't in your answer: every new number is checked the same way."
     )
 
 

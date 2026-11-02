@@ -226,6 +226,30 @@ def test_retry_message_says_why_each_figure_failed():
     assert "47.3% is not in any tool result" in msg
 
 
+def test_retry_message_steers_a_worked_out_remainder_back_to_the_parts():
+    # "The other 19%" is 100% minus the cash share: the engine never returns it, and the
+    # retry has to say why, or the model repeats it and the whole answer is withheld.
+    from advisor_engine.assistant.numcheck import verify
+    tool = json.dumps({"asset_class_exposure": {"cash": 0.81, "fixed_income": 0.088, "equity": 0.102}})
+    v = verify("81.0% is in cash and the other 19% is invested.", [tool])
+    assert v["unmatched"] == ["19%"]
+    msg = chat._retry_message(v)
+    assert "19% is not in any tool result" in msg
+    assert "what is left of 100%" in msg and "each part" in msg
+    assert "Don't add any figure" in msg
+    # The hint carries no example figures the model could copy into another portfolio:
+    # apart from the flagged figure, its only number is the "100%" in its wording.
+    from advisor_engine.assistant.numcheck import extract_numbers
+    assert extract_numbers(msg.replace("19%", "")) == [100.0]
+    # Quoting the parts instead passes.
+    assert verify("81.0% is in cash, 8.8% in bonds and 10.2% in stocks.", [tool])["ok"]
+
+
+def test_prompt_forbids_totals_and_remainders():
+    p = prompts.SYSTEM_PROMPT
+    assert "totals and remainders" in p and "each part's own figure" in p
+
+
 def test_prompt_formatting_rules_keep_detail():
     p = prompts.SYSTEM_PROMPT
     assert "short bold title on its own line" in p and "split long bullets rather than dropping detail" in p
