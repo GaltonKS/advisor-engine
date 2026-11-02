@@ -48,7 +48,7 @@ export default function ReviewTab({ ws }: { ws: Workspace }) {
               <p className="text-sm">Risk level <b>{fit.data.questionnaire.risk_level} / {fit.data.questionnaire.risk_level_max}</b>. {fit.data.questionnaire.method_status}</p>
               {fit.data.checks.map((c) => (
                 <p key={c.id} className={`mt-2 text-sm ${c.within ? "text-good" : "text-bad"}`}>
-                  {c.within ? "Within" : "Outside"} tolerance: worst historical drop {lossPct(c.portfolio_value)} vs {pct(c.client_limit, 0)} the client can accept.
+                  {c.within ? "Within" : "Outside"} tolerance: largest fall from a peak {lossPct(c.portfolio_value)} vs {pct(c.client_limit, 0)} the client can accept.
                 </p>
               ))}
             </>

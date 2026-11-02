@@ -58,7 +58,7 @@ def test_keyword_routing(tmp_path):
     assert "BBB (Technology)" in reply["position"]
     assert "didn't name a position" in reply["position_no_ticker"]
     assert "largest sector" in reply["sectors"]
-    assert "peak-to-trough" in reply["drawdown"] and "monthly" in reply["drawdown"]
+    assert "largest fall from a peak" in reply["drawdown"] and "calculated, not observed" in reply["drawdown"] and "monthly" in reply["drawdown"]
     assert reply["loss"] == reply["drawdown"]
     assert reply["client"].startswith("DRAFT for advisor review")
     assert "more detail" in reply["overview"]

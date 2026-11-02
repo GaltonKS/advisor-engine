@@ -7,7 +7,7 @@ import pytest
 
 from advisor_engine.assistant.tools import get_returns
 from advisor_engine.holdings import classify_asset_class, load_holdings, validate_holdings
-from advisor_engine.risk import risk_profile, shrunk_covariance
+from advisor_engine.risk import asset_class_coverage, risk_profile, shrunk_covariance
 from advisor_engine.stress import run_scenario, stress_test
 from advisor_engine.synthetic import synthetic_returns
 
@@ -40,6 +40,10 @@ def _profile(df):
     ("Preferred ETF", "preferred"), ("Preferred Stock", "preferred"),
     ("Cash", "cash"), ("Money Market Fund", "cash"),
     ("", "equity"), ("Commodities", "other"), ("Balanced", "other"),
+    # Inflation-protected Treasuries are bonds, however the export spells them.
+    ("TIPS", "fixed_income"), ("Inflation-Protected", "fixed_income"), ("tips etf", "fixed_income"),
+    # "tips" only as a word, and real estate stays "other" (modelled as equity).
+    ("Multipstrategy", "other"), ("Real Estate", "other"),
 ])
 def test_classify_asset_class(label, expected):
     assert classify_asset_class(label) == expected
@@ -160,3 +164,37 @@ def test_sector_shock_is_weighted_average_when_classes_mix():
     r = stress_test(df, {"Energy": -0.20}, 0.0, {"fixed_income": 0.0})
     (energy,) = r["sectors"]
     assert energy["shock"] == pytest.approx(0.25 * -0.20)
+
+
+# --- labels the engine doesn't recognise -----------------------------------------------
+
+# Rows from an adviser's retirement export: VTIP labelled "TIPS" was "other" and took a
+# stock's -20% in the broad sell-off; VNQ ("Real Estate") is equity-like and stays other.
+RETIREMENT = (
+    "Account,Tax Treatment,Ticker,Name,Asset Class,Sector,Shares,Share Price\n"
+    "401(k),Pre-tax,VFIAX,Vanguard 500 Index Fund Admiral,US Equity,Large Blend,280,565.20\n"
+    "401(k),Pre-tax,VBTLX,Vanguard Total Bond Market Index Admiral,Bonds,Aggregate Bonds,9500,9.78\n"
+    "Traditional IRA,Pre-tax,VTIP,Vanguard Short-Term Inflation-Protected ETF,TIPS,Inflation-Protected,900,49.10\n"
+    "Roth IRA,Roth,VNQ,Vanguard Real Estate ETF,Real Estate,Real Estate,120,91.40\n"
+    "Taxable Brokerage,Taxable,CASH,High-Yield Savings,Cash,Cash,30000,1.00\n"
+).encode()
+
+
+def test_tips_are_bonds_in_the_profile_and_the_stress_test():
+    df = load_holdings(RETIREMENT)
+    classes = dict(zip(df["ticker"], df["asset_class"]))
+    assert classes["VTIP"] == "fixed_income" and classes["VNQ"] == "other"
+    res = run_scenario(df, "broad_selloff")
+    shocks = {p["ticker"]: p["shock"] for p in res["positions"]}
+    assert shocks["VTIP"] == pytest.approx(0.02)   # bonds rise 2%, not stocks' -20%
+    assert shocks["VNQ"] == pytest.approx(-0.20)   # real estate moves like stocks
+
+
+def test_profile_lists_holdings_in_other():
+    p = _profile(load_holdings(RETIREMENT))
+    cov = p["asset_class_coverage"]
+    assert cov["n_other"] == 1 and cov["other_tickers"] == ["VNQ"]
+    assert cov["other_weight"] == pytest.approx(p["asset_class_exposure"]["other"])
+    # A file without the column is all equity, so nothing is listed.
+    plain = validate_holdings(pd.DataFrame({"ticker": ["AAA", "BBB"], "shares": [1, 2], "price": [10.0, 5.0]}))
+    assert asset_class_coverage(plain) == {"other_weight": 0.0, "n_other": 0, "other_tickers": []}

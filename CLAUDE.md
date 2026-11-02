@@ -121,7 +121,10 @@ every turn --append_audit--> data/audit/audit.jsonl
   while any holding is unclassified. `sector_coverage` reports what is missing.
   `compare` skips a headline figure that either side withheld.
 - Asset class is optional too: `holdings.classify_asset_class` maps labels to
-  `ASSET_CLASSES` (blank -> equity, unrecognised -> "other", modelled as equity). The
+  `ASSET_CLASSES` (blank -> equity, unrecognised -> "other", modelled as equity; TIPS /
+  inflation-protected labels are fixed_income). Profiles list "other" holdings in
+  `asset_class_coverage`, and the web app names them, so a mislabelled bond fund never
+  passes silently as a stock. The
   synthetic model gives bonds and preferreds a shared rates factor and little market
   exposure, and cash a near-constant return; equity draws are unchanged by the option.
   Profiles report `asset_class_exposure` and each position's `asset_class`.
@@ -138,6 +141,10 @@ every turn --append_audit--> data/audit/audit.jsonl
   / `market_share_of_risk` are deliberately removed from the output (they would be
   artifacts). Keep that behaviour unless a real index series is supplied.
 - Drawdown and volatility figures carry a `period_label` (default `"monthly"`).
+  `historical_max_drawdown` is the largest fall from a peak (it can span several
+  periods), shown as "Largest fall from a peak", never "worst month".
+  `stress_loss_1_in_100` is calculated (`stress_loss_z` × period volatility, normal
+  distribution), and screens and the report say so via `format.stressLossMethod`.
 - Docstrings explain the method and its caveats; comments explain *why*. Match that.
 - Synthetic returns are seeded per series (market, sector, ticker), so a ticker's history
   never depends on the other holdings. What-if and compare rely on that; keep it.

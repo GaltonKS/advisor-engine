@@ -55,6 +55,21 @@ function SectorGapNote({ profile, go }: { profile: RiskProfile; go: (tab: TabId)
   );
 }
 
+/** Holdings in "other" are modelled and stress-tested as stocks; say so and point to
+ *  the editor, so a mislabelled bond fund doesn't pass as one. */
+function AssetClassGapNote({ profile, go }: { profile: RiskProfile; go: (tab: TabId) => void }) {
+  const cov = profile.asset_class_coverage;
+  if (!cov?.n_other) return null;
+  const one = cov.n_other === 1;
+  return (
+    <div className="no-print mb-5 border border-gold/50 bg-gold/5 px-3 py-2 text-sm">
+      {cov.other_tickers.join(", ")} ({pct(cov.other_weight)} of the portfolio) {one ? "has an asset class" : "have asset classes"} the
+      engine doesn't recognise, so {one ? "it is" : "they are"} modelled and stress-tested as stocks.{" "}
+      <button className="underline" onClick={() => go("holdings")}>Check asset classes →</button>
+    </div>
+  );
+}
+
 export function versionName(p: Portfolio, all: Portfolio[]): string {
   const n = all.findIndex((x) => x.id === p.id) + 1;
   const what = p.label || (p.source === "editor" ? "Edited holdings" : p.filename);
@@ -154,6 +169,7 @@ export default function ClientWorkspace() {
             {profile.isLoading && <Loading what="Running the engine" />}
             <ErrorNote error={profile.error} />
             {profile.data && tab !== "holdings" && <SectorGapNote profile={profile.data} go={go} />}
+            {profile.data && tab !== "holdings" && <AssetClassGapNote profile={profile.data} go={go} />}
             {profile.data && (
               <TabBody tab={tab} ws={{ client: c, portfolios, portfolio, profile: profile.data, go }} />
             )}

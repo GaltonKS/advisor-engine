@@ -5,7 +5,7 @@ import { Logo } from "../../components/Logo";
 import { Empty, Loading, Panel } from "../../components/ui";
 import { useMe } from "../../components/Layout";
 import { useApi } from "../../lib/api";
-import { date, dateTime, lossPct, lossSigned, num, pct, shortHash } from "../../lib/format";
+import { date, dateTime, lossPct, lossSigned, num, pct, shortHash, stressLossMethod } from "../../lib/format";
 import { Markdown } from "../../lib/markdown";
 import type { Draft } from "../../lib/types";
 import type { Workspace } from "../ClientWorkspace";
@@ -114,8 +114,8 @@ export default function ReportTab({ ws }: { ws: Workspace }) {
             <tr><td>Holdings</td><td className="num">{p.concentration.n_positions}</td></tr>
             <tr><td>Behaves like this many independent bets</td><td className="num">{num(p.concentration.effective_bets)}</td></tr>
             <tr><td>Share of risk from the largest common factor</td><td className="num">{pct(p.concentration.top_component_share)}</td></tr>
-            <tr><td>Worst historical drop ({p.drawdown.period_label} data)</td><td className="num">{lossPct(p.drawdown.historical_max_drawdown)}</td></tr>
-            <tr><td>Loss in a severe 1-in-100 {p.drawdown.period_label} period</td><td className="num">{lossSigned(Math.abs(p.drawdown.stress_loss_1_in_100))}</td></tr>
+            <tr><td>Largest fall from a peak ({p.drawdown.period_label} data)</td><td className="num">{lossPct(p.drawdown.historical_max_drawdown)}</td></tr>
+            <tr><td>Estimated loss in a severe 1-in-100 {p.drawdown.period_label} period</td><td className="num">{lossSigned(Math.abs(p.drawdown.stress_loss_1_in_100))}</td></tr>
             {qr && <tr><td>Client risk level (questionnaire)</td><td className="num">{qr.risk_level} / {qr.risk_level_max}</td></tr>}
           </tbody>
         </table>
@@ -131,6 +131,16 @@ export default function ReportTab({ ws }: { ws: Workspace }) {
           These figures describe the past and a stress scenario. They are not a forecast and not a recommendation.
           Returns used: {p.returns_source}, {p.n_periods} {p.drawdown.period_label} periods.
         </p>
+        <p className="mt-2 text-xs text-muted">
+          The largest fall from a peak is measured from a high point to a later low and can span several
+          {" "}{p.drawdown.period_label} periods. {stressLossMethod(p.drawdown.stress_loss_z, p.drawdown.period_label)}
+        </p>
+        {p.asset_class_coverage && p.asset_class_coverage.n_other > 0 && (
+          <p className="mt-2 text-xs text-muted">
+            {p.asset_class_coverage.other_tickers.join(", ")} {p.asset_class_coverage.n_other === 1 ? "is" : "are"} modelled and
+            stress-tested as stocks, because {p.asset_class_coverage.n_other === 1 ? "its asset class wasn't" : "their asset classes weren't"} recognised.
+          </p>
+        )}
         <div className="mt-6 border-t border-rule pt-3 text-[11px] text-faint">
           Approved {report.approved_at ? dateTime(report.approved_at) : ""}{me.data && report.approved_by === me.data.adviser.id ? ` by ${me.data.adviser.email}` : ""} ·
           engine v{p.engine_version} · holdings {shortHash(ws.portfolio.sha256)} · draft {report.id.slice(0, 8)}.

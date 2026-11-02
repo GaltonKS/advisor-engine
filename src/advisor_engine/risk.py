@@ -310,6 +310,22 @@ def sector_coverage(holdings: pd.DataFrame) -> dict:
     }
 
 
+def asset_class_coverage(holdings: pd.DataFrame) -> dict:
+    """Holdings whose asset class label wasn't recognised ("other").
+
+    The engine models and stress-tests them as equity, so callers say which they are
+    rather than letting a mislabelled bond fund pass as a stock.
+    """
+    if "asset_class" not in holdings:
+        return {"other_weight": 0.0, "n_other": 0, "other_tickers": []}
+    mask = holdings["asset_class"] == "other"
+    return {
+        "other_weight": float(holdings.loc[mask, "weight"].sum()),
+        "n_other": int(mask.sum()),
+        "other_tickers": list(holdings.loc[mask, "ticker"]),
+    }
+
+
 def max_drawdown(portfolio_returns: pd.Series) -> float:
     """Worst peak-to-trough loss of the compounded return series (negative number)."""
     # Growth of 1 unit, tracked against its running high-water mark.
@@ -327,9 +343,14 @@ def drawdown_sensitivity(
 ) -> dict:
     """Two views of downside.
 
-    - historical_max_drawdown: worst drawdown in the supplied return history.
+    - historical_max_drawdown: the largest fall from a peak to a later low in the
+      supplied return history. It can span several periods, so it is not the worst
+      single period.
     - stress_loss_1_in_100: parametric one-period loss at ~99% confidence
-      using the shrunk covariance (z=2.33), ignoring the mean.
+      using the shrunk covariance (z=2.33), ignoring the mean. It is calculated, not
+      observed: z times the period volatility, assuming normally distributed returns,
+      so it can understate fat tails. `stress_loss_z` carries z, so screens state the
+      method from the engine's own figure.
 
     `period_label` names the length of one return period ("monthly" by default).
     Every figure here is per that period, so it travels with them.
@@ -340,6 +361,7 @@ def drawdown_sensitivity(
         "historical_max_drawdown": max_drawdown(portfolio_returns),
         "period_volatility": port_vol,
         "stress_loss_1_in_100": -z * port_vol,
+        "stress_loss_z": z,
         "period_label": period_label,
     }
 
@@ -358,6 +380,7 @@ class RiskProfile:
     positions: list = field(default_factory=list)
     sector_coverage: dict = field(default_factory=dict)
     asset_class_exposure: dict = field(default_factory=dict)
+    asset_class_coverage: dict = field(default_factory=dict)
     sector_risk: dict = field(default_factory=dict)
     asset_class_risk: dict = field(default_factory=dict)
 
@@ -431,6 +454,7 @@ def risk_profile(
         positions=positions,
         sector_coverage=sector_coverage(holdings),
         asset_class_exposure=asset_class_exposure(holdings),
+        asset_class_coverage=asset_class_coverage(holdings),
         sector_risk=group_risk(positions, "sector"),
         asset_class_risk=group_risk(positions, "asset_class"),
     )

@@ -72,7 +72,7 @@ def check_portfolio(result: dict, profile: dict) -> list[dict]:
     limit = result["tolerable_loss"]
     return [{
         "id": "drawdown_vs_tolerance",
-        "label": "Worst historical drop vs largest loss the client can accept",
+        "label": "Largest fall from a peak vs largest loss the client can accept",
         "portfolio_value": drop,
         "client_limit": limit,
         "within": drop <= limit,

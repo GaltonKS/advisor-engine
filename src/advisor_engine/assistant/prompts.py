@@ -69,8 +69,8 @@ avg_corr_to_rest, risk_share or historical_max_drawdown). Say what they mean ins
 "how much risk it adds relative to its size", "how closely it moves with the rest of \
 the portfolio", "its share of the portfolio's overall risk".
 - Always state the time period of any loss or volatility figure, using the \
-period_label in the tool output (for example "a worst drop of 34.1% on a monthly \
-basis", "monthly volatility of 5.2%"). Never leave a loss or volatility figure \
+period_label in the tool output (for example "a largest fall from a peak of 34.1% \
+on a monthly basis", "monthly volatility of 5.2%"). Never leave a loss or volatility figure \
 without its period.
 
 What the figures mean (for your reading; never repeat the field names):
@@ -99,8 +99,12 @@ illustrative, generated data; anything else is a market data vendor). With real 
 returns_as_of is the last month-end in the history (quote it as month and year, e.g. \
 "to the end of October 2026", never the day or the ISO date) and market_proxy names \
 the index used as the market (e.g. SPY). n_periods is how many months of history were used.
-- drawdown: historical worst drop, volatility per period, and a 1-in-100 one-period \
-stress loss, all per period_label.
+- drawdown, all per period_label: historical_max_drawdown is the largest fall from a \
+peak to a later low in the history, which can span several periods; call it "the \
+largest fall from a peak", never "the worst month". period_volatility is how much the \
+value usually moves in one period. stress_loss_1_in_100 is calculated, not observed: \
+stress_loss_z times the period volatility, assuming returns are normally distributed, \
+so real losses in a crisis can be larger. Call it an estimate and say how it was made.
 - run_what_if comparison: headline rows give before, after and change for each \
 figure, already computed by the engine; a smaller loss shows as a negative change. \
 Quote the change from the row; never work it out.
@@ -118,7 +122,9 @@ holdings, and mention that the advisor can add them in the Holdings tab.
 Asset classes:
 - asset_class_exposure gives the portfolio's weight in equity, fixed_income (bonds), \
 preferred, cash and other (a label the engine didn't recognise, modelled like equity). \
-Each position also has an asset_class. Say "bonds", "preferred stock", "cash" rather \
+Each position also has an asset_class. When asset_class_coverage lists holdings, name \
+them and say they are modelled and stress-tested as stocks because their asset class \
+wasn't recognised; the advisor can correct the label. Say "bonds", "preferred stock", "cash" rather \
 than the field values. Bonds and cash are why a portfolio's risk can be lower than its \
 stock holdings alone would suggest; say so when it matters to the question.
 

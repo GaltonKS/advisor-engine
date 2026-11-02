@@ -46,3 +46,9 @@ export const sourceLine = (s: { label: string; n_periods: number; period_label: 
   returns_source: string; engine_version: string; holdings_sha256: string | null }): string =>
   `${s.label} · ${s.n_periods} ${s.period_label} ${s.returns_source} returns · engine v${s.engine_version}` +
   (s.holdings_sha256 ? ` · holdings ${s.holdings_sha256.slice(0, 8)}` : "");
+
+/** How the 1-in-100 loss is made, quoting the engine's own multiplier. */
+export function stressLossMethod(z: number | undefined, period: string): string {
+  const how = z === undefined ? "a multiple of" : `${num(z, 2)} ×`;
+  return `Estimated loss in one severe ${period} period: calculated as ${how} ${period} volatility, assuming returns are normally distributed. Not an observed loss; a real crisis can be worse.`;
+}

@@ -241,6 +241,15 @@ def test_drawdown_carries_period_label():
     assert "historical_max_drawdown" in risk_profile(h, r).to_dict()["drawdown"]
 
 
+def test_stress_loss_states_its_multiplier():
+    # The 1-in-100 loss is z x volatility, not an observed loss; screens quote z from here.
+    h = _holdings()
+    r = synthetic_returns(list(h["ticker"]), list(h["sector"]), n_periods=120)
+    dd = risk_profile(h, r).to_dict()["drawdown"]
+    assert dd["stress_loss_z"] == 2.33
+    assert dd["stress_loss_1_in_100"] == pytest.approx(-dd["stress_loss_z"] * dd["period_volatility"])
+
+
 def test_beta_and_market_share_only_with_provided_market():
     h = _holdings()
     r = synthetic_returns(list(h["ticker"]), list(h["sector"]), n_periods=120)
