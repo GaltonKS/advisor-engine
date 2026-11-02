@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { Logo } from "../../components/Logo";
 import { Empty, Loading, Panel } from "../../components/ui";
 import { useMe } from "../../components/Layout";
 import { useApi } from "../../lib/api";
@@ -35,6 +36,12 @@ export default function ReportTab({ ws }: { ws: Workspace }) {
   const all = drafts.data ?? [];
   const report = pickReport(all, params.get("report"));
   const unsaved = useUnsavedEdits(report);
+  // The page title becomes the PDF's file name and the browser's print header.
+  useEffect(() => {
+    const before = document.title;
+    document.title = `${ws.client.name} · Portfolio risk review · GaltonKS`;
+    return () => { document.title = before; };
+  }, [ws.client.name]);
   if (drafts.isLoading) return <Loading />;
   if (!report) {
     return (
@@ -83,9 +90,21 @@ export default function ReportTab({ ws }: { ws: Workspace }) {
       )}
       {report.approved && (
       <article className="mx-auto max-w-3xl border border-rule bg-white p-10 print:border-0 print:p-0">
-        <div className="eyebrow">Portfolio risk review · {date(report.approved_at ?? report.created_at)}</div>
-        <h1 className="mt-1 text-4xl">{ws.client.name}</h1>
-        {ws.client.objective && <p className="text-muted">{ws.client.objective}</p>}
+        <header className="report-masthead flex items-end justify-between gap-6 border-b-2 border-gold pb-4">
+          <Logo markWidth={44} />
+          <div className="text-right">
+            <div className="eyebrow">Portfolio risk review</div>
+            <div className="mt-1 font-mono text-xs text-muted">{date(report.approved_at ?? report.created_at)}</div>
+          </div>
+        </header>
+
+        <div className="mt-8">
+          <h1 className="text-4xl">{ws.client.name}</h1>
+          <p className="mt-1 text-muted">
+            {[ws.client.objective, `${p.concentration.n_positions} holdings`,
+              `${p.returns_source} returns, illustrative`].filter(Boolean).join(" · ")}
+          </p>
+        </div>
 
         <Markdown text={report.approved_text ?? ""} className="my-6" />
 
