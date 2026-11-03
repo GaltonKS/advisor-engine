@@ -29,9 +29,9 @@ app.approve_adviser themselves. The same can be done in the Supabase SQL Editor:
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 
+from ..config import supabase_admin
 from .settings import MFA_MODES
 
 PENDING_SQL = """
@@ -122,7 +122,8 @@ def main(argv: list[str] | None = None) -> int:
     rp.add_argument("--check", required=True, help="how identity was checked")
     args = parser.parse_args(argv)
 
-    db_url = os.environ.get("SUPABASE_DB_URL", "")
+    cfg = supabase_admin()
+    db_url = cfg.db_url
     if not db_url:
         print("Set SUPABASE_DB_URL (the API's database connection) first.", file=sys.stderr)
         return 2
@@ -146,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "reset-mfa":
         from .auth_admin import SupabaseAuthAdmin
 
-        url, key = os.environ.get("SUPABASE_URL", ""), os.environ.get("SUPABASE_SECRET_KEY", "")
+        url, key = cfg.url, cfg.secret_key
         if not (url and key):
             print("Set SUPABASE_URL and SUPABASE_SECRET_KEY as well.", file=sys.stderr)
             return 2
