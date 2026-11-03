@@ -2,9 +2,9 @@
 
     engine modules  <-  analysis / paths / config / data  <-  assistant, api
 
-The engine (risk math, stress, questionnaire, compare, holdings, synthetic data,
-charts) must never import the LLM layer or the API, and neither may the shared layer
-in between. The API may use the assistant (run_turn, verify, the tools), not the
+The engine (risk math, stress, questionnaire, the household risk profile, compare,
+holdings, synthetic data, charts) must never import the LLM layer or the API, and
+neither may the shared layer in between. The API may use the assistant (run_turn, verify, the tools), not the
 other way round.
 """
 
@@ -15,7 +15,8 @@ import pytest
 
 PKG = Path(__file__).resolve().parents[1] / "src" / "advisor_engine"
 
-ENGINE = ["risk", "stress", "questionnaire", "compare", "holdings", "synthetic", "charts"]
+ENGINE = ["risk", "stress", "questionnaire", "compare", "holdings", "synthetic", "charts",
+          "profile", "profile_config"]
 SHARED = ["analysis", "paths", "config", "_env", "data"]
 
 
