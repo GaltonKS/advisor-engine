@@ -6,7 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from ._paths import DEFAULT_HOLDINGS
+from ..paths import DEFAULT_HOLDINGS
 from .chat import llm_mode, run_turn
 from .tools import resolve_holdings_path
 

@@ -28,12 +28,11 @@ from pathlib import Path
 import pandas as pd
 
 from .._env import load_env
+from ..paths import DATA_DIR
 from ..synthetic import synthetic_market, synthetic_returns
 from .base import DataSourceError, PriceHistoryData, PriceSource, SymbolNotFound, as_of
 from .cache import PriceCache
 
-# Same place as assistant._paths.DATA_DIR (not imported, to keep this package standalone).
-DATA_DIR = Path(__file__).resolve().parents[3] / "data"
 DEFAULT_INDEX = "SPY"  # S&P 500 ETF: a broad index with dividend-adjusted history
 
 

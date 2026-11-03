@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .. import __version__
-from ._paths import AUDIT_PATH
+from ..paths import AUDIT_PATH
 
 _KEY_PATTERN = re.compile(r"sk-ant-[A-Za-z0-9_\-]+")
 

@@ -425,7 +425,7 @@ def test_audit_never_contains_api_key(monkeypatch, tmp_path):
 
 
 def test_default_audit_path_is_under_gitignored_data_dir():
-    from advisor_engine.assistant._paths import AUDIT_PATH, DATA_DIR
+    from advisor_engine.paths import AUDIT_PATH, DATA_DIR
     assert AUDIT_PATH.is_relative_to(DATA_DIR) and DATA_DIR.name == "data"
     ignore = (DATA_DIR.parent / ".gitignore").read_text()
     assert "data/*" in ignore and "!data/audit" not in ignore

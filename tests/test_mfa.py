@@ -382,7 +382,7 @@ def alice_client(supabase_db, tmp_path):
     adv = db.get_or_create_adviser(None, None)
     import hashlib
 
-    from advisor_engine.assistant._paths import DEFAULT_HOLDINGS
+    from advisor_engine.paths import DEFAULT_HOLDINGS
 
     fid, csv = adv["firm_id"], DEFAULT_HOLDINGS.read_bytes()
     c = db.create_client(fid, adv["id"], {"name": "Household A"})

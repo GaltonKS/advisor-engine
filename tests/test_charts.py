@@ -8,7 +8,8 @@ import numpy as np
 import pytest
 
 from advisor_engine import __version__, charts
-from advisor_engine.assistant.tools import engine_profile, execute_tool
+from advisor_engine.analysis import engine_profile
+from advisor_engine.assistant.tools import execute_tool
 from advisor_engine.compare import compare_profiles
 from advisor_engine.holdings import load_holdings
 from advisor_engine.risk import RISK_SOURCE_NAMES, risk_sources
@@ -82,7 +83,7 @@ def test_risk_vs_size_highlight_and_label_cap(profile):
 
 
 def test_what_if_measures_are_the_comparison_rows(profile):
-    from advisor_engine.assistant.tools import apply_changes
+    from advisor_engine.analysis import apply_changes
     df = load_holdings(SAMPLE)
     after = engine_profile(apply_changes(df, {"remove": [df["ticker"][0]]}))
     comp = compare_profiles(profile, after)

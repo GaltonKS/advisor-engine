@@ -12,7 +12,7 @@ import re
 import pandas as pd
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
-from ...assistant.tools import engine_profile
+from ...analysis import engine_profile, holdings_rows
 from ...compare import compare_profiles
 from ...holdings import COLUMNS, load_holdings, validate_holdings
 from ..deps import Ctx, ctx, frame_of, log, own_client, own_portfolio, profile_of
@@ -36,11 +36,6 @@ def _engine_profile(holdings: pd.DataFrame) -> dict:
         return engine_profile(holdings)
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
-
-
-def _holdings_rows(df: pd.DataFrame) -> list[dict]:
-    return [{k: (float(v) if k in ("shares", "price", "value", "weight") else v)
-             for k, v in row.items()} for row in df.to_dict("records")]
 
 
 @router.post("/clients/{client_id}/portfolios", status_code=201)
@@ -70,7 +65,7 @@ def profile(portfolio_id: str, c: Ctx = Depends(ctx)) -> dict:
 @router.get("/portfolios/{portfolio_id}/holdings")
 def holdings(portfolio_id: str, c: Ctx = Depends(ctx)) -> dict:
     own_portfolio(c, portfolio_id)
-    return {"holdings": _holdings_rows(frame_of(c, portfolio_id))}
+    return {"holdings": holdings_rows(frame_of(c, portfolio_id))}
 
 
 @router.post("/clients/{client_id}/portfolios/holdings", status_code=201)

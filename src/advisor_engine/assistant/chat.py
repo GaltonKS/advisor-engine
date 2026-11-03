@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .._env import load_env
+from ..config import llm_mode
 from . import prompts
 from .audit import append_audit, build_record
 from .numcheck import verify
@@ -62,17 +63,6 @@ class TurnResult:
 
 def _load_env() -> None:
     load_env()
-
-
-def llm_mode() -> str:
-    """"mock" or "anthropic". ADVISOR_LLM wins; otherwise live only if an API key is set."""
-    _load_env()
-    mode = os.environ.get("ADVISOR_LLM", "").strip().lower()
-    if mode in ("mock", "anthropic"):
-        return mode
-    if mode:
-        raise ValueError(f"ADVISOR_LLM must be 'mock' or 'anthropic', not {mode!r}.")
-    return "anthropic" if os.environ.get("ANTHROPIC_API_KEY") else "mock"
 
 
 def _make_client():

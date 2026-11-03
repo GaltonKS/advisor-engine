@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from advisor_engine import config
 from advisor_engine.assistant import chat
 from advisor_engine.assistant.mock_client import MockClient
 
@@ -202,7 +203,7 @@ def test_mock_mode_needs_no_network_or_anthropic(tmp_path):
 
 @pytest.fixture
 def env(monkeypatch):
-    monkeypatch.setattr(chat, "_load_env", lambda: None)  # ignore the repo's .env
+    monkeypatch.setattr(config, "load_env", lambda: None)  # ignore the repo's .env
     monkeypatch.delenv("ADVISOR_LLM", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     return monkeypatch

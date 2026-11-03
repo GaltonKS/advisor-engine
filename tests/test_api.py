@@ -20,7 +20,7 @@ from advisor_engine.api.auth import dev_user_id  # noqa: E402
 from advisor_engine.api.main import create_app  # noqa: E402
 from advisor_engine.api.settings import Settings, load_settings  # noqa: E402
 from advisor_engine.api.store import LocalStore  # noqa: E402
-from advisor_engine.assistant._paths import DEFAULT_HOLDINGS  # noqa: E402
+from advisor_engine.paths import DEFAULT_HOLDINGS  # noqa: E402
 from advisor_engine.assistant.tools import execute_tool  # noqa: E402
 
 SUPABASE_URL = "https://example.supabase.co"

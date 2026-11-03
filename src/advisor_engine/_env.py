@@ -15,7 +15,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from .paths import REPO_ROOT
+
 _loaded = False
 
 

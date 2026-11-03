@@ -30,7 +30,7 @@ import json
 import re
 from types import SimpleNamespace
 
-from ._paths import DEFAULT_HOLDINGS
+from ..paths import DEFAULT_HOLDINGS
 from .numcheck import verify
 
 # chat.py's retry message; it is a user turn but not a question.

@@ -19,8 +19,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .._env import load_env
-from ..assistant._paths import DATA_DIR
-from ..assistant.chat import llm_mode
+from ..config import llm_mode
+from ..paths import DATA_DIR
 
 DEFAULT_DAILY_TURN_LIMIT = 200
 # off: no second factor asked for. enrol: advisers are prompted to set one up (the grace
