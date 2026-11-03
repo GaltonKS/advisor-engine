@@ -170,8 +170,11 @@ src/advisor_engine/
     synthetic.py   synthetic return generator (no licensed data needed)
     risk.py        the risk profile
     demo.py        end-to-end run on the sample portfolio
+    analysis.py    engine operations shared by the assistant and the API (profile, what-if changes)
+    config.py      environment variables (with api/settings.py; see above)
+    data/          market data sources (synthetic, Twelve Data, FMP) and the price cache
     assistant/     LLM layer: tools, prompts, numcheck, audit, chat loop, CLI, mock client
-    api/           FastAPI backend for the React app in web/
+    api/           FastAPI backend for the React app in web/: main.py builds the app, routers/ per area
 data/sample/       small synthetic portfolios, safe to commit
 tests/
 ```
