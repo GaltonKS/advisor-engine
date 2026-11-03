@@ -16,6 +16,7 @@ from ..auth_admin import AuthAdminError, verified
 from ..deps import (Ctx, any_ctx, audit_or_log, base_ctx, ctx, factors_of, get_auth_admin,
                     get_store, log_, require_fresh_code)
 from ..schemas import FactorIn, RegistrationIn
+from ..store_base import Store
 
 router = APIRouter()
 
@@ -60,7 +61,7 @@ def mfa_enrolled(body: FactorIn, c: Ctx = Depends(any_ctx),
 
 
 @router.delete("/me/mfa/factors/{factor_id}", status_code=204)
-def mfa_remove(factor_id: str, c: Ctx = Depends(any_ctx), store=Depends(get_store),
+def mfa_remove(factor_id: str, c: Ctx = Depends(any_ctx), store: Store = Depends(get_store),
                auth_admin=Depends(get_auth_admin)) -> None:
     """Remove one of the adviser's own authenticators: needs a fresh code, and never
     the last verified one while two-step sign-in is required."""

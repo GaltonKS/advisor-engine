@@ -35,6 +35,7 @@ def _new_id() -> str:
 
 
 class LocalStore:
+    # Implements api.store_base.Store and StoreSession (as_user returns itself).
     def __init__(self, root: Path, require_approval: bool = False):
         self.root = Path(root)
         # Off for local development and most tests (dev users are trusted); on mirrors the

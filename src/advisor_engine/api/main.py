@@ -28,6 +28,7 @@ from .auth_admin import MemoryAuthAdmin, SupabaseAuthAdmin
 from .routers import account, assistant, audit, clients, operator, portfolios, profiling, stress
 from .settings import Settings, load_settings
 from .store import LocalStore
+from .store_base import Store
 from .supabase_store import SupabaseStorage, SupabaseStore
 
 log_ = logging.getLogger("advisor_engine.api")
@@ -36,7 +37,7 @@ log_ = logging.getLogger("advisor_engine.api")
 ROUTERS = (account, operator, clients, portfolios, stress, profiling, assistant, audit)
 
 
-def make_store(settings: Settings):
+def make_store(settings: Settings) -> Store:
     if settings.store == "supabase":
         return SupabaseStore(settings.supabase_db_url,
                              SupabaseStorage(settings.supabase_url, settings.supabase_secret_key),
@@ -50,7 +51,8 @@ def make_auth_admin(settings: Settings):
     return MemoryAuthAdmin()  # dev auth has no authenticators
 
 
-def create_app(settings: Settings | None = None, store=None, auth_admin=None) -> FastAPI:
+def create_app(settings: Settings | None = None, store: Store | None = None,
+               auth_admin=None) -> FastAPI:
     settings = settings or load_settings()
     store = store or make_store(settings)
     auth_admin = auth_admin or make_auth_admin(settings)

@@ -12,12 +12,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from ..deps import Ctx, ctx, get_store
 from ..metrics import REJECT_REASONS, REVIEW_CHECKS, review_presets, review_summary
 from ..schemas import ReviewIn
+from ..store_base import Store
 
 router = APIRouter()
 
 
 @router.get("/operator/metrics")
-def operator_metrics(c: Ctx = Depends(ctx), store=Depends(get_store)) -> dict:
+def operator_metrics(c: Ctx = Depends(ctx), store: Store = Depends(get_store)) -> dict:
     """Pilot usage across every firm (counts only), for the platform operator.
     Anyone else gets 404, so the route's existence isn't revealed."""
     if not c.settings.is_operator(c.adv.get("email")):
@@ -26,7 +27,7 @@ def operator_metrics(c: Ctx = Depends(ctx), store=Depends(get_store)) -> dict:
 
 
 @router.post("/operator/reviews")
-def review(body: ReviewIn, c: Ctx = Depends(ctx), store=Depends(get_store)) -> dict:
+def review(body: ReviewIn, c: Ctx = Depends(ctx), store: Store = Depends(get_store)) -> dict:
     """Approve or reject a pending sign-up. Who decided (the operator's signed-in email)
     and when are recorded automatically, with the checks and a one-line summary, in the
     append-only approval audit trail."""

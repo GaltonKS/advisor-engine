@@ -23,6 +23,7 @@ from ..holdings import load_holdings
 from .auth import User, current_user
 from .auth_admin import AuthAdminError
 from .settings import Settings
+from .store_base import Store, StoreSession
 
 log_ = logging.getLogger("advisor_engine.api")
 
@@ -39,7 +40,7 @@ def get_settings(request: Request) -> Settings:
     return request.app.state.settings
 
 
-def get_store(request: Request):
+def get_store(request: Request) -> Store:
     """The store itself (owner connection), for the few routes that need it: operator
     views and factor-removal permits. Everything else goes through `Ctx.db`."""
     return request.app.state.store
@@ -55,12 +56,12 @@ def get_auth_admin(request: Request):
 class Ctx:
     """The signed-in adviser, a store session that acts as them, and how they signed in."""
     adv: dict
-    db: object
+    db: StoreSession
     user: User
     settings: Settings
 
 
-def base_ctx(user: User = Depends(current_user), store=Depends(get_store),
+def base_ctx(user: User = Depends(current_user), store: Store = Depends(get_store),
              settings: Settings = Depends(get_settings)) -> Ctx:
     """The signed-in adviser, before any multi-factor or approval check (/me only)."""
     db = store.as_user(user.id, user.email, aal=user.aal, amr=user.amr)
