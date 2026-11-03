@@ -278,3 +278,117 @@ def test_approval_audit_trail_is_append_only_and_private(supabase_db, store):
             raw(supabase_db, user, "select count(*) from public.adviser_reviews")
     with pytest.raises(psycopg.errors.InsufficientPrivilege):
         raw(supabase_db, "alice", "select app.review_adviser('erin@dev.local', 'approved', 'me', '{}', null, 'x')")
+
+
+# --- households and the three-part risk profile (20261108000000_households_profile.sql) ---
+
+@pytest.fixture
+def alice_household(supabase_db, alice_world):
+    """Alice's client as a household of two, with one answer each kind and a snapshot."""
+    cid, fid = alice_world["client"]["id"], alice_world["firm_id"]
+    uid = dev_user_id("alice")
+    dana = raw(supabase_db, "alice", "insert into public.people (firm_id, client_id, name, role)"
+               " values (%s, %s, 'Dana', 'primary') returning id", [fid, cid])[0][0]
+    raw(supabase_db, "alice", "insert into public.people (firm_id, client_id, name, role)"
+        " values (%s, %s, 'Marcus', 'partner')", [fid, cid])
+    raw(supabase_db, "alice",
+        "insert into public.profile_inputs (firm_id, client_id, person_id, dimension,"
+        " question_id, answer, entered_by, method_version)"
+        " values (%s, %s, %s, 'willingness', 'w_reaction', '2', %s, 'draft-2')",
+        [fid, cid, dana, uid])
+    raw(supabase_db, "alice",
+        "insert into public.profile_snapshots (firm_id, client_id, created_by, method_version,"
+        " inputs_hash, result) values (%s, %s, %s, 'draft-2', 'h', '{}')", [fid, cid, uid])
+    return {"firm_id": fid, "client_id": cid, "dana": dana, "uid": uid}
+
+
+PROFILE_TABLES = ["people", "profile_inputs", "profile_snapshots"]
+
+
+@pytest.mark.parametrize("table", PROFILE_TABLES)
+def test_another_firm_sees_no_household_rows_without_a_filter(supabase_db, store,
+                                                              alice_household, table):
+    as_(store, "bob").get_or_create_adviser(None, None)
+    assert raw(supabase_db, "alice", f"select count(*) from public.{table}")[0][0] >= 1
+    assert raw(supabase_db, "bob", f"select count(*) from public.{table}")[0][0] == 0
+
+
+@pytest.mark.parametrize("table", PROFILE_TABLES)
+def test_household_tables_have_rls_and_no_anon_access(supabase_db, table):
+    with psycopg.connect(supabase_db) as conn:
+        assert conn.execute("select relrowsecurity from pg_class where oid = %s::regclass",
+                            [f"public.{table}"]).fetchone()[0]
+        conn.execute("set local role anon")
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            conn.execute(f"select * from public.{table}")
+
+
+@pytest.mark.parametrize("sql", [
+    "update public.profile_inputs set answer = '5'",
+    "delete from public.profile_inputs",
+    "update public.profile_snapshots set result = '{\"x\": 1}'",
+    "delete from public.profile_snapshots",
+    "delete from public.people",
+])
+def test_profile_inputs_and_snapshots_are_append_only_for_advisers(supabase_db, alice_household,
+                                                                   sql):
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        raw(supabase_db, "alice", sql)
+
+
+@pytest.mark.parametrize("table", ["profile_inputs", "profile_snapshots"])
+def test_profile_inputs_and_snapshots_are_append_only_even_for_the_owner(supabase_db,
+                                                                         alice_household, table):
+    with psycopg.connect(supabase_db, autocommit=True) as conn:
+        for sql in (f"update public.{table} set method_version = 'x'",
+                    f"delete from public.{table}", f"truncate public.{table}"):
+            with pytest.raises(psycopg.errors.RaiseException, match="append-only"):
+                conn.execute(sql)
+
+
+def test_a_household_has_at_most_two_people(supabase_db, alice_household):
+    h = alice_household
+    with pytest.raises(psycopg.errors.UniqueViolation):
+        raw(supabase_db, "alice", "insert into public.people (firm_id, client_id, name, role)"
+            " values (%s, %s, 'Third', 'partner')", [h["firm_id"], h["client_id"]])
+    with pytest.raises(psycopg.errors.CheckViolation):
+        raw(supabase_db, "alice", "insert into public.people (firm_id, client_id, name, role)"
+            " values (%s, %s, 'Child', 'dependant')", [h["firm_id"], h["client_id"]])
+
+
+def test_willingness_is_per_person_and_ability_per_household(supabase_db, alice_household):
+    h = alice_household
+    sql = ("insert into public.profile_inputs (firm_id, client_id, person_id, dimension,"
+           " question_id, answer, entered_by, method_version)"
+           " values (%s, %s, %s, %s, 'q', '1', %s, 'draft-2')")
+    with pytest.raises(psycopg.errors.CheckViolation):
+        raw(supabase_db, "alice", sql, [h["firm_id"], h["client_id"], None, "willingness", h["uid"]])
+    with pytest.raises(psycopg.errors.CheckViolation):
+        raw(supabase_db, "alice", sql, [h["firm_id"], h["client_id"], h["dana"], "ability", h["uid"]])
+    # A retraction is a new row with a null answer.
+    raw(supabase_db, "alice", sql.replace("'1'", "null"),
+        [h["firm_id"], h["client_id"], None, "ability", h["uid"]])
+
+
+def test_inputs_cannot_be_backdated_or_entered_as_someone_else(supabase_db, store, alice_household):
+    h = alice_household
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        raw(supabase_db, "alice",
+            "insert into public.profile_inputs (firm_id, client_id, dimension, question_id,"
+            " answer, entered_by, method_version, recorded_at)"
+            " values (%s, %s, 'need', 'q', '1', %s, 'draft-2', '2020-01-01')",
+            [h["firm_id"], h["client_id"], h["uid"]])
+    bob_id = as_(store, "bob").get_or_create_adviser(None, None)["id"]
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        raw(supabase_db, "alice",
+            "insert into public.profile_inputs (firm_id, client_id, dimension, question_id,"
+            " answer, entered_by, method_version) values (%s, %s, 'need', 'q', '1', %s, 'draft-2')",
+            [h["firm_id"], h["client_id"], bob_id])
+
+
+def test_a_firm_cannot_attach_people_to_another_firms_client(supabase_db, store, alice_world):
+    """Foreign keys bypass RLS, so the (client_id, firm_id) key is what stops this."""
+    bob_fid = as_(store, "bob").get_or_create_adviser(None, None)["firm_id"]
+    with pytest.raises(psycopg.errors.ForeignKeyViolation):
+        raw(supabase_db, "bob", "insert into public.people (firm_id, client_id, name, role)"
+            " values (%s, %s, 'Planted', 'partner')", [bob_fid, alice_world["client"]["id"]])
