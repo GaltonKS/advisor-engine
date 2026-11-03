@@ -17,7 +17,7 @@ from advisor_engine.api.supabase_store import (  # noqa: E402
     SupabaseStorage,
     SupabaseStore,
 )
-from advisor_engine.assistant._paths import DEFAULT_HOLDINGS  # noqa: E402
+from advisor_engine.paths import DEFAULT_HOLDINGS  # noqa: E402
 
 CSV = DEFAULT_HOLDINGS.read_bytes()
 

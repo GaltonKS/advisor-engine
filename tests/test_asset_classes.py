@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from advisor_engine.assistant.tools import get_returns
+from advisor_engine.analysis import get_returns
 from advisor_engine.holdings import classify_asset_class, load_holdings, validate_holdings
 from advisor_engine.risk import asset_class_coverage, risk_profile, shrunk_covariance
 from advisor_engine.stress import run_scenario, stress_test

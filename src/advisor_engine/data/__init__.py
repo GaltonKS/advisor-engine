@@ -7,7 +7,8 @@
     returns(holdings) -> DataFrame    returns per holding; columns = holdings tickers
     market(returns) -> Series         market index returns on the same periods
 
-Configured by environment variables (from the host, or a local `.env`; see _env.py):
+Configured by environment variables (from the host, or a local `.env`; read by
+`config.market_data_config()`):
     ADVISOR_MARKET_DATA   synthetic (default) | fmp | twelvedata (alias: td)
     FMP_API_KEY           required for fmp; never logged or returned
     TWELVE_DATA_API_KEY   required for twelvedata; never logged or returned
@@ -21,20 +22,17 @@ To add a vendor: write a `PriceSource` (see base.py and fmp.py) and add a branch
 
 from __future__ import annotations
 
-import os
 from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
 
-from .._env import load_env
+from ..config import MarketDataConfig, market_data_config
+from ..paths import DATA_DIR
 from ..synthetic import synthetic_market, synthetic_returns
 from .base import DataSourceError, PriceHistoryData, PriceSource, SymbolNotFound, as_of
 from .cache import PriceCache
 
-# Same place as assistant._paths.DATA_DIR (not imported, to keep this package standalone).
-DATA_DIR = Path(__file__).resolve().parents[3] / "data"
-DEFAULT_INDEX = "SPY"  # S&P 500 ETF: a broad index with dividend-adjusted history
 
 
 class SyntheticData:
@@ -52,21 +50,6 @@ class SyntheticData:
         return synthetic_market(len(returns)).set_axis(returns.index)
 
 
-MODE_ALIASES = {"td": "twelvedata", "twelve_data": "twelvedata", "twelve-data": "twelvedata"}
-KEY_VARS = {"fmp": "FMP_API_KEY", "twelvedata": "TWELVE_DATA_API_KEY"}
-
-
-def _settings() -> tuple[str, str, str, str, str]:
-    load_env()
-    mode = os.environ.get("ADVISOR_MARKET_DATA", "synthetic").strip().lower() or "synthetic"
-    mode = MODE_ALIASES.get(mode, mode)
-    return (mode,
-            os.environ.get(KEY_VARS.get(mode, ""), "").strip() if mode in KEY_VARS else "",
-            os.environ.get("ADVISOR_MARKET_INDEX", DEFAULT_INDEX).strip().upper() or DEFAULT_INDEX,
-            os.environ.get("ADVISOR_MARKET_CACHE", "").strip(),
-            os.environ.get("SUPABASE_DB_URL", "").strip())
-
-
 def _cache(setting: str, db_url: str):
     if setting.lower() == "supabase" or (not setting and db_url):
         if not db_url:
@@ -80,10 +63,11 @@ def _cache(setting: str, db_url: str):
 
 
 @lru_cache(maxsize=4)
-def _build(mode: str, api_key: str, index: str, cache_setting: str, db_url: str):
+def _build(cfg: MarketDataConfig):
+    mode, api_key, index = cfg.mode, cfg.api_key, cfg.index
     if mode == "synthetic":
         return SyntheticData()
-    cache = _cache(cache_setting, db_url)
+    cache = _cache(cfg.cache_setting, cfg.db_url)
     if mode == "fmp":
         from .fmp import FMPSource
 
@@ -98,7 +82,7 @@ def _build(mode: str, api_key: str, index: str, cache_setting: str, db_url: str)
 
 def get_market_data():
     """The configured market data source (built once per configuration)."""
-    return _build(*_settings())
+    return _build(market_data_config())
 
 
 __all__ = ["DataSourceError", "PriceHistoryData", "PriceSource", "SymbolNotFound",

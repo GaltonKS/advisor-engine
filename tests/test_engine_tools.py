@@ -10,7 +10,8 @@ import pandas as pd
 import pytest
 
 from advisor_engine.assistant import chat
-from advisor_engine.assistant.tools import TOOLS, apply_changes, execute_tool
+from advisor_engine.analysis import apply_changes
+from advisor_engine.assistant.tools import TOOLS, execute_tool
 from advisor_engine.holdings import load_holdings
 from advisor_engine.risk import group_risk, market_sensitivity
 

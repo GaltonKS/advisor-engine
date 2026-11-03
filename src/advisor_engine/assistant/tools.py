@@ -24,13 +24,12 @@ from pathlib import Path
 import pandas as pd
 
 from .. import charts
+from ..analysis import apply_changes, engine_profile, holdings_rows
 from ..compare import compare_profiles
-from ..holdings import COLUMNS, load_holdings, validate_holdings
-from ..risk import risk_profile
+from ..data import DataSourceError
+from ..holdings import load_holdings
+from ..paths import DATA_DIR, REPO_ROOT
 from ..stress import SCENARIOS, run_scenario, stress_test
-from ..data import as_of as returns_as_of
-from ..data import DataSourceError, get_market_data
-from ._paths import DATA_DIR, REPO_ROOT
 
 _PATH = {"type": "string",
          "description": "Path to a holdings CSV (columns: ticker, shares, price, optional sector "
@@ -162,48 +161,11 @@ REFER_TO_STRESS_TEST = {
 TOOLS = [GET_RISK_PROFILE, GET_HOLDINGS, RUN_WHAT_IF, RUN_STRESS_TEST, SHOW_CHART,
          REFER_TO_STRESS_TEST]
 
-# Labels for the synthetic data (the default source). With real data the labels come from
-# the configured source: see `data.get_market_data()`.
-RETURNS_SOURCE = "synthetic"
-MARKET_SOURCE = "synthetic market factor"
-
-
 @dataclass
 class ToolResult:
     text: str
     is_error: bool = False
     holdings_sha256: str | None = None
-
-
-def get_returns(holdings: pd.DataFrame) -> pd.DataFrame:
-    """Return history for every holdings ticker, from the configured market data source
-    (`data.get_market_data()`: synthetic by default, or a vendor such as FMP).
-    Contract: columns cover every `holdings["ticker"]`."""
-    return get_market_data().returns(holdings)
-
-
-def get_market_returns(returns: pd.DataFrame) -> pd.Series:
-    """The market index return series aligned with `returns`, from the same source."""
-    return get_market_data().market(returns)
-
-
-def engine_profile(holdings: pd.DataFrame, returns_fn=None) -> dict:
-    """The get_risk_profile payload for a holdings frame (also used by the API).
-
-    Market sensitivity needs a market series on the same periods; with an injected
-    `returns_fn` (tests, custom data) there is none, so those figures are left out.
-    """
-    if returns_fn is not None:
-        returns = returns_fn(holdings)
-        return {"returns_source": RETURNS_SOURCE, **risk_profile(holdings, returns).to_dict()}
-    data = get_market_data()
-    returns = data.returns(holdings)
-    profile = risk_profile(holdings, returns, market=data.market(returns),
-                           market_name=data.market_source)
-    out = {"returns_source": data.returns_source, **profile.to_dict()}
-    if (last := returns_as_of(returns)) is not None:
-        out["returns_as_of"] = last  # dated (real) data only
-    return out
 
 
 def resolve_holdings_path(raw: str, data_dir: Path | None = None) -> Path:
@@ -227,41 +189,6 @@ def resolve_holdings_path(raw: str, data_dir: Path | None = None) -> Path:
     if not p.is_file():
         raise ValueError(f"Holdings file not found: {p.name}")
     return p
-
-
-def holdings_rows(df: pd.DataFrame) -> list[dict]:
-    return [{k: (float(v) if k in ("shares", "price", "value", "weight") else v)
-             for k, v in row.items()} for row in df.to_dict("records")]
-
-
-def apply_changes(holdings: pd.DataFrame, tool_input: dict) -> pd.DataFrame:
-    """Holdings after a what-if's remove / set_shares / add, validated again."""
-    df = holdings[COLUMNS].copy()
-    have = set(df["ticker"])
-
-    def tickers(xs) -> list[str]:
-        return [str(t).strip().upper() for t in xs]
-
-    remove = tickers(tool_input.get("remove") or [])
-    set_shares = {str(k).strip().upper(): v for k, v in (tool_input.get("set_shares") or {}).items()}
-    unknown = sorted((set(remove) | set(set_shares)) - have)
-    if unknown:
-        raise ValueError(f"Not in the holdings: {unknown}")
-    for t, n in set_shares.items():
-        df.loc[df["ticker"] == t, "shares"] = float(n)
-    remove += [t for t, n in set_shares.items() if float(n) == 0]
-    df = df[~df["ticker"].isin(remove)]
-
-    added = pd.DataFrame(tool_input.get("add") or [], columns=COLUMNS).fillna("")
-    if len(added):
-        added["ticker"] = tickers(added["ticker"])
-        clash = sorted(set(added["ticker"]) & set(df["ticker"]))
-        if clash:
-            raise ValueError(f"Already held (use set_shares instead): {clash}")
-        df = pd.concat([df, added], ignore_index=True)
-    if df.empty:
-        raise ValueError("The change would leave no holdings.")
-    return validate_holdings(df)
 
 
 def option_label(tool_input: dict) -> str:

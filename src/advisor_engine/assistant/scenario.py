@@ -20,14 +20,13 @@ Safeguards, enforced here rather than trusted to the prompt:
 from __future__ import annotations
 
 import json
-import os
 import re
 
 import pandas as pd
 
+from .. import config
 from ..holdings import STANDARD_SECTORS, UNCLASSIFIED
 from ..stress import SCENARIOS, SHOCKABLE_CLASSES
-from .chat import DEFAULT_MODEL
 from .numcheck import verify
 
 MAX_TOKENS = 4096
@@ -156,7 +155,7 @@ def suggest_shocks(description: str, holdings: pd.DataFrame, client=None,
         return _finish(client.suggest(description, sectors, classes), description, sectors,
                        classes, "mock", "mock")
 
-    model = model or os.environ.get("ADVISOR_MODEL", DEFAULT_MODEL)
+    model = model or config.model_name()
     response = client.beta.messages.create(
         model=model,
         max_tokens=MAX_TOKENS,

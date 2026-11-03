@@ -46,6 +46,10 @@ Requires Python >= 3.10.
 src/advisor_engine/
     __init__.py        __version__ (engine version recorded in every audit line)
     _env.py            load_env(): local .env into os.environ, once, never overriding
+    paths.py           REPO_ROOT, DATA_DIR, DEFAULT_HOLDINGS, AUDIT_PATH
+    config.py          env reads outside the API: llm_mode(), model_name(), market_data_config(), ...
+    analysis.py        engine operations on a holdings frame: engine_profile(), get_returns() /
+                       get_market_returns(), holdings_rows(), apply_changes() (used by tools and API)
     holdings.py        load/validate holdings CSV -> adds value and weight columns
     synthetic.py       market + sector (+ rates) factor model by asset class (stand-in for real data)
     risk.py            all risk math; risk_profile() -> RiskProfile.to_dict()
@@ -55,30 +59,42 @@ src/advisor_engine/
     charts.py          chart specs from engine output (risk by group, risk vs size, what-if)
     demo.py            end-to-end run on data/sample/sample_holdings.csv
     data/
-        __init__.py    get_market_data(): the configured source (synthetic | fmp), SyntheticData
+        __init__.py    get_market_data(): the configured source (synthetic | fmp | twelvedata), SyntheticData
         base.py        PriceSource protocol, PriceHistoryData (month-end prices -> returns), errors
         cache.py       PriceCache: month-end closes per vendor/symbol on disk, 24h freshness
         supabase_cache.py SupabasePriceCache: same interface in Postgres (market schema), shared
         fmp.py         FMPSource: dividend-adjusted daily closes from FMP's stable API
         twelvedata.py  TwelveDataSource: split- and dividend-adjusted daily closes (time_series, adjust=all)
     assistant/
-        _paths.py      REPO_ROOT, DATA_DIR, DEFAULT_HOLDINGS, AUDIT_PATH
         tools.py       tool schemas (TOOLS: risk profile, holdings, what-if, stress, show_chart), execute_tool(),
-                       engine_profile(), get_returns() / get_market_returns(), path guard
+                       build_chart(), path guard (resolve_holdings_path)
         prompts.py     SYSTEM_PROMPT, FIRM_PROFILE, build_system_prompt()
-        chat.py        run_turn(): tool loop, number check, retry, audit; llm_mode()
+        chat.py        run_turn(): tool loop, number check, retry, audit; _make_client()
         numcheck.py    verify(reply, tool_outputs): every figure must match tool output
         audit.py       append_audit(): one JSON line per turn, API keys redacted
         mock_client.py offline stand-in for the Anthropic client (templated replies)
         scenario.py    AI-suggested stress shocks for a described scenario (+ MockSuggester)
         cli.py         terminal REPL (`python -m advisor_engine.assistant`)
     api/
-        settings.py    env config; dev auth forces mock and refuses to run on Render
+        settings.py    the API's env config (Settings); dev auth forces mock and refuses to run on Render
         auth.py        current_user(): Supabase access token (JWKS/HS256) or X-Dev-User; aal/amr
         auth_admin.py  Supabase Auth admin calls (list/delete a user's MFA factors), secret key
+        store_base.py  Store / StoreSession Protocols: every store method the routes call
         store.py       LocalStore: firm-scoped clients, portfolios, drafts, audit (dev, tests)
-        supabase_store.py SupabaseStore: same methods on Postgres (RLS) + Storage
-        main.py        FastAPI routes over execute_tool / run_turn / verify
+        supabase_store.py SupabaseStore + SupabaseSession: the same interface on Postgres (RLS) + Storage
+        main.py        create_app(): settings/store/auth admin on app.state, middleware, include routers; `app`
+        deps.py        Ctx, base_ctx -> any_ctx -> ctx, require_fresh_code, log/audit_or_log,
+                       own_client/own_portfolio, profile_of/frame_of, factors_of, assistant_error_message
+        schemas.py     Pydantic request bodies (the request half of the API contract)
+        routers/       one APIRouter per area; routes move engine output around, compute nothing
+            account.py    /health, /me, /me/mfa/*, /firm/mfa, /me/registration
+            operator.py   /operator/metrics, /operator/reviews
+            clients.py    /clients, /clients/{id} (get, rename, soft delete)
+            portfolios.py upload, holdings editor, /profile, /holdings, /what-if, /compare
+            stress.py     /stress/scenarios, /portfolios/{id}/stress[/current|/runs/{run}|/reset|/suggest]
+            profiling.py  /questionnaire, /clients/{id}/questionnaire, /portfolios/{id}/suitability
+            assistant.py  /portfolios/{id}/drafts|messages|turns, /drafts/{id}/approve
+            audit.py      /audit
         admin.py       operator commands: pending sign-ups, approve, mfa-mode, reset-mfa (`python -m advisor_engine.api.admin`)
         metrics.py     pilot metrics definitions (weekly active, feature use, funnel) for the operator page
 web/                   React app (see web/README.md); formats engine output, computes nothing
@@ -92,6 +108,22 @@ supabase/migrations/   Postgres schema, row-level security, append-only audit (s
 data/sample/           synthetic portfolios, the only committed data
 tests/                 one test file per module area
 ```
+
+### Dependency direction
+
+```
+engine modules        risk, stress, questionnaire, compare, holdings, synthetic, charts
+      ^
+shared layer          analysis, paths, config, _env, data/
+      ^
+assistant/  <--  api/  (the API uses run_turn, verify and execute_tool; never the reverse)
+```
+
+Engine modules never import `assistant/`, `api/` or the shared layer; the shared layer
+never imports `assistant/` or `api/`; `assistant/` never imports `api/`.
+`tests/test_layering.py` parses the imports and enforces this. Something both the
+assistant and the API need that isn't about the model belongs in the shared layer
+(engine operations in `analysis.py`, env reads in `config.py`, locations in `paths.py`).
 
 ## Data flow
 
@@ -156,7 +188,7 @@ every turn --append_audit--> data/audit/audit.jsonl
 - Holdings paths must resolve inside `data/`, must be `.csv`, and may not be under
   `data/audit/`. Keep all file access going through `resolve_holdings_path`.
 - Market data comes only from `data.get_market_data()` (used by `get_returns`,
-  `get_market_returns` and `engine_profile` in `tools.py`). It is synthetic unless
+  `get_market_returns` and `engine_profile` in `analysis.py`). It is synthetic unless
   `ADVISOR_MARKET_DATA=fmp` or `td` (see "Real market data" below). Every profile carries its
   `returns_source`, a market series (the synthetic factor, or `ADVISOR_MARKET_INDEX`) so
   beta and correlation to the market are always present, and with real data
@@ -205,7 +237,7 @@ every turn --append_audit--> data/audit/audit.jsonl
 - The firm disclaimer is appended verbatim by code in `chat.py`, never given to the
   model and never run through the number check.
 - Mode: `ADVISOR_LLM=mock|anthropic`. Unset means mock without `ANTHROPIC_API_KEY`,
-  anthropic with one. Model name comes from `ADVISOR_MODEL` (default in `chat.py`).
+  anthropic with one. Model name comes from `ADVISOR_MODEL` (`config.model_name()`, default `config.DEFAULT_MODEL`).
 - The audit log must never contain API keys; `audit._redact` is the safety net, but
   don't put secrets in records in the first place.
 
@@ -503,6 +535,36 @@ Client report (not yet charted):
 4. Update `mock_client.py` so mock mode can exercise it, and add tests in
    `tests/test_assistant.py` using `FakeClient`.
 
+### A route
+1. Put it in the router for its area in `api/routers/` (or a new router module, added
+   to `ROUTERS` in `main.py`). Request bodies go in `api/schemas.py`.
+2. Depend on `ctx` (approved adviser; `any_ctx` / `base_ctx` only for the account
+   routes that must work while pending or before two-step sign-in). Read through
+   `c.db`, which acts as the adviser, and pass `c.adv["firm_id"]`; use
+   `own_client` / `own_portfolio` so another firm's ids answer 404. Use `get_store`
+   (owner connection) only for cross-firm operator views or permits.
+3. Get figures from the engine (`profile_of`, `analysis`, `stress`, `compare`), never
+   compute them in the route. Audit engine runs with `deps.log(c, event, ...)`. A
+   sensitive action calls `require_fresh_code(c)` and records `fresh_code`.
+4. Add tests in `tests/test_api.py` (both stores via the `api` fixture). Changing an
+   existing route's path, method, request or response shape is a contract change for
+   `web/`: diff `app.openapi()` before and after.
+
+### A store method
+1. Add it to the right Protocol in `api/store_base.py`: `StoreSession` for anything on
+   the adviser's behalf (takes `firm_id`), `Store` for owner-connection operations.
+2. Implement it in `LocalStore` (`store.py`) and in `SupabaseSession` /
+   `SupabaseStore` (`supabase_store.py`) with the same signature.
+   `tests/test_store_protocol.py` checks the signatures and that every store call in
+   `api/` is declared in a protocol.
+3. A new table or column is a new migration (see the API rules above), with RLS keyed
+   on `app.current_firm_id()` and tests in `tests/test_supabase_store.py`.
+
+### An environment variable
+Read it in `config.py` (or `api/settings.py` for API-only settings), never with
+`os.environ` elsewhere, and add it to README.md's "Environment variables" table and to
+`.env.example`. `tests/test_config_docs.py` enforces all three.
+
 ### Real market data
 - `src/advisor_engine/data/` splits the job in two. A vendor adapter (`PriceSource`) only
   returns a symbol's dividend-adjusted daily closes, or raises `SymbolNotFound`.
@@ -528,9 +590,9 @@ Client report (not yet charted):
   (default SPY), `ADVISOR_MARKET_CACHE` (default `data/market_cache`). The key is a
   secret: Render/`.env` only, never `VITE_*`, never logged. `_env.load_env()` reads a
   local `.env` (cwd, then repo root) once per process without overriding real variables;
-  `data._settings`, `api.settings.load_settings` and `chat.llm_mode` call it. Tests set
-  `ADVISOR_NO_DOTENV=1` (conftest) so a developer's keys never reach the suite.
-  `.env.example` lists every variable.
+  `config.market_data_config`, `config.llm_mode` and `api.settings.load_settings` call
+  it (`data._build` is cached per `MarketDataConfig`). Tests set `ADVISOR_NO_DOTENV=1`
+  (conftest) so a developer's keys never reach the suite.
 - `returns_as_of` is quoted as month and year ("to the end of October 2026"): years are
   not figures to the number check, days are. The prompt says so; keep it that way.
 - Caches implement `get_many(source, symbols)` / `put_many(source, {symbol: closes})`,

@@ -94,6 +94,7 @@ class MemoryStorage:
 
 
 class SupabaseStore:
+    # Implements api.store_base.Store; as_user returns a SupabaseSession (StoreSession).
     def __init__(self, db_url: str, storage, cache_dir: Path):
         self.db_url = db_url
         self.storage = storage
@@ -197,6 +198,7 @@ class SupabaseStore:
 
 
 class SupabaseSession:
+    # Implements api.store_base.StoreSession.
     def __init__(self, store: SupabaseStore, user_id: str, email: str, aal: str = "aal1",
                  amr: tuple = ()):
         self.store = store

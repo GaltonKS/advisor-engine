@@ -7,13 +7,13 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
 
 from .. import __version__
-from ._paths import AUDIT_PATH
+from ..config import anthropic_api_key
+from ..paths import AUDIT_PATH
 
 _KEY_PATTERN = re.compile(r"sk-ant-[A-Za-z0-9_\-]+")
 
@@ -24,7 +24,7 @@ def file_sha256(path: str | Path) -> str:
 
 def _redact(line: str) -> str:
     """Belt and braces: never let an API key reach disk, whatever is in the record."""
-    key = os.environ.get("ANTHROPIC_API_KEY", "")
+    key = anthropic_api_key()
     if len(key) >= 8:
         line = line.replace(key, "[REDACTED]")
     return _KEY_PATTERN.sub("[REDACTED]", line)

@@ -272,7 +272,7 @@ support. Until then, TOTP is the only factor. When they arrive, either factor sa
 |---|---|
 | `api/settings.py` | `ADVISOR_REQUIRE_MFA` (`off` / `enrol` / `required`, default `off`) and `ADVISOR_MFA_DEADLINE` (ISO date shown during `enrol`). Always off with dev auth. |
 | `api/auth.py` | `User.aal` and `User.amr` from the token; `mfa_fresh()` against `FRESH_MFA_SECONDS` (300). |
-| `api/main.py` | `required`: every route except `/me` answers 403 `{"code": "mfa_required"}` below aal2, checked before approval. Fresh code (403 `{"code": "mfa_fresh_required"}`) for deleting a client and removing an authenticator. `POST /me/mfa/enrolled`, `DELETE /me/mfa/factors/{id}`, `GET /firm/mfa` (owner only). Audit rows carry `aal`, and `fresh_code` on sensitive actions. |
+| `api/deps.py`, `api/routers/` | `required`: every route except `/me` answers 403 `{"code": "mfa_required"}` below aal2, checked before approval. Fresh code (403 `{"code": "mfa_fresh_required"}`) for deleting a client and removing an authenticator. `POST /me/mfa/enrolled`, `DELETE /me/mfa/factors/{id}`, `GET /firm/mfa` (owner only). Audit rows carry `aal`, and `fresh_code` on sensitive actions. |
 | `api/auth_admin.py` | Supabase Auth admin calls with the secret key: list and delete a user's factors. |
 | `api/admin.py` | `mfa-mode [MODE]` and `reset-mfa EMAIL --requested-by --verified-by --check`. |
 | `supabase/migrations/20261107000000_mfa_direct_paths.sql` | Trigger on `auth.mfa_factors` (verified factors need a permit from the API), `app.mfa_fresh_ok()` and a trigger on `public.clients` (soft delete needs a fresh code). |

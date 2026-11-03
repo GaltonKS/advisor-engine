@@ -7,17 +7,18 @@ reply with a figure the engine did not produce is withheld and logged.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from .._env import load_env
+from .. import config
+from ..config import llm_mode
 from . import prompts
 from .audit import append_audit, build_record
 from .numcheck import verify
 from .tools import TOOLS, execute_tool
 
-DEFAULT_MODEL = "claude-sonnet-5-5"
+DEFAULT_MODEL = config.DEFAULT_MODEL  # ADVISOR_MODEL overrides it (config.model_name)
 MAX_TOOL_ROUNDS = 5
 MAX_RETRIES = 1
 # Output cap per call. Thinking counts against it, so it is set well above a normal reply
@@ -62,17 +63,6 @@ class TurnResult:
 
 def _load_env() -> None:
     load_env()
-
-
-def llm_mode() -> str:
-    """"mock" or "anthropic". ADVISOR_LLM wins; otherwise live only if an API key is set."""
-    _load_env()
-    mode = os.environ.get("ADVISOR_LLM", "").strip().lower()
-    if mode in ("mock", "anthropic"):
-        return mode
-    if mode:
-        raise ValueError(f"ADVISOR_LLM must be 'mock' or 'anthropic', not {mode!r}.")
-    return "anthropic" if os.environ.get("ANTHROPIC_API_KEY") else "mock"
 
 
 def _make_client():
@@ -231,7 +221,7 @@ def run_turn(
     _load_env()
     client = client or _make_client()
     # A client may name itself (the mock does), so the audit log never claims a real model.
-    model = model or getattr(client, "model_name", None) or os.environ.get("ADVISOR_MODEL", DEFAULT_MODEL)
+    model = model or getattr(client, "model_name", None) or config.model_name()
     firm_profile = firm_profile if firm_profile is not None else prompts.FIRM_PROFILE
 
     system = prompts.build_system_prompt(firm_profile)

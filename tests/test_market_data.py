@@ -12,8 +12,9 @@ import pandas as pd
 import pytest
 
 from advisor_engine import data
-from advisor_engine.assistant import tools
-from advisor_engine.assistant.tools import engine_profile, execute_tool
+from advisor_engine import analysis
+from advisor_engine.analysis import engine_profile
+from advisor_engine.assistant.tools import execute_tool
 from advisor_engine.data.base import (
     MIN_PERIODS,
     PriceHistoryData,
@@ -145,7 +146,7 @@ def test_cache_file_names_are_safe(tmp_path):
 
 def test_profile_is_labelled_with_source_index_and_as_of_date(tmp_path, monkeypatch):
     md = market_data(source_for("AAA", "BBB", "CCC", "SPY"), tmp_path)
-    monkeypatch.setattr(tools, "get_market_data", lambda: md)
+    monkeypatch.setattr(analysis, "get_market_data", lambda: md)
     p = engine_profile(frame("AAA", "BBB", "CCC"))
     assert p["returns_source"] == "Fake" and p["returns_as_of"] == "2026-10-31"
     adjusted = p["concentration"]["market_adjusted"]
@@ -164,8 +165,8 @@ def test_synthetic_default_is_unchanged(monkeypatch):
 
 def test_vendor_errors_come_back_as_tool_errors(tmp_path, monkeypatch):
     md = market_data(source_for("SPY"), tmp_path)  # knows none of the sample's tickers
-    monkeypatch.setattr(tools, "get_market_data", lambda: md)
-    from advisor_engine.assistant._paths import DEFAULT_HOLDINGS
+    monkeypatch.setattr(analysis, "get_market_data", lambda: md)
+    from advisor_engine.paths import DEFAULT_HOLDINGS
     res = execute_tool("get_risk_profile", {"holdings_path": str(DEFAULT_HOLDINGS)})
     assert res.is_error and res.text.startswith("Error: No Fake price history for:")
 
@@ -260,7 +261,7 @@ def test_fmp_end_to_end_profile(tmp_path, monkeypatch):
         return httpx.Response(200, json=rows[::-1])
 
     md = PriceHistoryData(fmp(handler), PriceCache(tmp_path), "SPY", today=lambda: TODAY)
-    monkeypatch.setattr(tools, "get_market_data", lambda: md)
+    monkeypatch.setattr(analysis, "get_market_data", lambda: md)
     p = engine_profile(frame("AAA", "BBB"))
     assert p["returns_source"] == "FMP" and p["returns_as_of"] == "2026-10-31"
     json.dumps(p)  # still JSON-serialisable
@@ -481,7 +482,7 @@ def test_td_end_to_end_profile(tmp_path, monkeypatch):
         return httpx.Response(200, json=td_body(rows[::-1]))
 
     md = PriceHistoryData(td(handler), PriceCache(tmp_path), "SPY", today=lambda: TODAY)
-    monkeypatch.setattr(tools, "get_market_data", lambda: md)
+    monkeypatch.setattr(analysis, "get_market_data", lambda: md)
     p = engine_profile(frame("AAA", "BBB"))
     assert p["returns_source"] == "Twelve Data" and p["returns_as_of"] == "2026-10-31"
     json.dumps(p)

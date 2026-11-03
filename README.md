@@ -46,17 +46,10 @@ check and audit log. The assistant prints the active mode.
 ### Market data
 
 Returns are synthetic by default. To use real prices from Twelve Data or Financial
-Modeling Prep, set
-these environment variables, either on the host (Render: Environment settings) or
-locally in `.env` (`cp .env.example .env`; the real environment wins over the file):
-
-| Variable | Value |
-|---|---|
-| `ADVISOR_MARKET_DATA` | `td` (Twelve Data; `twelvedata` also works) or `fmp` (default `synthetic`) |
-| `TWELVE_DATA_API_KEY` | your Twelve Data key, for `td` (secret: `.env` or the host's settings, never git) |
-| `FMP_API_KEY` | your FMP key, for `fmp` (secret, as above) |
-| `ADVISOR_MARKET_INDEX` | the market index symbol (default `SPY`) |
-| `ADVISOR_MARKET_CACHE` | where month-end prices are cached: `supabase` (default when `SUPABASE_DB_URL` is set), `disk`, or a directory (default `data/market_cache`) |
+Modeling Prep, set `ADVISOR_MARKET_DATA` and the vendor's key (see
+[Environment variables](#environment-variables)), either on the host (Render:
+Environment settings) or locally in `.env` (`cp .env.example .env`; the real environment
+wins over the file).
 
 The engine uses monthly returns from dividend-adjusted closes: up to 120 months, over
 the window every holding shares (at least 24). Profiles then say `returns_source: Twelve Data` (or `FMP`)
@@ -105,6 +98,70 @@ auth always uses the mock assistant. Setting `SUPABASE_URL` switches to Supabase
 (plus `SUPABASE_JWT_SECRET` on projects that still use the legacy shared secret). Data is
 stored per firm under `data/api/`. See `docs/migration-plan.md` for the full plan.
 
+## Environment variables
+
+Every variable the project reads, in one place (`.env.example` lists the same ones).
+The Python package reads them in `src/advisor_engine/config.py` and
+`src/advisor_engine/api/settings.py` only. A local `.env` is loaded once per process and
+never overrides the real environment. Secrets belong in `.env` or the host's settings,
+never in git and never in a `VITE_*` variable.
+
+**Market data**
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `ADVISOR_MARKET_DATA` | `synthetic` | `synthetic`, `td` (Twelve Data; `twelvedata`, `twelve_data`, `twelve-data` also work) or `fmp` |
+| `TWELVE_DATA_API_KEY` | | Twelve Data key, for `td` (secret) |
+| `FMP_API_KEY` | | FMP key, for `fmp` (secret) |
+| `ADVISOR_MARKET_INDEX` | `SPY` | market index symbol for real data |
+| `ADVISOR_MARKET_CACHE` | `supabase` when `SUPABASE_DB_URL` is set, else `disk` | where month-end prices are cached: `supabase`, `disk` (`data/market_cache`) or a directory |
+
+**Galton AI (LLM)**
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `ADVISOR_LLM` | `anthropic` if `ANTHROPIC_API_KEY` is set, else `mock` | `mock` or `anthropic`. The API uses the mock whatever this says unless sign-in is Supabase |
+| `ANTHROPIC_API_KEY` | | Anthropic key (secret; redacted from the audit log) |
+| `ADVISOR_MODEL` | `claude-sonnet-5-5` | model name for the assistant and scenario suggestions |
+
+**API (FastAPI backend)**
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `SUPABASE_URL` | | Supabase project URL. Set means Supabase sign-in |
+| `ADVISOR_AUTH` | `supabase` if `SUPABASE_URL` is set, else `dev` | `supabase` or `dev` (trusted `X-Dev-User` header; refuses to run on Render) |
+| `SUPABASE_JWT_SECRET` | | legacy HS256 secret; empty means tokens are verified via JWKS |
+| `SUPABASE_DB_URL` | | Postgres connection (transaction pooler). Set means the Supabase store; needs `SUPABASE_URL` and `SUPABASE_SECRET_KEY`. Required on Render |
+| `SUPABASE_SECRET_KEY` | | `sb_secret_...` key, for Storage and Auth admin calls (secret, server only) |
+| `ALLOWED_ORIGINS` | `http://localhost:5173` with dev auth, else none | comma-separated CORS origins, no trailing slash |
+| `ADVISOR_API_STORE` | `data/api` | local store directory (and the Supabase store's file cache) |
+| `ADVISOR_DAILY_TURN_LIMIT` | `200` | assistant turns and scenario suggestions per adviser per day |
+| `ADVISOR_OPERATORS` | | comma-separated operator emails (Pilot metrics page) |
+| `ADVISOR_REQUIRE_MFA` | `off` | `off`, `enrol` or `required` (always `off` with dev auth) |
+| `ADVISOR_MFA_DEADLINE` | | ISO date two-step sign-in becomes required, shown during `enrol` |
+| `RENDER` | | set by Render itself; turns on the deploy checks above |
+
+The operator command (`python -m advisor_engine.api.admin`) reads `SUPABASE_DB_URL`,
+and for `reset-mfa` also `SUPABASE_URL` and `SUPABASE_SECRET_KEY`, from the real
+environment only (not `.env`).
+
+**Development and tests**
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `ADVISOR_NO_DOTENV` | | set to skip `.env` entirely (the test suite sets it) |
+| `TEST_DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/postgres` | admin connection for the Postgres-backed tests |
+
+**Web app (`web/`, build time) and desktop shell (`desktop/`)**
+
+| Variable | Meaning |
+|---|---|
+| `VITE_API_URL` | the API's URL |
+| `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase project and its publishable key (never the secret key) |
+| `VITE_DEV_USER` | dev sign-in name (local only) |
+| `VITE_PLAUSIBLE_DOMAIN`, `VITE_PLAUSIBLE_SCRIPT` | Plausible page-view analytics (off when unset) |
+| `ADVISOR_APP_URL`, `ADVISOR_SUPABASE_URL` | desktop shell: the app to load, and the Supabase origin it may reach |
+
 ## Layout
 
 ```
@@ -113,8 +170,11 @@ src/advisor_engine/
     synthetic.py   synthetic return generator (no licensed data needed)
     risk.py        the risk profile
     demo.py        end-to-end run on the sample portfolio
+    analysis.py    engine operations shared by the assistant and the API (profile, what-if changes)
+    config.py      environment variables (with api/settings.py; see above)
+    data/          market data sources (synthetic, Twelve Data, FMP) and the price cache
     assistant/     LLM layer: tools, prompts, numcheck, audit, chat loop, CLI, mock client
-    api/           FastAPI backend for the React app in web/
+    api/           FastAPI backend for the React app in web/: main.py builds the app, routers/ per area
 data/sample/       small synthetic portfolios, safe to commit
 tests/
 ```
