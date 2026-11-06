@@ -15,7 +15,8 @@ import pytest
 
 PKG = Path(__file__).resolve().parents[1] / "src" / "advisor_engine"
 
-ENGINE = ["risk", "stress", "questionnaire", "compare", "holdings", "synthetic", "charts"]
+ENGINE = ["risk", "stress", "questionnaire", "compare", "holdings", "synthetic", "charts",
+          "profile", "profile_config"]
 SHARED = ["analysis", "paths", "config", "_env", "data"]
 
 
