@@ -38,6 +38,7 @@ applied.
 | `20261105000000_adviser_reviews.sql` | `public.adviser_reviews` (append-only approval audit trail), `app.review_adviser`, `rejected` status; `approve_adviser` now records a review |
 | `20261106000000_mfa.sql` | Two-step sign-in: `app.security_settings` mode (starts `off`), `app.mfa_ok()`, restrictive `mfa_required` policies on every firm table (see docs/mfa-plan.md) |
 | `20261107000000_mfa_direct_paths.sql` | Fresh-code checks the database enforces too: verified authenticators can only be deleted with a permit from the API (trigger on `auth.mfa_factors`), and soft-deleting a client needs a fresh code (`app.mfa_fresh_ok()`, trigger on `public.clients`) |
+| `20261108000000_households_profile.sql` | Households and the three-part risk profile: `people` (at most a `primary` and a `partner` per client), `profile_inputs` (answers, append-only; null retracts) and `profile_snapshots` (frozen engine results, append-only) |
 
 Apply a new migration **before** merging the code that uses it: Render redeploys the API
 from `main`, and the new API reads the new columns.
