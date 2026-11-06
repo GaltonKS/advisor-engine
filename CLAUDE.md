@@ -55,6 +55,9 @@ src/advisor_engine/
     risk.py            all risk math; risk_profile() -> RiskProfile.to_dict()
     stress.py          preset/custom sector + asset-class shock scenarios (illustrative, uncalibrated)
     questionnaire.py   six-question client risk score (draft method) + drawdown check
+    profile.py         household risk profile: willingness (per person), ability (household),
+                       need (plan) from stored answers, with bands, ceiling, flags, summary
+    profile_config.py  the profile's question bank and every tunable number (all DRAFT)
     compare.py         before/after differences between two risk profiles
     charts.py          chart specs from engine output (risk by group, risk vs size, what-if)
     demo.py            end-to-end run on data/sample/sample_holdings.csv
@@ -112,7 +115,8 @@ tests/                 one test file per module area
 ### Dependency direction
 
 ```
-engine modules        risk, stress, questionnaire, compare, holdings, synthetic, charts
+engine modules        risk, stress, questionnaire, compare, holdings, synthetic, charts,
+                      profile, profile_config
       ^
 shared layer          analysis, paths, config, _env, data/
       ^
@@ -182,6 +186,24 @@ every turn --append_audit--> data/audit/audit.jsonl
   never depends on the other holdings. What-if and compare rely on that; keep it.
 - Before/after differences come from `compare.compare_profiles`, never from a caller.
   Loss figures there are sizes (kind `"loss"`), so a smaller loss is a negative change.
+
+### Household risk profile (`profile.py`, `profile_config.py`)
+- **All method numbers are draft placeholders**, uncalibrated and not reviewed by
+  compliance. They all live in `profile_config.py`, each marked `# DRAFT`, under
+  `METHOD_VERSION` (bump it when any changes). Never present them as final in code
+  comments or the UI; results carry `method_status`, and `plain_summary` ends with it.
+- Store answers, not scores: `public.profile_inputs` holds one row per answer and the
+  engine rescores on every read. Latest row per (person, question) wins by
+  `recorded_at`; a null answer retracts. Inputs and `public.profile_snapshots` are
+  append-only (insert and select only; triggers refuse edits even for the owner).
+- Willingness is per person (`person_id` set), ability and need are per household
+  (`person_id` null). Household willingness is the lower partner, never an average;
+  ceiling = min(household willingness, ability). Flags and the summary are templates.
+- A household is at most one `primary` and one `partner` (`public.people`, unique
+  `client_id, role`).
+- The engine takes a portfolio risk reading on the 1 to 10 scale as an optional input
+  and does not compute one. `risk.py` has no such reading yet.
+- No LLM, no I/O: `profile.py` imports only `profile_config` and the standard library.
 
 ### LLM layer (`assistant/`)
 - `execute_tool` never raises: errors come back as `ToolResult(..., is_error=True)`.

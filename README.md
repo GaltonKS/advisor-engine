@@ -15,6 +15,11 @@ Prototype, step 2 of the MVP: **risk profile** from a holdings CSV.
 - Sector-level effective bets
 - Sector exposure
 - Drawdown sensitivity (historical and covariance-based stress)
+- Household risk profile (in progress, `profile.py`): willingness per person, ability
+  per household and need per plan, each estimated from stored answers with an
+  uncertainty band, giving a ceiling and flags. **All of its method numbers are draft
+  placeholders** (`profile_config.py`, `METHOD_VERSION = "draft-2"`), pending
+  compliance review. No LLM is involved.
 
 ## Setup
 
@@ -169,6 +174,8 @@ src/advisor_engine/
     holdings.py    load and validate holdings CSV
     synthetic.py   synthetic return generator (no licensed data needed)
     risk.py        the risk profile
+    profile.py     household risk profile: willingness / ability / need, bands, ceiling, flags
+    profile_config.py  its question bank and every tunable number (all DRAFT)
     demo.py        end-to-end run on the sample portfolio
     analysis.py    engine operations shared by the assistant and the API (profile, what-if changes)
     config.py      environment variables (with api/settings.py; see above)
