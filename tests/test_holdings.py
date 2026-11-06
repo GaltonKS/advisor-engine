@@ -195,3 +195,52 @@ def test_a_holding_with_blank_shares_is_still_an_error():
     data = (EXPORT_HEADER + EXPORT_ROWS + 'CCC,C Co,Equity,Tech,,,,,,"$1,000.00",,,,\n').encode()
     with pytest.raises(ValueError, match=r"Line 4: shares value '' is empty"):
         load_holdings(data)
+
+
+# --- Schwab position export -------------------------------------------------------
+
+SCHWAB = (
+    '"Positions for account Individual ...109 as of 10:33 AM ET, 2026/11/04"\n\n'
+    '"Symbol","Description","Qty (Quantity)","Price","Price Chng $ (Price Change $)",'
+    '"Price Chng % (Price Change %)","Mkt Val (Market Value)","Day Chng $ (Day Change $)",'
+    '"Day Chng % (Day Change %)","Cost Basis","Gain $ (Gain/Loss $)","Gain % (Gain/Loss %)",'
+    '"Reinvest?","Reinvest Capital Gains?","Asset Type",\n'
+    '"523234102","LECG CORP ** DO NOT TAKE IN** SEE NOTES 6 YR NON-TRANS","15","N/A","N/A",'
+    '"N/A","N/A","N/A","N/A","Incomplete","N/A","N/A","N/A","N/A","Equity",\n'
+    '"AAA","A CO","1200","185","7.14","1.48%","$222,000.00","$1.00","1.48%","$9,227.66",'
+    '"$4,927.50","53.4%","No","N/A","Equity",\n'
+    '"BBB","B CO","800","420.5","-3.73","-4.23%","$336,400.00","-$41.03","-4.23%","$934.61",'
+    '"-$5.66","-0.61%","Yes","N/A","Equity",\n'
+    '"Cash & Cash Investments","--","--","--","--","--","$62.97","$0.00","0%","--","--","--",'
+    '"--","--","Cash and Money Market",\n'
+    '"Positions Total","","--","--","--","--","$558,462.97","$39.81","0.17%","$17,239.15",'
+    '"$5,640.61","32.72%","--","--","--",\n'
+)
+
+
+def test_schwab_export():
+    df = load_holdings(SCHWAB.encode())
+    assert list(df["ticker"]) == ["AAA", "BBB", "CASH"]
+    for _, row in df.iloc[:2].iterrows():
+        assert (row["shares"], row["price"]) == EXPECTED[row["ticker"]]
+    cash = df.iloc[2]
+    assert (cash["shares"], cash["price"], cash["asset_class"]) == (62.97, 1.0, "cash")
+    assert list(df["asset_class"][:2]) == ["equity", "equity"]
+
+
+def test_glossed_headers_never_become_price():
+    data = b"Symbol,Qty (Quantity),Price Chng $ (Price Change $),Mkt Val (Market Value)\nAAA,1,2,3\n"
+    with pytest.raises(ValueError, match=r"missing columns: \['price'\]"):
+        load_holdings(data)
+
+
+def test_priced_holding_with_na_value_is_still_an_error():
+    data = SCHWAB.replace('"AAA","A CO","1200","185"', '"AAA","A CO","1200","N/A"')
+    with pytest.raises(ValueError, match=r"price value 'N/A' is not a number"):
+        load_holdings(data.encode())
+
+
+def test_cash_line_needs_a_cash_asset_class():
+    data = SCHWAB.replace('"Cash and Money Market"', '"Equity"')
+    with pytest.raises(ValueError, match=r"shares value '--'"):
+        load_holdings(data.encode())

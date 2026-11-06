@@ -15,8 +15,12 @@ Common spellings of standard sectors are mapped to one name (`SECTOR_ALIASES`), 
 Files saved from Excel or exported by brokers rarely match the sample exactly, so
 `read_holdings_csv` accepts a few layout differences that have only one reading:
 header case and spacing, a byte-order mark, comma / semicolon / tab / pipe
-separators, title rows above the header, a short list of column aliases, and
-currency symbols or thousands separators in numbers. Anything ambiguous (a number
+separators, title rows above the header, a short list of column aliases (also when
+written as "Qty (Quantity)", a short name with its long form), and currency symbols
+or thousands separators in numbers. Broker exports also get two narrow rules: a cash
+line with no quantity or price (Schwab's "Cash & Cash Investments") becomes a CASH
+holding valued at its market value, and a line whose price and market value are both
+"N/A" (an untradeable position with no value) is left out. Anything ambiguous (a number
 that could be read two ways, a header it can't find) is rejected with a message
 saying what was found, never guessed: a misread figure would flow into every result.
 """
@@ -74,12 +78,20 @@ ALIASES = {
     "market price": "price",
     "asset class": "asset_class",
     "asset type": "asset_class",
+    # Read only for a cash line with no quantity or price (see read_holdings_csv);
+    # never used as, or to derive, a per-share price.
+    "market value": "market_value",
+    "mkt val": "market_value",
 }
+_KNOWN = {*COLUMNS, "market_value"}
 
 # Ticker cells that mark a broker export's summary line rather than a holding. Such a
 # row is skipped only when its shares and price are also blank.
 _SUMMARY_LABELS = {"", "total", "totals", "grand total", "subtotal", "account total",
-                   "portfolio total"}
+                   "portfolio total", "positions total"}
+# What broker exports print in a cell that has no value (Schwab: "--" and "N/A").
+_PLACEHOLDERS = {"", "--", "n/a"}
+CASH_TICKER = "CASH"
 
 _DELIMITERS = (",", ";", "\t", "|")
 _HEADER_SEARCH_LINES = 20
@@ -89,7 +101,17 @@ def _norm_header(name: object) -> str:
     s = str(name).replace("﻿", "").strip().strip('"').strip()
     s = re.sub(r"\s+", " ", s).lower()
     s = re.sub(r"\s*\(\$\)$", "", s)
-    return ALIASES.get(s, s)
+    s = ALIASES.get(s, s)
+    # "Qty (Quantity)", "Mkt Val (Market Value)": a short name glossed in brackets.
+    # Taken only when a part names a known column, so "Price Chng % (Price Change %)"
+    # stays unknown rather than becoming price.
+    gloss = re.fullmatch(r"(.+?)\s*\((.+)\)", s)
+    if s not in _KNOWN and gloss:
+        for part in gloss.groups():
+            part = ALIASES.get(part.strip(), part.strip())
+            if part in _KNOWN:
+                return part
+    return s
 
 
 def _decode(data: bytes) -> str:
@@ -189,12 +211,26 @@ def read_holdings_csv(source: str | Path | bytes) -> pd.DataFrame:
     for optional in ("sector", "asset_class"):
         if optional not in df.columns:
             df[optional] = ""
-    df = df[COLUMNS]
+    market_value = df["market_value"] if "market_value" in df.columns else None
+    df = df[COLUMNS].copy()
     # Excel often leaves trailing blank rows, and broker exports add a totals line
     # (no ticker or "Total", with only the value columns filled). Drop those only.
-    blank = lambda v: str(v).strip() == ""  # noqa: E731
+    blank = lambda v: str(v).strip().lower() in _PLACEHOLDERS  # noqa: E731
     summary = df["ticker"].map(lambda t: str(t).strip().rstrip(":").lower() in _SUMMARY_LABELS)
-    df = df[~(summary & df["shares"].map(blank) & df["price"].map(blank))]
+    no_qty_price = df["shares"].map(blank) & df["price"].map(blank)
+    keep = ~(summary & no_qty_price)
+    if market_value is not None:
+        # A cash line has an amount, not shares and a price: hold it as CASH at 1.00
+        # per unit. Only for rows the asset class column calls cash.
+        cash = no_qty_price & ~summary & df["asset_class"].map(
+            lambda a: classify_asset_class(a) == "cash" and str(a).strip() != "")
+        for i in df.index[cash]:
+            df.loc[i, ["ticker", "shares", "price"]] = [CASH_TICKER, market_value[i], "1"]
+        # No price and no market value: the broker can't value it (e.g. Schwab's
+        # non-transferable positions), so it carries no weight. Leave it out.
+        keep &= ~(df["price"].map(lambda v: str(v).strip().lower() == "n/a")
+                  & market_value.map(lambda v: str(v).strip().lower() == "n/a"))
+    df = df[keep]
 
     for col in ("shares", "price"):
         parsed = []
