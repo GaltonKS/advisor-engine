@@ -274,6 +274,91 @@ class LocalStore:
             return c
         return self._update(firm_id, fn)
 
+    # --- households and the risk profile ---------------------------------------------
+    # People live in state.json. Inputs and snapshots are append-only JSON-lines files,
+    # like the audit log: rows are only ever added (see the migration's rules).
+
+    def _jsonl(self, path: Path) -> list[dict]:
+        if not path.exists():
+            return []
+        return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+
+    def _append(self, path: Path, row: dict) -> dict:
+        with self._lock:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a") as f:
+                f.write(json.dumps(row, default=str) + "\n")
+        return row
+
+    def _inputs_path(self, firm_id: str) -> Path:
+        return self.firm_dir(firm_id) / "profile_inputs.jsonl"
+
+    def _snapshots_path(self, firm_id: str) -> Path:
+        return self.firm_dir(firm_id) / "profile_snapshots.jsonl"
+
+    def create_person(self, firm_id: str, client_id: str, adviser_id: str,
+                      fields: dict) -> dict:
+        """Add a person to the household. ValueError if the client already has someone in
+        that role (one `primary`, one `partner`), as the database's unique constraint."""
+        if fields["role"] not in ("primary", "partner"):
+            raise ValueError("role must be primary or partner")
+
+        def fn(state):
+            people = state.setdefault("people", {})
+            if any(p["client_id"] == client_id and p["role"] == fields["role"]
+                   for p in people.values()):
+                raise ValueError(f"This household already has a {fields['role']}.")
+            person = {"id": _new_id(), "firm_id": firm_id, "client_id": client_id,
+                      "name": fields["name"], "role": fields["role"],
+                      "created_by": adviser_id, "created_at": _now()}
+            people[person["id"]] = person
+            return person
+        return self._update(firm_id, fn)
+
+    def list_people(self, firm_id: str, client_id: str) -> list[dict]:
+        if self.get_client(firm_id, client_id) is None:
+            return []
+        people = self._state(firm_id).get("people", {}).values()
+        return sorted((p for p in people if p["client_id"] == client_id),
+                      key=lambda p: p["created_at"])
+
+    def add_profile_input(self, firm_id: str, client_id: str, adviser_id: str,
+                          fields: dict) -> dict:
+        return self._append(self._inputs_path(firm_id), {
+            "id": _new_id(), "firm_id": firm_id, "client_id": client_id,
+            "person_id": fields.get("person_id"), "dimension": fields["dimension"],
+            "question_id": fields["question_id"], "answer": fields.get("answer"),
+            "source": fields.get("source", "advisor_entered"), "entered_by": adviser_id,
+            "method_version": fields["method_version"], "recorded_at": _now()})
+
+    def list_profile_inputs(self, firm_id: str, client_id: str) -> list[dict]:
+        """Every row for the client, oldest first (latest-wins is the engine's job)."""
+        if self.get_client(firm_id, client_id) is None:
+            return []
+        return [r for r in self._jsonl(self._inputs_path(firm_id)) if r["client_id"] == client_id]
+
+    def save_profile_snapshot(self, firm_id: str, client_id: str, adviser_id: str,
+                              fields: dict) -> dict:
+        return self._append(self._snapshots_path(firm_id), {
+            "id": _new_id(), "firm_id": firm_id, "client_id": client_id,
+            "created_by": adviser_id, "method_version": fields["method_version"],
+            "inputs_hash": fields["inputs_hash"], "result": fields["result"],
+            "created_at": _now()})
+
+    def list_profile_snapshots(self, firm_id: str, client_id: str) -> list[dict]:
+        """Newest first."""
+        if self.get_client(firm_id, client_id) is None:
+            return []
+        rows = self._jsonl(self._snapshots_path(firm_id))
+        return [r for r in rows if r["client_id"] == client_id][::-1]
+
+    def get_profile_snapshot(self, firm_id: str, snapshot_id: str) -> dict | None:
+        row = next((r for r in self._jsonl(self._snapshots_path(firm_id))
+                    if r["id"] == snapshot_id), None)
+        if row is None or self.get_client(firm_id, row["client_id"]) is None:
+            return None
+        return row
+
     # --- portfolios ------------------------------------------------------------------
 
     def portfolio_csv(self, firm_id: str, portfolio_id: str) -> Path:

@@ -352,3 +352,72 @@ export interface WhatIfChart extends ChartBase {
 }
 
 export type ChartSpec = RiskByGroupChart | RiskVsSizeChart | WhatIfChart;
+
+// --- household risk profile (draft method; GET /clients/{id}/profile) -------------------
+
+export type ProfileDimension = "willingness" | "ability" | "need";
+
+export interface ProfileOption { key: string; label: string; value: number }
+
+export interface ProfileQuestion {
+  id: string;
+  dimension: ProfileDimension;
+  kind: "choice" | "loss_limits" | "number";
+  prompt: string;
+  noise_sd: number;
+  options?: ProfileOption[];
+  min?: number;
+  max?: number;
+  unit?: "years" | "fraction";
+}
+
+export interface ProfileQuestionBank { questions: ProfileQuestion[]; method_version: string; method_status: string }
+
+export interface Person { id: string; name: string; role: "primary" | "partner"; client_id?: string; created_at?: string }
+
+/** One dimension's estimate on the 1 to 10 scale (low / high are the band's drawn ends). */
+export interface DimensionEstimate { mean: number; band: number; low: number; high: number; n_answers: number }
+
+export interface ProfileFlag {
+  code: string;
+  severity: "info" | "warn";
+  message: string;
+  refs: { dimensions: string[]; person_ids: string[] };
+}
+
+export type LossLimits = { uncomfortable_pct: number; act_pct: number };
+export type ProfileAnswerValue = string | number | LossLimits;
+
+export interface ProfileAnswer {
+  person_id: string | null;
+  dimension: ProfileDimension;
+  question_id: string;
+  answer: ProfileAnswerValue;
+  recorded_at: string;
+}
+
+export interface HouseholdProfile {
+  people: (Person & { willingness: DimensionEstimate | null })[];
+  household_willingness: (DimensionEstimate & { person_id: string }) | null;
+  ability: DimensionEstimate | null;
+  need: DimensionEstimate | null;
+  ceiling: { value: number; band: number; limited_by: "willingness" | "ability"; person_id?: string } | null;
+  scale: { min: number; max: number };
+  provisional: boolean;
+  flags: ProfileFlag[];
+  plain_summary: string;
+  method_version: string;
+  method_status: string;
+  inputs_hash: string;
+  answers: ProfileAnswer[];
+}
+
+export interface ProfileSnapshot {
+  id: string;
+  client_id: string;
+  created_by: string;
+  method_version: string;
+  inputs_hash: string;
+  result: HouseholdProfile;
+  created_at: string;
+}
