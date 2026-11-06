@@ -25,7 +25,8 @@ from fastapi.responses import JSONResponse
 
 from .. import __version__
 from .auth_admin import MemoryAuthAdmin, SupabaseAuthAdmin
-from .routers import account, assistant, audit, clients, operator, portfolios, profiling, stress
+from .routers import (account, assistant, audit, clients, household_profile, operator,
+                      portfolios, profiling, stress)
 from .settings import Settings, load_settings
 from .store import LocalStore
 from .store_base import Store
@@ -34,7 +35,8 @@ from .supabase_store import SupabaseStorage, SupabaseStore
 log_ = logging.getLogger("advisor_engine.api")
 
 # Included in this order (the order routes were declared before the split).
-ROUTERS = (account, operator, clients, portfolios, stress, profiling, assistant, audit)
+ROUTERS = (account, operator, clients, portfolios, stress, profiling, household_profile,
+           assistant, audit)
 
 
 def make_store(settings: Settings) -> Store:
