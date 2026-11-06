@@ -9,6 +9,7 @@ import AssistantTab from "./tabs/AssistantTab";
 import AuditTab from "./tabs/AuditTab";
 import CompareTab from "./tabs/CompareTab";
 import HoldingsTab from "./tabs/HoldingsTab";
+import HouseholdProfileTab from "./tabs/HouseholdProfileTab";
 import OverviewTab from "./tabs/OverviewTab";
 import PositionsTab from "./tabs/PositionsTab";
 import ProfileTab from "./tabs/ProfileTab";
@@ -32,7 +33,9 @@ const TABS = [
   ["holdings", "Holdings & what-if"],
   ["compare", "Compare"],
   ["stress", "Stress test"],
-  ["profile", "Risk profile"],
+  ["household", "Household profile"],
+  // The legacy six-question questionnaire; suitability still reads it (tab id unchanged).
+  ["profile", "Questionnaire"],
   ["assistant", "Galton AI"],
   ["report", "Client report"],
   ["review", "Review prep"],
@@ -190,6 +193,7 @@ function TabBody({ tab, ws }: { tab: TabId; ws: Workspace }) {
     case "holdings": return <HoldingsTab ws={ws} />;
     case "compare": return <CompareTab ws={ws} />;
     case "stress": return <StressTab ws={ws} />;
+    case "household": return <HouseholdProfileTab ws={ws} />;
     case "profile": return <ProfileTab ws={ws} />;
     case "assistant": return <AssistantTab ws={ws} />;
     case "report": return <ReportTab ws={ws} />;

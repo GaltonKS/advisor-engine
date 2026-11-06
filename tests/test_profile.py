@@ -333,3 +333,12 @@ def test_question_bank_is_plain_data():
     assert bank["method_version"] == cfg.METHOD_VERSION
     bank["questions"][0]["options"].clear()  # a copy: the config is untouched
     assert cfg.QUESTIONS[0]["options"]
+
+
+def test_band_ends_are_clamped_to_the_scale():
+    out = profile.compute_profile([row("w_reaction", "buy_lot", DANA)], [DANA])
+    w = out["people"][0]["willingness"]
+    assert w["low"] == pytest.approx(w["mean"] - w["band"]) and w["high"] == cfg.SCALE_MAX
+    out = profile.compute_profile([row("w_reaction", "sell_all", DANA)], [DANA])
+    assert out["people"][0]["willingness"]["low"] == cfg.SCALE_MIN
+    assert out["scale"] == {"min": 1.0, "max": 10.0}
