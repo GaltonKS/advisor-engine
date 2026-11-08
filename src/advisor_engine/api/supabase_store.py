@@ -284,6 +284,71 @@ class SupabaseSession:
             "where firm_id = %s and id = %s returning *",
             [Jsonb(answers), firm_id, client_id], one=True)
 
+    # --- households and the risk profile ---------------------------------------------
+    # Inputs and snapshots are insert-only in the database (grants and triggers); there
+    # is nothing here that could change one. Reads skip a soft-deleted client's rows.
+
+    _LIVE_CLIENT = ("exists (select 1 from public.clients c where c.id = client_id "
+                    "and c.deleted_at is null)")
+
+    def create_person(self, firm_id: str, client_id: str, adviser_id: str,
+                      fields: dict) -> dict:
+        if fields["role"] not in ("primary", "partner"):
+            raise ValueError("role must be primary or partner")
+        try:
+            return self._run(
+                "insert into public.people (firm_id, client_id, name, role, created_by) "
+                "values (%s, %s, %s, %s, %s) returning *",
+                [firm_id, client_id, fields["name"], fields["role"], adviser_id], one=True)
+        except psycopg.errors.UniqueViolation:
+            raise ValueError(f"This household already has a {fields['role']}.") from None
+
+    def list_people(self, firm_id: str, client_id: str) -> list[dict]:
+        if not (cid := _uuid(client_id)):
+            return []
+        return self._run(f"select * from public.people where firm_id = %s and client_id = %s "
+                         f"and {self._LIVE_CLIENT} order by created_at", [firm_id, cid])
+
+    def add_profile_input(self, firm_id: str, client_id: str, adviser_id: str,
+                          fields: dict) -> dict:
+        answer = fields.get("answer")
+        return self._run(
+            "insert into public.profile_inputs (firm_id, client_id, person_id, dimension,"
+            " question_id, answer, source, entered_by, method_version)"
+            " values (%s, %s, %s, %s, %s, %s, %s, %s, %s) returning *",
+            [firm_id, client_id, fields.get("person_id"), fields["dimension"],
+             fields["question_id"], None if answer is None else Jsonb(answer),
+             fields.get("source", "advisor_entered"), adviser_id, fields["method_version"]],
+            one=True)
+
+    def list_profile_inputs(self, firm_id: str, client_id: str) -> list[dict]:
+        if not (cid := _uuid(client_id)):
+            return []
+        return self._run(f"select * from public.profile_inputs where firm_id = %s "
+                         f"and client_id = %s and {self._LIVE_CLIENT} order by recorded_at, id",
+                         [firm_id, cid])
+
+    def save_profile_snapshot(self, firm_id: str, client_id: str, adviser_id: str,
+                              fields: dict) -> dict:
+        return self._run(
+            "insert into public.profile_snapshots (firm_id, client_id, created_by,"
+            " method_version, inputs_hash, result) values (%s, %s, %s, %s, %s, %s) returning *",
+            [firm_id, client_id, adviser_id, fields["method_version"], fields["inputs_hash"],
+             Jsonb(fields["result"])], one=True)
+
+    def list_profile_snapshots(self, firm_id: str, client_id: str) -> list[dict]:
+        if not (cid := _uuid(client_id)):
+            return []
+        return self._run(f"select * from public.profile_snapshots where firm_id = %s "
+                         f"and client_id = %s and {self._LIVE_CLIENT} "
+                         f"order by created_at desc, id", [firm_id, cid])
+
+    def get_profile_snapshot(self, firm_id: str, snapshot_id: str) -> dict | None:
+        if not (sid := _uuid(snapshot_id)):
+            return None
+        return self._run(f"select * from public.profile_snapshots where firm_id = %s "
+                         f"and id = %s and {self._LIVE_CLIENT}", [firm_id, sid], one=True)
+
     # --- portfolios ------------------------------------------------------------------
 
     def firm_dir(self, firm_id: str) -> Path:

@@ -29,7 +29,7 @@ export const analyticsEnabled = Boolean(DOMAIN) && !DEV;
 /** Workspace tabs that may appear in a page type. Kept equal to ClientWorkspace's tabs by a test. */
 export const ANALYTICS_TABS = [
   "overview", "positions", "holdings", "compare", "stress",
-  "profile", "assistant", "report", "review", "audit",
+  "household", "profile", "assistant", "report", "review", "audit",
 ] as const;
 
 /** The page type reported for an address inside the signed-in app. */

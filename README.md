@@ -15,11 +15,13 @@ Prototype, step 2 of the MVP: **risk profile** from a holdings CSV.
 - Sector-level effective bets
 - Sector exposure
 - Drawdown sensitivity (historical and covariance-based stress)
-- Household risk profile (in progress, `profile.py`): willingness per person, ability
+- Household risk profile (`profile.py`): willingness per person, ability
   per household and need per plan, each estimated from stored answers with an
   uncertainty band, giving a ceiling and flags. **All of its method numbers are draft
   placeholders** (`profile_config.py`, `METHOD_VERSION = "draft-2"`), pending
-  compliance review. No LLM is involved.
+  compliance review. No LLM is involved. In the web app it is the **Household
+  profile** tab; tables `people`, `profile_inputs` and `profile_snapshots` (inputs and
+  snapshots are append-only).
 
 ## Setup
 

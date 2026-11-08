@@ -172,7 +172,11 @@ def estimate(readings: list[tuple[float, float]]) -> dict | None:
 def _rounded(est: dict | None, **extra) -> dict | None:
     if est is None:
         return None
+    # low / high: mean ∓ band, clamped to the scale, so a screen can draw the band
+    # without working anything out.
     return {"mean": round(est["mean"], 3), "band": round(est["band"], 3),
+            "low": round(max(cfg.SCALE_MIN, est["mean"] - est["band"]), 3),
+            "high": round(min(cfg.SCALE_MAX, est["mean"] + est["band"]), 3),
             "n_answers": est["n_answers"], **extra}
 
 
@@ -256,6 +260,7 @@ def compute_profile(inputs: Iterable[dict], people: list[dict],
         "need": _rounded(need),
         "ceiling": {**ceiling, "value": round(ceiling["value"], 3),
                     "band": round(ceiling["band"], 3)} if ceiling else None,
+        "scale": {"min": cfg.SCALE_MIN, "max": cfg.SCALE_MAX},
         "portfolio_risk": portfolio_risk,
         "provisional": provisional,
         "flags": flags,

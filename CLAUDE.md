@@ -96,6 +96,8 @@ src/advisor_engine/
             portfolios.py upload, holdings editor, /profile, /holdings, /what-if, /compare
             stress.py     /stress/scenarios, /portfolios/{id}/stress[/current|/runs/{run}|/reset|/suggest]
             profiling.py  /questionnaire, /clients/{id}/questionnaire, /portfolios/{id}/suitability
+            household_profile.py  /profile/questions, /clients/{id}/people, /clients/{id}/profile[/inputs],
+                          /clients/{id}/profile/snapshots[/{snapshot_id}] (household risk profile)
             assistant.py  /portfolios/{id}/drafts|messages|turns, /drafts/{id}/approve
             audit.py      /audit
         admin.py       operator commands: pending sign-ups, approve, mfa-mode, reset-mfa (`python -m advisor_engine.api.admin`)
@@ -202,7 +204,22 @@ every turn --append_audit--> data/audit/audit.jsonl
 - A household is at most one `primary` and one `partner` (`public.people`, unique
   `client_id, role`).
 - The engine takes a portfolio risk reading on the 1 to 10 scale as an optional input
-  and does not compute one. `risk.py` has no such reading yet.
+  and does not compute one. `risk.py` has no such reading yet, so
+  `GET /clients/{id}/profile` has no `?portfolio_id=` until a draft mapping is agreed.
+- Store: `create_person` / `list_people`, `add_profile_input` / `list_profile_inputs`
+  (every row; latest-wins is `profile.latest_answers`), `save_profile_snapshot` /
+  `list_profile_snapshots` / `get_profile_snapshot`. No method changes or removes an
+  input or snapshot. LocalStore keeps inputs and snapshots in append-only JSON-lines
+  files. Reads hide a soft-deleted client's household.
+- Routes (`routers/household_profile.py`) validate answers with `profile.validate_answer`
+  (a null answer retracts), recompute with `compute_profile` on every read, and audit
+  every write (`person_added`, `profile_answer_recorded` / `_retracted`,
+  `profile_snapshot_saved`). A snapshot stores the frozen result and `inputs_hash`.
+- Each estimate carries `low` / `high` (mean ∓ band, clamped to the scale) so the web
+  app can draw the band without working it out.
+- Web: the **Household profile** tab (`HouseholdProfileTab.tsx`) shows only
+  `GET /clients/{id}/profile`. The legacy questionnaire stays as the **Questionnaire**
+  tab (id `profile`) because suitability and Review prep still read it.
 - No LLM, no I/O: `profile.py` imports only `profile_config` and the standard library.
 
 ### LLM layer (`assistant/`)

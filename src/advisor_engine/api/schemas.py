@@ -78,3 +78,18 @@ class SuggestIn(BaseModel):
 
 class QuestionnaireIn(BaseModel):
     answers: dict[str, int]
+
+
+class PersonIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    # Omitted: primary if the household has no one yet, else partner.
+    role: Literal["primary", "partner"] | None = None
+
+
+class ProfileInputIn(BaseModel):
+    question_id: str = Field(min_length=1, max_length=100)
+    # Set for willingness questions (per person), omitted for ability and need.
+    person_id: str | None = Field(default=None, max_length=64)
+    # The answer as the question bank describes it (an option key, a number, or
+    # {"uncomfortable_pct", "act_pct"}); null retracts the latest answer.
+    answer: str | float | dict[str, float] | None = None
