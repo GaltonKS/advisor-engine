@@ -12,6 +12,8 @@ import pytest
 
 from advisor_engine import profile, profile_config as cfg
 
+pytestmark = pytest.mark.advisor
+
 DANA = {"id": "p-dana", "name": "Dana", "role": "primary"}
 MARCUS = {"id": "p-marcus", "name": "Marcus", "role": "partner"}
 

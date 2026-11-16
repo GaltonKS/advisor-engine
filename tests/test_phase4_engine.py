@@ -10,6 +10,8 @@ from advisor_engine.risk import risk_profile
 from advisor_engine.stress import SCENARIOS, run_scenario, scenario_list, stress_test
 from advisor_engine.synthetic import synthetic_returns
 
+pytestmark = pytest.mark.advisor
+
 
 def holdings(rows):
     return validate_holdings(pd.DataFrame(rows, columns=["ticker", "shares", "price", "sector"]))

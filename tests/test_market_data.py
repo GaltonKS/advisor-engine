@@ -410,6 +410,8 @@ def test_env_file_configures_market_data(monkeypatch, tmp_path):
 from advisor_engine.data.base import NotInPlan  # noqa: E402
 from advisor_engine.data.twelvedata import TwelveDataSource, td_symbol  # noqa: E402
 
+pytestmark = pytest.mark.advisor
+
 
 def td(handler):
     return TwelveDataSource(KEY, client=httpx.Client(transport=httpx.MockTransport(handler)))

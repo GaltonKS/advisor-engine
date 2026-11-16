@@ -15,6 +15,8 @@ from advisor_engine.assistant.tools import TOOLS, execute_tool
 from advisor_engine.holdings import load_holdings
 from advisor_engine.risk import group_risk, market_sensitivity
 
+pytestmark = pytest.mark.advisor
+
 REPO = Path(__file__).resolve().parents[1]
 SAMPLE = str(REPO / "data" / "sample" / "sample_holdings.csv")
 

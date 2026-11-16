@@ -97,6 +97,8 @@ from advisor_engine.holdings import UNCLASSIFIED  # noqa: E402
 from advisor_engine.risk import risk_profile  # noqa: E402
 from advisor_engine.synthetic import synthetic_returns  # noqa: E402
 
+pytestmark = pytest.mark.advisor
+
 MIXED = (b"ticker,shares,price,sector\nAAA,100,50,Technology\nBBB,100,50,Technology\n"
          b"CCC,100,50,Energy\nDDD,100,100,\nEEE,100,50,unclassified\n")
 

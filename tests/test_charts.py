@@ -14,6 +14,8 @@ from advisor_engine.compare import compare_profiles
 from advisor_engine.holdings import load_holdings
 from advisor_engine.risk import RISK_SOURCE_NAMES, risk_sources
 
+pytestmark = pytest.mark.advisor
+
 REPO = Path(__file__).resolve().parents[1]
 SAMPLE = str(REPO / "data" / "sample" / "sample_holdings.csv")
 

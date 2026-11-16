@@ -12,6 +12,8 @@ from advisor_engine.api.settings import Settings  # noqa: E402
 from advisor_engine.api.store import LocalStore  # noqa: E402
 from advisor_engine.profile_config import METHOD_STATUS, METHOD_VERSION  # noqa: E402
 
+pytestmark = pytest.mark.advisor
+
 ALICE = {"X-Dev-User": "alice"}
 BOB = {"X-Dev-User": "bob"}
 

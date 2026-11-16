@@ -56,6 +56,8 @@ pip install -e ".[dev,llm,api]"    # everything (anthropic, fastapi)
 
 pytest                             # full suite; never calls the real API
 pytest tests/test_risk.py -q       # one file
+pytest -m advisor                  # the parked advisor product's tests only
+pytest -m "not advisor"            # everything else (shared layer, API, assistant)
 python -m advisor_engine.demo      # print the sample risk profile as JSON
 python -m advisor_engine.assistant [--holdings data/<file>.csv]   # terminal chat
 uvicorn advisor_engine.api.main:app --reload                       # API, :8000 (dev auth)
@@ -573,6 +575,10 @@ Client report (not yet charted):
   (`TEST_DATABASE_URL`). CI runs a Postgres service and fails if those tests skip.
 - Write audit output to `tmp_path` in tests (monkeypatch `audit.AUDIT_PATH` or pass
   `audit_path=`), never to the real `data/audit/`.
+- Files that only exercise advisor-specific modules carry `pytestmark = pytest.mark.advisor`
+  (registered in `pyproject.toml`, `--strict-markers`). Judge by what a file imports and
+  calls, not its name. `pytest -m advisor` and `pytest -m "not advisor"` add up to the
+  whole suite.
 - Run `pytest` before committing; the suite is fast (seconds).
 
 ## Adding things

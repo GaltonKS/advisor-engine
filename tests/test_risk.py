@@ -18,6 +18,8 @@ from advisor_engine.risk import (
 )
 from advisor_engine.synthetic import synthetic_returns
 
+pytestmark = pytest.mark.advisor
+
 
 def _holdings(n=6, sectors=None):
     sectors = sectors or ["A", "A", "B", "B", "C", "C"][:n]
