@@ -26,6 +26,22 @@ any `request` / `stream` with a method other than GET or HEAD, and any other HTT
 library. `api/` is outside it because its outbound calls go to our own Supabase; a
 connector never lives there. Don't widen the exclusions to make a connector pass.
 
+### The advisor product is frozen
+
+The repo is being extended into a small-business product (docs/phase-1.md). The advisor
+engine is **parked, not deleted**:
+
+- No new advisor features, no new advisor migrations, no calendar time on it.
+- A change that serves only the advisor side is not made: no refactoring, tidying or
+  test improvement in `risk.py`, `holdings.py`, `synthetic.py`, `stress.py`,
+  `questionnaire.py`, `profile*.py`, `charts.py`, `compare.py`, `data/` or their routes and
+  screens, and no shaping shared code around them.
+- Its tests stay green (`pytest -m advisor`). They are a check on the shared layer: if a
+  shared-layer change breaks them, it has probably broken something real. Fix the change,
+  not the test.
+- Deleting advisor code, `data/` or the market tables is a later decision, made after the
+  Phase 2 parity gate. Until then delete nothing.
+
 Current status: risk profile plus CFP tools (what-if, compare, stress scenarios, risk
 questionnaire), served by a FastAPI backend on Render with Supabase, and a React app in
 `web/`. Returns are synthetic until licensed market data is confirmed. The stress presets
