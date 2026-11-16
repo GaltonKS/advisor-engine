@@ -17,6 +17,15 @@ calls engine tools and explains their output. Code enforces this (see "Number ch
 below) rather than trusting the prompt. Any change that lets a figure reach the advisor
 without coming from the engine breaks the product's main guarantee.
 
+**Read, never write.** No route, tool or job ever writes to QuickBooks or to any other
+system a client's data comes from (sector systems, banks, custodians). Connectors read
+with GET and nothing else; changes to a client's books are made by the client, in their
+own system. `tests/test_read_only.py` enforces this: it parses every module outside
+`api/` and fails on any `post` / `put` / `patch` / `delete` on an httpx client or module,
+any `request` / `stream` with a method other than GET or HEAD, and any other HTTP
+library. `api/` is outside it because its outbound calls go to our own Supabase; a
+connector never lives there. Don't widen the exclusions to make a connector pass.
+
 Current status: risk profile plus CFP tools (what-if, compare, stress scenarios, risk
 questionnaire), served by a FastAPI backend on Render with Supabase, and a React app in
 `web/`. Returns are synthetic until licensed market data is confirmed. The stress presets
