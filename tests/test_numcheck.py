@@ -281,3 +281,66 @@ def test_coarse_with_no_nearby_value_is_plain_no_match():
 def test_precise_figure_still_passes():
     assert verify("1.29", [{"x": 1.2929}])["ok"]
     assert verify("10.9%", [{"x": 0.109}])["ok"]
+
+
+# --- K / M / B suffixes (business units) ------------------------------------
+
+BOOKS = {"kept_per_month": 13912.4, "year_sales": 553174}
+
+
+@pytest.mark.parametrize(
+    "reply, outputs, good, reason",
+    [
+        ("The shop keeps $13.9K a month.", BOOKS, True, None),
+        ("The shop keeps $99.9K a month.", BOOKS, False, "no matching tool figure"),
+        ("Sales were $1.2M for the year.", BOOKS, False, "no matching tool figure"),
+        ("Sales were $553,174 for the year.", BOOKS, True, None),
+        ("$13.9K", {"x": 13949.0}, True, None),  # rounds to the nearest 100
+        ("$13.9K", {"x": 13951.0}, False, "no matching tool figure"),
+        # A scaled figure never matches the percent pool (0.2113 -> 21.13%).
+        ("$21.1K of risk", {"top_component_share": 0.2113}, False, "no matching tool figure"),
+    ],
+)
+def test_scaled_figures_are_checked(reply, outputs, good, reason):
+    r = verify(reply, [outputs])
+    assert r["checked"] == 1
+    assert r["ok"] is good
+    if reason:
+        assert list(r["reasons"].values()) == [reason]
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [("$13.9K", [13900.0]), ("1.5B", [1500000000.0]), ("-2.5M", [-2500000.0]),
+     ("2m and 3k", [2000000.0, 3000.0])],
+)
+def test_extract_numbers_scales_suffixes(text, expected):
+    assert extract_numbers(text) == expected
+
+
+def test_suffix_glued_to_a_word_is_not_a_figure():
+    assert extract_numbers("13.9Kg and 5Mbps") == []
+
+
+# --- labels: account types and dates -----------------------------------------
+
+@pytest.mark.parametrize(
+    "text",
+    ["401(k)", "401k", "403(b)", "403b", "401 (k)", "Nov 10", "10 November", "Sept. 3",
+     "March 3rd", "on Dec. 31, the books close", "Your 401(k) and 403b plans"],
+)
+def test_account_types_and_dates_are_labels(text):
+    assert verify(text, [{}])["checked"] == 0
+
+
+def test_month_does_not_swallow_a_year():
+    r = verify("In Nov 2026 sales were $553,174.", [BOOKS])
+    assert r["ok"] and r["checked"] == 1
+
+
+def test_labels_do_not_hide_real_figures():
+    # Money written as $401k is a figure; so is a percent after a month name, and a
+    # count before the verb "may".
+    assert extract_numbers("$401k") == [401000.0]
+    assert extract_numbers("Nov 10.5%") == [10.5]
+    assert extract_numbers("Of the 12, 10 may be sold") == [12, 10]

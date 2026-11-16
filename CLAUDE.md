@@ -17,6 +17,31 @@ calls engine tools and explains their output. Code enforces this (see "Number ch
 below) rather than trusting the prompt. Any change that lets a figure reach the advisor
 without coming from the engine breaks the product's main guarantee.
 
+**Read, never write.** No route, tool or job ever writes to QuickBooks or to any other
+system a client's data comes from (sector systems, banks, custodians). Connectors read
+with GET and nothing else; changes to a client's books are made by the client, in their
+own system. `tests/test_read_only.py` enforces this: it parses every module outside
+`api/` and fails on any `post` / `put` / `patch` / `delete` on an httpx client or module,
+any `request` / `stream` with a method other than GET or HEAD, and any other HTTP
+library. `api/` is outside it because its outbound calls go to our own Supabase; a
+connector never lives there. Don't widen the exclusions to make a connector pass.
+
+### The advisor product is frozen
+
+The repo is being extended into a small-business product (docs/phase-1.md). The advisor
+engine is **parked, not deleted**:
+
+- No new advisor features, no new advisor migrations, no calendar time on it.
+- A change that serves only the advisor side is not made: no refactoring, tidying or
+  test improvement in `risk.py`, `holdings.py`, `synthetic.py`, `stress.py`,
+  `questionnaire.py`, `profile*.py`, `charts.py`, `compare.py`, `data/` or their routes and
+  screens, and no shaping shared code around them.
+- Its tests stay green (`pytest -m advisor`). They are a check on the shared layer: if a
+  shared-layer change breaks them, it has probably broken something real. Fix the change,
+  not the test.
+- Deleting advisor code, `data/` or the market tables is a later decision, made after the
+  Phase 2 parity gate. Until then delete nothing.
+
 Current status: risk profile plus CFP tools (what-if, compare, stress scenarios, risk
 questionnaire), served by a FastAPI backend on Render with Supabase, and a React app in
 `web/`. Returns are synthetic until licensed market data is confirmed. The stress presets
@@ -31,6 +56,8 @@ pip install -e ".[dev,llm,api]"    # everything (anthropic, fastapi)
 
 pytest                             # full suite; never calls the real API
 pytest tests/test_risk.py -q       # one file
+pytest -m advisor                  # the parked advisor product's tests only
+pytest -m "not advisor"            # everything else (shared layer, API, assistant)
 python -m advisor_engine.demo      # print the sample risk profile as JSON
 python -m advisor_engine.assistant [--holdings data/<file>.csv]   # terminal chat
 uvicorn advisor_engine.api.main:app --reload                       # API, :8000 (dev auth)
@@ -548,6 +575,10 @@ Client report (not yet charted):
   (`TEST_DATABASE_URL`). CI runs a Postgres service and fails if those tests skip.
 - Write audit output to `tmp_path` in tests (monkeypatch `audit.AUDIT_PATH` or pass
   `audit_path=`), never to the real `data/audit/`.
+- Files that only exercise advisor-specific modules carry `pytestmark = pytest.mark.advisor`
+  (registered in `pyproject.toml`, `--strict-markers`). Judge by what a file imports and
+  calls, not its name. `pytest -m advisor` and `pytest -m "not advisor"` add up to the
+  whole suite.
 - Run `pytest` before committing; the suite is fast (seconds).
 
 ## Adding things

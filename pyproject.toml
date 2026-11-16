@@ -31,3 +31,9 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The parked advisor product's tests (see CLAUDE.md, "The advisor product is frozen"):
+# files that only exercise advisor-specific modules. `pytest -m advisor` runs them alone.
+markers = [
+    "advisor: exercises only advisor-specific modules (risk, holdings, market data, stress, questionnaire, household profile, asset classes, charts)",
+]
+addopts = "--strict-markers"

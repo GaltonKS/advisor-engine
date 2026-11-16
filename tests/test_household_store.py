@@ -12,6 +12,8 @@ from advisor_engine.api.auth import dev_user_id  # noqa: E402
 from advisor_engine.api.store import LocalStore  # noqa: E402
 from advisor_engine.api.store_base import StoreSession  # noqa: E402
 
+pytestmark = pytest.mark.advisor
+
 
 @pytest.fixture(params=["local", "supabase"])
 def store(request, tmp_path):

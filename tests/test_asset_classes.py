@@ -11,6 +11,8 @@ from advisor_engine.risk import asset_class_coverage, risk_profile, shrunk_covar
 from advisor_engine.stress import run_scenario, stress_test
 from advisor_engine.synthetic import synthetic_returns
 
+pytestmark = pytest.mark.advisor
+
 # Trimmed from an advisor's mock portfolio export: same columns, a few rows, and the
 # totals line the export ends with.
 EXPORT = (

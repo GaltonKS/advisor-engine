@@ -19,6 +19,11 @@ Deliberate rules, all aimed at not letting an invented figure through:
   flagged "coarse match, unverified".
 - The number of items in a tool list (e.g. 12 positions) counts as a tool figure.
 - Numbers in error text from a tool count, since the model may quote them.
+- A K / M / B suffix scales the figure ($13.9K is 13,900) and the precision with it, so
+  $13.9K is checked to the nearest 100. A scaled figure is money or a count: it only
+  matches raw tool values, never the percent form.
+- Labels are not figures: the 1-in-100 metric name, account types (401(k), 403b) and
+  calendar dates (Nov 10, 10 November). They are blanked before numbers are read.
 Spelled-out numbers ("twelve") are not detected.
 """
 
@@ -32,12 +37,28 @@ from dataclasses import dataclass
 _NUM = r"(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?"
 _TOKEN = re.compile(
     rf"(?<![\w.])(?P<sign>[-−])?(?P<num>{_NUM})"
-    r"(?P<suffix>\s?%|\s?percent\b|[x×](?!\w))?(?![\w]|\.\d)"
+    r"(?P<suffix>\s?%|\s?percent\b|[x×](?!\w)|[kKmMbB](?!\w))?(?![\w]|\.\d)"
 )
+_SCALE = {"k": 1e3, "m": 1e6, "b": 1e9}
 # "1." / "2)" / "**3.**" at the start of a line, optionally after a bullet marker.
 _LIST_NUMBER = re.compile(r"^(\s*(?:[>*+-]\s+)?(?:\*\*)?)\d{1,3}[.)](?=[\s*])")
-# The name of the engine's 1-in-100 stress metric is a label, not a figure.
-_LABEL = re.compile(r"\b1[- ]in[- ]100\b", re.IGNORECASE)
+# Labels, not figures: the name of the engine's 1-in-100 stress metric, US retirement
+# account types (401(k), 403b; without this the K / B suffix would read 401k as 401,000)
+# and calendar dates in either order (Nov 10, Sept. 3, 10 November). A day must not be
+# followed by more digits, so "Nov 2026" leaves the year to the year rule. "May" must be
+# capitalised so "10 may be" is not taken for a date and a real figure hidden.
+_MONTH = (
+    r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|(?-i:May)|june?|july?|aug(?:ust)?"
+    r"|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b\.?"
+)
+_DAY = r"\d{1,2}(?:st|nd|rd|th)?(?![\d%×]|\.\d|,\d|\s?percent\b)"
+_LABEL = re.compile(
+    r"\b1[- ]in[- ]100\b"
+    r"|(?<![\w$.,])40[13]\s?(?:\([kb]\)|[kb]\b)"
+    rf"|\b{_MONTH}\s+{_DAY}"
+    rf"|(?<![\w$.,])\d{{1,2}}(?:st|nd|rd|th)?\s+{_MONTH}",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -48,6 +69,7 @@ class Token:
     kind: str  # "percent" | "multiplier" | "bare"
     direction: int = 0  # -1 / +1 if the reply states a sign for it, else 0
     coarse: bool = False  # integer or one significant figure
+    scale: float = 1.0  # K / M / B multiplier written after the number
 
 
 _NEG_WORDS = re.compile(
@@ -103,7 +125,8 @@ def _tokens(text: str) -> list[Token]:
     for m in _TOKEN.finditer(cleaned):
         num, suffix = m.group("num"), m.group("suffix")
         decimals = len(num.split(".")[1]) if "." in num else 0
-        value = float(num.replace(",", ""))
+        scale = _SCALE.get((suffix or "").strip().lower(), 1.0)
+        value = float(num.replace(",", "")) * scale
         # A bare 4-digit integer in 1900-2100 is a year.
         if not suffix and not m.group("sign") and decimals == 0 and "," not in num \
                 and len(num) == 4 and 1900 <= value <= 2100:
@@ -116,13 +139,14 @@ def _tokens(text: str) -> list[Token]:
             direction = _direction_near(
                 cleaned[max(0, m.start() - 120):m.start()], cleaned[m.end():m.end() + 120]
             )
-        if suffix is None:
-            kind = "bare"
+        if suffix is None or scale != 1.0:
+            kind = "bare"  # a scaled figure is money or a count, never a percent
         elif suffix.strip() in ("x", "×"):
             kind = "multiplier"
         else:
             kind = "percent"
-        out.append(Token(m.group(0).strip(), value, decimals, kind, direction, _is_coarse(num, decimals)))
+        out.append(Token(m.group(0).strip(), value, decimals, kind, direction,
+                         _is_coarse(num, decimals), scale))
     return out
 
 
@@ -179,14 +203,17 @@ def _sign_ok(direction: int, a: float) -> bool:
 def _check(tok: Token, raw, pct, lengths, rel_tol: float, abs_tol: float) -> str | None:
     """None if the token is backed by a tool value, else the reason it is not."""
     pools = {"percent": [pct], "multiplier": [raw], "bare": [raw, pct]}[tok.kind]
+    if tok.scale != 1.0:
+        pools = [raw]  # $21.1K is not 21.1% of anything
     x = abs(tok.value)
-    unit = 10 ** -tok.decimals
+    # The written unit carries the multiplier: $13.9K is precise to the nearest 100.
+    unit = (10 ** -tok.decimals) * tok.scale
     half_unit = 0.5 * unit
 
     if tok.coarse:
         # Exact equality or a list length is solid evidence. Rounding is not, unless the
         # tool value is the nearest one and within a quarter unit (tighter than rounding).
-        strict = min(0.5, 0.25 * unit)
+        strict = min(0.5 * tok.scale, 0.25 * unit)
         pool_all = [a for pool in pools for a in pool]
         nearest = min((abs(abs(a) - x) for a in pool_all), default=None)
         hits = [

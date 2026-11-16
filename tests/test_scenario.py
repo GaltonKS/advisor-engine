@@ -12,6 +12,8 @@ from advisor_engine.assistant.scenario import (WITHHELD, MockSuggester, output_s
 from advisor_engine.assistant.tools import execute_tool
 from advisor_engine.holdings import load_holdings
 
+pytestmark = pytest.mark.advisor
+
 REPO = Path(__file__).resolve().parents[1]
 MIXED = load_holdings(b"ticker,shares,price,sector,asset class\n"
                       b"AAA,100,50,Technology,Equity\nBBB,100,50,Energy,Equity\n"
