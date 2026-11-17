@@ -7,8 +7,10 @@ figures with these and compare strings. This file is not part of the engine: the
 formats (web/src/lib/format.ts), and these rules are what it would port if the skeleton's
 look is wanted.
 
-`toLocaleString("en-US")` rounds the exact value of the double half away from zero; so does
-Decimal(value) with ROUND_HALF_UP on the absolute value.
+`toLocaleString("en-US")` rounds the *shortest decimal form* of the double (what repr()
+prints), half away from zero, not its exact binary value: 1.45 is "1.5" at one decimal even
+though the double is 1.4499999999999999556. Decimal(repr(abs(v))) with ROUND_HALF_UP does the
+same. tests/test_skeleton_format.py holds this to the skeleton's own output.
 """
 
 from __future__ import annotations
@@ -26,7 +28,7 @@ def _ok(v) -> bool:
 
 
 def grp(v: float, d: int = 0) -> str:
-    q = Decimal(abs(v)).quantize(Decimal(1).scaleb(-d), rounding=ROUND_HALF_UP)
+    q = Decimal(repr(abs(float(v)))).quantize(Decimal(1).scaleb(-d), rounding=ROUND_HALF_UP)
     return f"{q:,.{d}f}"
 
 
@@ -64,6 +66,12 @@ def fmt_date(d) -> str:
     return f"{MONTHS[d.month - 1]} {d.day}, {d.year}"
 
 
+def js_number(v) -> str:
+    """String(v) for a number, as JavaScript writes it into text."""
+    from advisor_engine.jsmath import js_string
+    return js_string(v)
+
+
 def figure(f: dict) -> str:
     """One figure `{value, unit, decimals, signed}` as the skeleton writes it."""
     v, unit, d = f.get("value"), f.get("unit"), f.get("decimals") or 0
@@ -76,7 +84,8 @@ def figure(f: dict) -> str:
     if unit == "share":
         return signed(v, lambda x: pct(x, d)) if f.get("signed") else pct(v, d)
     if unit in ("count", "months"):
-        return num(v, d)
+        # "plain": the skeleton writes the raw number into the text ("has 1000 numbers")
+        return js_number(v) if f.get("plain") else num(v, d)
     if unit == "cents":
         return str(int(math.floor(v * 100 + 0.5))) + "¢"
     if unit == "price":

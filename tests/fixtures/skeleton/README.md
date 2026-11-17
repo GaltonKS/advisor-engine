@@ -1,29 +1,33 @@
 # Skeleton parity fixtures
 
-What the FIS pilot skeleton's own engine computes on its three worked examples, for
-`tests/test_parity.py` (gate layer 2) and `tests/test_rand.py`. Written by Node from the
-skeleton itself; never edit the JSON by hand.
+What the FIS pilot skeleton's own engine (`app/engine.js`) returns, captured by Node from
+the skeleton itself, so the Python port is tested against the skeleton's answers rather
+than against what we expect them to be. Never edit the JSON by hand: recapture.
 
-| File | Written by | Holds |
-| --- | --- | --- |
-| `<example>/brain.json`, `<example>/data.json` | `capture.js` | the example's brain and snapshot as JSON (brain closures replaced by parameterised measures, see `METRIC_PORTS`) |
-| `<example>/expected.json` | `capture.js` | five runs × ~20 ideas: model, evaluate, cash, bridge, chartFor, measures, views, panels, cost lines, check, tax |
-| `check_broken.json` | `capture.js` | the brain check on three deliberately broken brains |
-| `rand.json` | `capture_rand.js` | known-seed draws from `rng` and `gauss` |
+| File | Written by | Holds | Tested in |
+| --- | --- | --- | --- |
+| `basics.json` | `capture_basics.js` | known-seed `rng` / `gauss` draws; `n2`, `Math.round`, `sum` / `mean` / `sd` / `quant`, `clamp`, `parseDay`, `addDays`, `fmtMonth` on awkward inputs | `test_rand.py`, `test_jsmath.py` |
+| `<example>/brain.json`, `<example>/data.json` | `capture_build.js` | the three worked examples' brain and snapshot as JSON (a brain's metric closures become parameterised measures: `METRIC_PORTS`) | every step |
+| `<example>/build.json` | `capture_build.js` | the model base (`FIS.build`) for each example built five ways, plus nine edge runs on the barbershop | `test_model.py` |
+| `<example>/ideas.json` | `capture_ideas.js` | `FIS.evaluate` and `FIS.bridge` on about twenty ideas per example (as shipped, and corrected on the 13-week basis), plus loose and malformed ideas on the barbershop, with the error where the skeleton throws | `test_evaluate.py` |
+| `<example>/cash.json` | `capture_cash.js` | `FIS.cash` for ideas that move cash, a path-count override and synthetic tax payments, as shipped and corrected; on the barbershop, brain and data variants (11 to 70 weeks, a closed month, a 26-week horizon, the brain's path count, a floor above cash) | `test_cash.py` |
+| `<example>/overview.json` | `capture_overview.js` | every measure (label, text, small line, tone), the pick-list, ready-made views and the four numbers for saved choices; the panel list, layouts and four panels; cost lines; `chartFor`; the brain check; each example built five ways (the tax example with taxes off) | `test_overview.py` |
+| `check_cases.json` | `capture_overview.js` | the brain check on broken and odd brains, each stored with its brain and data | `test_overview.py` |
+| `home-services-tax/tax.json` | `capture_tax.js` | `FIS.tax` and the cash range with its payments for ideas that move tax, the Overview with taxes on, and 28 tax-profile variants stored as overrides of `data.json` | `test_tax_parity.py` |
 
-Every file records the sha256 of the skeleton's `app/engine.js`; `test_parity.py` pins it.
+Every file records the sha256 of the skeleton's `app/engine.js` it came from.
 
-To recapture (Node 20+, the skeleton checked out or downloaded somewhere):
+To recapture (Node 20+, with the skeleton downloaded or checked out somewhere):
 
 ```bash
 cd tests/fixtures/skeleton
-node capture.js /path/to/fis-pilot-skeleton .
-node capture_rand.js /path/to/fis-pilot-skeleton > rand.json
+node capture_basics.js /path/to/fis-pilot-skeleton > basics.json
+node capture_build.js /path/to/fis-pilot-skeleton .
+node capture_ideas.js /path/to/fis-pilot-skeleton .     # reads the brain.json / data.json written above
+node capture_cash.js /path/to/fis-pilot-skeleton .
+node capture_overview.js /path/to/fis-pilot-skeleton .
+node capture_tax.js /path/to/fis-pilot-skeleton .
 ```
 
-A new skeleton version changes the sha256: update `SKELETON_SHA` in `test_parity.py` and
-read the diff of the expected files before trusting it. If Python then disagrees, fix the
-port, not the tolerance.
-
-Gate layer 3 (Elite's real data, tied to DaySmart's totals) is not here yet: Elite's
-`data.js` and the skeleton's output for it have not been provided.
+The skeleton builds dates as local calendar days; the capture gives the same output in UTC
+and in America/New_York (checked when it was written).

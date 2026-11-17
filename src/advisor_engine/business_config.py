@@ -10,10 +10,13 @@ does not make a number right: the price response, the tone thresholds and the ca
 simulation's settings are placeholders until a company's own history or a reviewer
 replaces them.
 
+Each step of the port adds the numbers it reads: this holds what `model.build`,
+`model.evaluate`, `bridge.bridge`, `cash.cash_range`, `measures` and `tax` use.
+
 The tax rules table is the exception in kind, not in status: its rates, thresholds and
-dates were read from IRS instructions (each row names its source), but nobody has
-reviewed the port, and the 2026 forms were not out when it was checked. It is a planning
-estimate, never advice, and it is off unless a brain switches it on.
+dates were read from IRS instructions (each row names its source), but nobody has reviewed
+the port, and the 2026 forms were not out when it was checked. It is a planning estimate,
+never advice, and it is off unless a brain switches it on.
 """
 
 from __future__ import annotations
@@ -54,20 +57,24 @@ WINDOW_WEEKS = {12: 52, 3: 13}  # DRAFT: basis (months) -> weeks of sales averag
 SEASON_MIN_WEEKS = 3            # DRAFT: weeks a calendar month needs before it gets its own season factor
 FIT_MIN_WEEKS = 12              # DRAFT: weeks needed to measure the week-to-week swing (and so the cash range)
 PHI_MAX = 0.9                   # DRAFT: cap on week-to-week carry-over of a swing
-TREND_YEAR_WEEKS = 65           # DRAFT: weeks needed to compare against the same weeks a year earlier
-TREND_QUARTER_WEEKS = 26        # DRAFT: weeks needed to compare against the 13 weeks before
+TREND_WEEKS = 13                # DRAFT: the trend compares the latest 13 weeks ...
+YEAR_WEEKS = 52                 # DRAFT: ... with the same weeks this many weeks earlier, when there is the history
+TREND_YEAR_WEEKS = YEAR_WEEKS + TREND_WEEKS  # derived: weeks needed for the year-on-year trend (65)
+TREND_QUARTER_WEEKS = 2 * TREND_WEEKS        # derived: weeks needed for the trend against the weeks before (26)
 ACTIVE_WEEKS = 13               # DRAFT: a unit with sales in the last 13 weeks is active
 
 # --- does the detail tie to the books? (PLAYBOOK "Does it tie?") ----------------------
 TIE_TOLERANCE = 0.05  # DRAFT: detail within 5% of Profit and Loss income ties
 
+# --- the bridge: steps that move the monthly bottom line by less than this are not listed --
+BRIDGE_MIN_STEP = 1  # DRAFT: dollars a month
+
 # --- the cash range (cash) ------------------------------------------------------------
-CASH_SEED = 77  # DRAFT: fixed so every idea is run on the same draws
+CASH_SEED = 77           # DRAFT: fixed so every idea is run on the same draws, and a result is repeatable
+MAX_HORIZON_WEEKS = 104  # DRAFT: the longest look-ahead a brain may ask for
+MAX_PATHS = 100000       # DRAFT: the most simulated paths a caller may ask for
 
-# --- the bridge: steps smaller than this (dollars a month) are not listed --------------
-BRIDGE_MIN_STEP = 1  # DRAFT
-
-# --- tones on the headline numbers (METRICS) -----------------------------------------
+# --- tones on the headline measures (measures.py) ----------------------------------------
 TONE = {
     "trend_bad": -0.05,           # DRAFT: year-on-year trend below this is "bad"
     "trend_good": 0.05,           # DRAFT: above this is "good"

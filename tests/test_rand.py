@@ -1,6 +1,6 @@
 """rand.py against draws taken from the skeleton's own rng and gauss in Node.
 
-tests/fixtures/skeleton/rand.json comes from capture_rand.js (see the README there).
+tests/fixtures/skeleton/basics.json comes from capture_basics.js, run on the skeleton itself.
 Uniform draws must be identical. Normal draws go through log/sqrt/sin/cos, which V8 and
 the C library compute independently, so they are held to 1e-15 (a last-bit difference);
 the 28,000-draw run checks that no difference grows along a long stream.
@@ -13,7 +13,7 @@ import pytest
 
 from advisor_engine.rand import gauss, rng
 
-FIX = json.loads((Path(__file__).parent / "fixtures" / "skeleton" / "rand.json").read_text())
+FIX = json.loads((Path(__file__).parent / "fixtures" / "skeleton" / "basics.json").read_text())
 
 
 @pytest.mark.parametrize("seed", list(FIX["uniform"]))

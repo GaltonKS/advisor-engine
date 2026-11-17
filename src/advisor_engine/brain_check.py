@@ -11,9 +11,14 @@ has at least three starter questions; every headline, view and panel layout name
 measures and panels (four of each, no repeats, no id clashes, no tax numbers with taxes
 off); the snapshot can be read, has 12 weeks of sales (52 for seasons), units, a Profit and
 Loss and a Balance Sheet; pay terms name known units and pay kinds; starter questions that
-quote a name use one in the data; facts and tax profile fields not yet confirmed; whether
-the detail ties to the books (and the brain says so when it does not); the tax profile is
-complete and holds nothing that looks like an EIN or a Social Security number.
+quote a name use one in the data; facts not yet confirmed; whether the detail ties to the
+books (and the brain says so when it does not); with taxes switched on, that the tax profile
+is complete and holds nothing that looks like an EIN or a Social Security number.
+
+Deliberate differences from the skeleton: a brain's values are read as JavaScript writes
+them into a message, but a name every JavaScript object inherits ("toString") is not taken
+for a measure, panel or pay kind, and odd shapes (a view that is not an object, a first
+system that is a list) are read as missing rather than crashing the check.
 """
 
 from __future__ import annotations
@@ -21,15 +26,44 @@ from __future__ import annotations
 import json
 import re
 
-from .charts import PANELS, panel_list
+from .jsmath import get, js_join, js_string, truthy
 from .levers import levers_on
 from .measures import GROUP, LIBRARY, esc
 from .model import build
+from .panels import PANELS, panel_list
 from .tax import TAX_ENTITIES, TAX_PROFILE, tax_of
 
 
 def _count(n):
-    return {"value": n, "unit": "count", "decimals": 0}
+    """A count the skeleton writes straight into the message (no thousands separators)."""
+    return {"value": n, "unit": "count", "decimals": 0, "plain": True}
+
+
+def _id(v):
+    """A view or layout id as a JavaScript Set tells ids apart: 1 and "1" differ, and two
+    objects are never the same."""
+    try:
+        hash(v)
+        return (type(v).__name__, v)
+    except TypeError:
+        return ("object", id(v))
+
+
+def _t(v) -> str:
+    """A name from the brain inside a message, as JavaScript writes it into a string."""
+    return v if isinstance(v, str) else js_string(v)
+
+
+def js_or_name(v, vid):
+    """`(v && v.name) || id || "(unnamed)"`."""
+    name = get(v, "name")
+    return name if truthy(name) else vid if truthy(vid) else "(unnamed)"
+
+
+def _named(k, table) -> bool:
+    """`table[k]` is set: a text key the table has. (JavaScript also finds names every object
+    inherits, such as "toString"; those are not measures or panels here.)"""
+    return isinstance(k, str) and k in table
 
 
 def check(brain: dict, data: dict) -> list[dict]:
@@ -38,21 +72,24 @@ def check(brain: dict, data: dict) -> list[dict]:
     def add(level, msg, vars=None):
         out.append({"level": level, "msg": msg, "vars": vars or {}})
 
-    co = brain.get("company") or {}
-    if not co.get("name"):
+    co = brain.get("company")
+    if not truthy(get(co, "name")):
         add("fix", "The brain has no company name.")
-    if not co.get("owner"):
+    if not truthy(get(co, "owner")):
         add("note", "No owner name: the assistant will say “the owner”.")
-    if not co.get("logo"):
+    if not truthy(get(co, "logo")):
         add("note", "No logo yet: the header shows the company's initial instead.")
-    if not brain.get("theme") or not brain["theme"].get("accent"):
+    if not truthy(get(brain.get("theme"), "accent")):
         add("note", "No accent color set: the default blue is used.")
-    sys = brain.get("systems") or []
-    if not sys:
+    # `BRAIN.systems || []`, then `!sys.length` and `sys[0].key`: a non-empty string has a length
+    # (and no .key), an object has none
+    sys = brain.get("systems") if truthy(brain.get("systems")) else []
+    if not (isinstance(sys, (list, str)) and len(sys)):
         add("fix", "No connected systems are listed.")
-    elif sys[0].get("key") != "quickbooks":
+    elif get(sys[0], "key") != "quickbooks":
         add("note", "QuickBooks is not the first system listed. It is the spine of the product and should lead.")
-    st = (brain.get("assistant") or {}).get("starters") or []
+    st = get(brain.get("assistant"), "starters")
+    st = [q for q in st if isinstance(q, str)] if isinstance(st, list) else []
     if len(st) < 3:
         add("fix", "Fewer than 3 starter questions for the assistant.")
     try:
@@ -61,40 +98,42 @@ def check(brain: dict, data: dict) -> list[dict]:
         add("fix", "The still data could not be read: " + esc(e))
         return out
 
-    own = brain.get("metrics") or {}
+    own = brain.get("metrics") if isinstance(brain.get("metrics"), dict) else {}
 
     def known(k):
-        return k in LIBRARY or k in own
+        # `METRICS[k] || (BRAIN.metrics || {})[k]`: an own entry that is null counts as missing
+        return _named(k, LIBRARY) or (_named(k, own) and truthy(own[k]))
 
-    for k in brain.get("headline") or []:
+    headline = brain.get("headline") if isinstance(brain.get("headline"), list) else []
+    for k in headline:
         if not known(k):
-            add("fix", esc(f"Headline metric “{k}” is not in the metric library or the brain."))
+            add("fix", esc(f"Headline metric “{_t(k)}” is not in the metric library or the brain."))
     tax_on = levers_on(brain).get("taxes")
 
     def is_tax(k):
-        return GROUP.get(k) == "Taxes" and k not in own
+        return isinstance(k, str) and GROUP.get(k) == "Taxes" and not truthy(own.get(k))
 
-    for k in brain.get("headline") or []:
+    for k in headline:
         if not tax_on and is_tax(k):
             add("fix", esc(f"Headline metric “{k}” is a tax number, but taxes are switched off in this brain, so its tile would read n/a. Set levers.taxes to true, or take it out of the headline."))
-    if not brain.get("headline"):
+    if not headline:
         add("fix", "No headline metrics chosen.")
 
     seen_v: set = set()
-    for v in brain.get("views") or []:
-        vid = v.get("id") if v else None
-        nm = (v and v.get("name")) or vid or "(unnamed)"
-        ks = v["keys"] if v and isinstance(v.get("keys"), list) else []
-        if not vid or not v.get("name"):
+    for v in brain.get("views") if isinstance(brain.get("views"), list) else []:
+        vid = get(v, "id")
+        nm = _t(js_or_name(v, vid))
+        ks = get(v, "keys") if isinstance(get(v, "keys"), list) else []
+        if not truthy(vid) or not truthy(get(v, "name")):
             add("fix", "A view in BRAIN.views needs an id and a name.")
-        elif vid in seen_v or vid in ("default", "custom"):
-            add("fix", esc(f"View id “{vid}” is already taken. Pick another."))
-        seen_v.add(vid)
+        elif _id(vid) in seen_v or vid in ("default", "custom"):
+            add("fix", esc(f"View id “{_t(vid)}” is already taken. Pick another."))
+        seen_v.add(_id(vid))
         if len(ks) != 4:
             add("fix", esc(f"View “{nm}” has ") + "{n} numbers; a view is exactly four.", {"n": _count(len(ks))})
         for k in ks:
             if not known(k):
-                add("fix", esc(f"View “{nm}” uses “{k}”, which is not in the metric library or the brain."))
+                add("fix", esc(f"View “{nm}” uses “{_t(k)}”, which is not in the metric library or the brain."))
             elif not tax_on and is_tax(k):
                 add("fix", esc(f"View “{nm}” uses “{k}”, a tax number, but taxes are switched off in this brain. Set levers.taxes to true, or choose another number."))
 
@@ -104,28 +143,28 @@ def check(brain: dict, data: dict) -> list[dict]:
             add("fix", "BRAIN.panels is the standard four panels under the numbers: exactly four panel keys.")
         else:
             for i, k in enumerate(b):
-                if k not in PANELS:
-                    add("fix", esc(f"BRAIN.panels uses “{k}”, which is not a panel. The panels are: " + ", ".join(PANELS) + "."))
+                if not _named(k, PANELS):
+                    add("fix", esc(f"BRAIN.panels uses “{_t(k)}”, which is not a panel. The panels are: " + ", ".join(PANELS) + "."))
                 elif b.index(k) != i:
                     add("fix", esc(f"BRAIN.panels lists “{k}” twice."))
                 elif not tax_on and PANELS[k]["group"] == "Taxes":
                     add("fix", esc(f"BRAIN.panels uses “{k}”, a tax panel, but taxes are switched off in this brain, so it would read “The tax estimate is not available.” Set levers.taxes to true, or choose another panel."))
     seen_p: set = set()
     have_p = {x["key"] for x in panel_list(M)}
-    for v in brain.get("panelViews") or []:
-        vid = v.get("id") if v else None
-        nm = (v and v.get("name")) or vid or "(unnamed)"
-        ks = v["keys"] if v and isinstance(v.get("keys"), list) else []
-        if not vid or not v.get("name"):
+    for v in brain.get("panelViews") if isinstance(brain.get("panelViews"), list) else []:
+        vid = get(v, "id")
+        nm = _t(js_or_name(v, vid))
+        ks = get(v, "keys") if isinstance(get(v, "keys"), list) else []
+        if not truthy(vid) or not truthy(get(v, "name")):
             add("fix", "A layout in BRAIN.panelViews needs an id and a name.")
-        elif vid in seen_p or vid in ("default", "custom"):
-            add("fix", esc(f"Panel layout id “{vid}” is already taken. Pick another."))
-        seen_p.add(vid)
+        elif _id(vid) in seen_p or vid in ("default", "custom"):
+            add("fix", esc(f"Panel layout id “{_t(vid)}” is already taken. Pick another."))
+        seen_p.add(_id(vid))
         if len(ks) != 4:
             add("fix", esc(f"Panel layout “{nm}” has ") + "{n} panels; a layout is exactly four.", {"n": _count(len(ks))})
         for i, k in enumerate(ks):
-            if k not in PANELS:
-                add("fix", esc(f"Panel layout “{nm}” uses “{k}”, which is not a panel."))
+            if not _named(k, PANELS):
+                add("fix", esc(f"Panel layout “{nm}” uses “{_t(k)}”, which is not a panel."))
             elif ks.index(k) != i:
                 add("fix", esc(f"Panel layout “{nm}” lists “{k}” twice."))
             elif k not in have_p:
@@ -140,14 +179,14 @@ def check(brain: dict, data: dict) -> list[dict]:
         add("fix", esc("No " + M["V"]["units"] + " in the sales data."))
     if not M["pnl"]["months"]:
         add("note", "No Profit and Loss loaded: the books table is empty.")
-    if not M["balance"]:
+    if not truthy(M["balance"]):
         add("note", "No Balance Sheet loaded: cash in the bank is typed in, not read from the books.")
-    for n, t in M["unitTerms"].items():
+    for n, t in (M["unitTerms"].items() if isinstance(M["unitTerms"], dict) else ()):
         if not any(u["name"] == n for u in M["units"]):
             add("note", esc(f"Pay terms are set for “{n}”, who is not in the sales data."))
-        kind = (t or {}).get("type")
-        if kind and kind not in M["types"]:
-            add("fix", esc(f"“{n}” is paid by “{kind}”, which this brain does not offer."))
+        kind = get(t, "type")
+        if truthy(kind) and not _named(kind, M["types"]):
+            add("fix", esc(f"“{n}” is paid by “{_t(kind)}”, which this brain does not offer."))
     names = [u["name"].lower() for u in M["units"]] + [o["name"].lower() for o in M["off"]]
     for q in st:
         m = re.search(r"[“\"]([^”\"]+)[”\"]", q)
@@ -156,7 +195,7 @@ def check(brain: dict, data: dict) -> list[dict]:
     un = [f for f in M["FL"] if not f.get("confirmed")]
     if un:
         add("note", "{n} of {of} facts are not confirmed by the owner yet: "
-            + esc(", ".join(f.get("l") or "" for f in un[:6]) + ("…" if len(un) > 6 else "") + "."),
+            + esc(", ".join("" if f.get("l") is None else _t(f.get("l")) for f in un[:6]) + ("…" if len(un) > 6 else "") + "."),
             {"n": _count(len(un)), "of": _count(len(M["FL"]))})
     cov = M["coverage"]
     if cov and (cov["ratio"] < 0.95 or cov["ratio"] > 1.05):
@@ -167,7 +206,7 @@ def check(brain: dict, data: dict) -> list[dict]:
     if brain.get("upload") is not None and not isinstance(brain["upload"], bool):
         add("fix", "BRAIN.upload is true or false (left out means true: the owner can bring in QuickBooks CSV files on Connected systems).")
     lv = brain.get("levers")
-    if lv and lv.get("taxes") is not None and not isinstance(lv["taxes"], bool):
+    if get(lv, "taxes") is not None and not isinstance(lv["taxes"], bool):
         add("fix", "BRAIN.levers.taxes is true or false (left out means false: no tax estimate anywhere).")
     if tax_on:
         X = tax_of(M)
@@ -182,20 +221,22 @@ def check(brain: dict, data: dict) -> list[dict]:
             uc = X["unconfirmed"]
             if uc:
                 add("note", "{n} of {of} tax profile fields are not confirmed by the owner yet: "
-                    + esc(", ".join(p["l"] for p in uc[:6]) + ("…" if len(uc) > 6 else "") + "."),
+                    + esc(", ".join(p["l"] for p in uc[:6]) + ("\u2026" if len(uc) > 6 else "") + "."),
                     {"n": _count(len(uc)), "of": _count(len(X["profile"]))})
             um = X["unmapped"]
             if um:
                 one = len(um) == 1
                 add("note", "{n} cost account" + (" has" if one else "s have") + " no tax category and " + ("is" if one else "are")
-                    + " taken as booked: " + esc(", ".join(u["account"] for u in um[:6]) + ("…" if len(um) > 6 else "") + "."),
+                    + " taken as booked: " + esc(js_join((u.get("account") for u in um[:6]), ", ") + ("\u2026" if len(um) > 6 else "") + "."),
                     {"n": _count(len(um))})
             est = sum(1 for x in X["map"] if x["status"] == "estimate" and x["cat"] != "deductible")
             if est:
                 add("note", "{n} tax categor" + ("y is an estimate" if est == 1 else "ies are estimates") + " for the accountant to review.",
                     {"n": _count(est)})
-            if re.search(r"\b\d{2}-\d{7}\b|\b\d{3}-\d{2}-\d{4}\b", json.dumps(data.get("tax") or {}, ensure_ascii=False)):
+            # JSON.stringify(DATA.tax || {}): compact separators, non-ASCII kept
+            if re.search(r"\b\d{2}-\d{7}\b|\b\d{3}-\d{2}-\d{4}\b",
+                         json.dumps(data.get("tax") or {}, ensure_ascii=False, separators=(",", ":"))):
                 add("fix", "The tax data holds something that looks like an EIN or a Social Security number. Remove it: no government ID belongs in a pilot.")
-    if not brain.get("coverage") and cov and cov["ratio"] < 0.95:
+    if not truthy(brain.get("coverage")) and cov and cov["ratio"] < 0.95:
         add("fix", "The data does not cover the whole business and BRAIN.coverage is empty.")
     return out

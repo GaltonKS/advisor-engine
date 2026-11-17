@@ -28,10 +28,10 @@ from __future__ import annotations
 import math
 
 from .business_config import (
-    ACTIVE_WEEKS, FIT_MIN_WEEKS, PHI_MAX, SEASON_MIN_WEEKS, TIE_TOLERANCE, TREND_QUARTER_WEEKS,
-    TREND_YEAR_WEEKS, WINDOW_WEEKS,
+    ACTIVE_WEEKS, FIT_MIN_WEEKS, PHI_MAX, SEASON_MIN_WEEKS, TIE_TOLERANCE, TREND_QUARTER_WEEKS, TREND_WEEKS,
+    TREND_YEAR_WEEKS, WINDOW_WEEKS, YEAR_WEEKS,
 )
-from .jsmath import NAN, add_days, clamp, fin, mean, parse_day, sd, total
+from .jsmath import NAN, add_days, clamp, fin, js_div, js_or, mean, parse_day, sd, to_number, total
 
 DAYS_PER_MONTH = 30.4375
 
@@ -39,11 +39,11 @@ DAYS_PER_MONTH = 30.4375
 def weekly(sales: dict) -> list[dict]:
     """One entry per week: `{i, dt, s (sales), n (tickets)}`. Rows naming a week that
     does not exist are ignored."""
-    weeks = [{"i": i, "dt": parse_day(w), "s": 0, "n": 0} for i, w in enumerate(sales["weeks"])]
+    weeks = [{"i": i, "dt": parse_day(w), "s": 0.0, "n": 0.0} for i, w in enumerate(sales["weeks"])]
     for r in sales["rows"]:
-        if 0 <= r[0] < len(weeks):
-            weeks[r[0]]["s"] += r[4]
-            weeks[r[0]]["n"] += r[3]
+        w = weeks[int(r[0])]  # indexes are checked by model.check_snapshot
+        w["s"] += to_number(r[4])  # a null amount counts as 0, as in JavaScript
+        w["n"] += to_number(r[3])
     return weeks
 
 
@@ -64,24 +64,24 @@ def units_and_offerings(sales: dict, weeks: list[dict], w0: int, months: float) 
     """
     n_w = len(weeks)
     n_o = len(sales["offerings"])
-    U = [{"i": i, "name": name, "rev": 0, "qty": 0, "svc": [0] * n_o, "first": None, "last": None}
+    U = [{"i": i, "name": name, "rev": 0.0, "qty": 0.0, "svc": [0.0] * n_o, "first": None, "last": None}
          for i, name in enumerate(sales["units"])]
-    O = [{"i": i, "name": o["name"], "price": o.get("price"), "cost": (o.get("costPct") or 0) / 100,
-          "kind": o.get("kind") or "", "rev": 0, "qty": 0} for i, o in enumerate(sales["offerings"])]
+    O = [{"i": i, "name": o.get("name"), "price": o.get("price"), "cost": to_number(js_or(o.get("costPct"), 0)) / 100,
+          "kind": o.get("kind") or "", "rev": 0.0, "qty": 0.0} for i, o in enumerate(sales["offerings"])]
     for r in sales["rows"]:
-        if not (0 <= r[1] < len(U)) or not (0 <= r[2] < len(O)):
-            continue
-        u, o = U[r[1]], O[r[2]]
-        if u["first"] is None or r[0] < u["first"]:
-            u["first"] = r[0]
-        if u["last"] is None or r[0] > u["last"]:
-            u["last"] = r[0]
-        if r[0] >= w0:
-            u["rev"] += r[4]
-            u["qty"] += r[3]
-            u["svc"][r[2]] += r[4]
-            o["rev"] += r[4]
-            o["qty"] += r[3]
+        wk, ui, oi = int(r[0]), int(r[1]), int(r[2])  # indexes are checked by model.check_snapshot
+        u, o = U[ui], O[oi]
+        if u["first"] is None or wk < u["first"]:
+            u["first"] = wk
+        if u["last"] is None or wk > u["last"]:
+            u["last"] = wk
+        if wk >= w0:
+            amount, qty = to_number(r[4]), to_number(r[3])
+            u["rev"] += amount
+            u["qty"] += qty
+            u["svc"][oi] += amount
+            o["rev"] += amount
+            o["qty"] += qty
     tot = total(u["rev"] for u in U)
     units = [{
         "name": u["name"], "mo": u["rev"] / months, "qty": u["qty"] / months, "svc": [v / months for v in u["svc"]],
@@ -118,14 +118,15 @@ def fit(weeks: list[dict], w0: int) -> dict:
     for i, a in enumerate(by):
         if len(a) >= SEASON_MIN_WEEKS and m_all > 0:
             out["season"][i] = mean(a) / m_all
-    out["seasonN"] = sum(1 for v in out["season"] if v is not None)
+    out["seasonN"] = sum(1 for v in out["season"] if v is not None)  # a count, so an int
     n_w = len(weeks)
     if n_w >= FIT_MIN_WEEKS:
-        adj = [v for v in (w["s"] / season_factor(out, w["dt"]) for w in weeks) if v > 0]
+        # a month with no sales has a season factor of 0: JavaScript's 0/0 is NaN, dropped here
+        adj = [v for v in (js_div(w["s"], season_factor(out, w["dt"])) for w in weeks) if v > 0]
         mu = mean(adj)
         lr = [math.log(v / mu) for v in adj]
         out["vol"] = sd(lr)
-        nu = de = 0
+        nu = de = 0.0
         for i in range(1, len(lr)):
             nu += lr[i] * lr[i - 1]
             de += lr[i - 1] * lr[i - 1]
@@ -140,13 +141,16 @@ def fit(weeks: list[dict], w0: int) -> dict:
     n_sum = total(w["n"] for w in win)
     out["avgTicket"] = total(w["s"] for w in win) / n_sum if n_sum > 0 else NAN
     raw = mean(w["s"] for w in win)
-    des = mean(w["s"] / season_factor(out, w["dt"]) for w in win)
+    # Skeleton behaviour, kept for parity: a window holding a month with no sales gives
+    # NaN here (0/0), and with it a cash range of NaN. Flagged in docs/phase-2.md.
+    des = mean(js_div(w["s"], season_factor(out, w["dt"])) for w in win)
     out["deseason"] = des / raw if raw > 0 else 1
+    latest = [w["s"] for w in weeks[-TREND_WEEKS:]]
     if n_w >= TREND_YEAR_WEEKS:
-        a, b = mean(w["s"] for w in weeks[-13:]), mean(w["s"] for w in weeks[-65:-52])
+        a, b = mean(latest), mean(w["s"] for w in weeks[-TREND_YEAR_WEEKS:-YEAR_WEEKS])
         out["trend"], out["trendKind"] = (a / b - 1 if b > 0 else NAN), "year"
     elif n_w >= TREND_QUARTER_WEEKS:
-        a, b = mean(w["s"] for w in weeks[-13:]), mean(w["s"] for w in weeks[-26:-13])
+        a, b = mean(latest), mean(w["s"] for w in weeks[-TREND_QUARTER_WEEKS:-TREND_WEEKS])
         out["trend"], out["trendKind"] = (a / b - 1 if b > 0 else NAN), "quarter"
     else:
         out["trend"], out["trendKind"] = NAN, ""
@@ -159,8 +163,8 @@ def coverage(pnl_months: list[dict], by_month: list[dict] | None) -> dict | None
     show no income)."""
     if not pnl_months or not by_month:
         return None
-    bm = {x["month"]: x["amount"] for x in by_month}
-    d = b = 0
+    bm = {x["month"]: to_number(x["amount"]) for x in by_month}
+    d = b = 0.0
     n = 0
     for m in pnl_months:
         if m["key"] in bm:

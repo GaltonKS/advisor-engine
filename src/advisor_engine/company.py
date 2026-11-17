@@ -58,10 +58,20 @@ def term_types(brain: dict) -> dict:
     Kinds the library does not know are ignored.
     """
     terms = brain.get("terms")
-    src = (terms.get("types") if terms else None)
-    if src is None:
+    src = terms.get("types") if isinstance(terms, dict) else None
+    # `(BRAIN.terms && BRAIN.terms.types) || {share: {}, wage: {}}`: any falsy value gives the default
+    if src is None or src is False or src == "" or src == 0 or (isinstance(src, float) and src != src):
         src = {"share": {}, "wage": {}}
-    out = {k: {**TERM_TYPE_DEFAULTS[k], **(src[k] or {})} for k in src if k in TERM_TYPE_DEFAULTS}
+    # Object.keys() of a list or a string gives "0", "1", ... and of true or a number gives
+    # nothing: neither names a pay kind, so the company is left with "none"
+    keys = list(src) if isinstance(src, dict) else []
+    out = {}
+    for k in keys:
+        if k in TERM_TYPE_DEFAULTS:
+            over = src[k]
+            # Object.assign copies an object's fields, a string's characters by index, nothing else
+            extra = over if isinstance(over, dict) else {str(i): c for i, c in enumerate(over)} if isinstance(over, str) else {}
+            out[k] = {**TERM_TYPE_DEFAULTS[k], **extra}
     if not out:
         out["none"] = dict(TERM_TYPE_DEFAULTS["none"])
     return out

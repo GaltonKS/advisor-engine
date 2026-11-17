@@ -20,7 +20,7 @@ import re
 from datetime import date
 from pathlib import Path
 
-from advisor_engine import brain_check, business_config, cash, charts, levers, measures, model, tax
+from advisor_engine import brain_check, business_config, cash, levers, measures, model, panels, tax
 from skeleton_format import figure, render
 
 FIX = Path(__file__).parent / "fixtures" / "skeleton"
@@ -306,7 +306,7 @@ def test_a_pass_through_shows_taxable_income_and_no_tax_figure():
     assert len(X["payments"]) == 0
     for k in ("tax_liability_year", "tax_next_payment", "tax_cash_90d"):
         assert metric_t(M, k, T, None) == "n/a"
-    assert any(p["key"] == "tax" for p in charts.panel_list(M)), "the panel still shows the bridge"
+    assert any(p["key"] == "tax" for p in panels.panel_list(M)), "the panel still shows the bridge"
     assert cash.cash_range(M, T, tax=X)["taxTotal"] == 0
     assert any(c["level"] == "note" and re.search("lands on the owners", c["msg"]) for c in checks(tax_brain(), D))
     # Phase 4: assert.match(FIS.plainWords(M, T, FIS.evaluate(M, Object.assign(FIS.blankIdea(M), { fixed: [{ l: "x", mo: 500 }] })), null, null).join(" "), /not worked out here/);
@@ -398,8 +398,8 @@ def test_with_taxes_off_nothing_changes():
             assert metric_t(M, k, T, C) == "n/a"
         assert not any(re.match("^tax_", x["key"]) for x in measures.view_measures(M, T, C))
         assert not any(p["id"] == "taxes" for p in measures.view_presets(M, T, C))
-        assert not any(p["key"] == "tax" for p in charts.panel_list(M))
-        assert not any(p["id"] == "taxes" for p in charts.panel_presets(M))
+        assert not any(p["key"] == "tax" for p in panels.panel_list(M))
+        assert not any(p["id"] == "taxes" for p in panels.panel_presets(M))
         # Phase 4: const pr = FIS.rulesPrompt(M, null); assert.ok(!/ownerSalaryChange|assetPurchase|"tax"|Taxes:/.test(pr), "nothing about tax reaches the assistant");
         # Phase 4: const r = FIS.ideaFromAI(M, null, { name: "x", ownerSalaryChange: 5000, assetPurchase: [{ name: "Van", cost: 30000, week: 2 }] }); assert.equal(r.idea.salary, 0); assert.equal(r.idea.assets.length, 0);
         # Phase 4: assert.equal(FIS.resultSummary(M, T, T, C, C).tax, undefined);
@@ -423,8 +423,8 @@ def test_with_taxes_on_the_assistant_is_told_the_estimate_and_can_move_owner_pay
     for k in ("tax_liability_year", "tax_next_payment", "tax_cash_90d"):
         assert metric_t(M, k, T, None) != "n/a"
     assert any(p["id"] == "taxes" for p in measures.view_presets(M, T, cash.cash_range(M, T)))
-    assert any(p["id"] == "taxes" for p in charts.panel_presets(M))
-    assert charts.panel_default(M) == ["weekly", "cash", "tax", "books"]
+    assert any(p["id"] == "taxes" for p in panels.panel_presets(M))
+    assert panels.panel_default(M) == ["weekly", "cash", "tax", "books"]
 
 
 def test_an_unknown_entity_or_an_llc_without_a_classification_is_not_a_pass_through():

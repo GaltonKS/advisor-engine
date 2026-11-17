@@ -86,23 +86,25 @@ src/advisor_engine/
     profile.py         household risk profile: willingness (per person), ability (household),
                        need (plan) from stored answers, with bands, ceiling, flags, summary
     profile_config.py  the profile's question bank and every tunable number (all DRAFT)
-    compare.py         before/after differences between two risk profiles; bridge() for a business idea
-    charts.py          chart specs from engine output (risk by group, risk vs size, what-if);
-                       the business Overview's panels (PANELS, panel_list/presets/keys, cost_lines), chart_for()
+    compare.py         before/after differences between two risk profiles
+    charts.py          chart specs from engine output (risk by group, risk vs size, what-if)
     demo.py            end-to-end run on data/sample/sample_holdings.csv
     -- small-business engine (Phase 2 port of the FIS pilot skeleton, docs/phase-2.md) --
     business_config.py every tunable number (all DRAFT, METHOD_VERSION, METHOD_STATUS) and the tax rules table
     rand.py            mulberry32 + Box-Muller, bit-for-bit the skeleton's (the cash and tax ranges)
-    jsmath.py          the skeleton's JavaScript semantics: total() (left-to-right), n2(), js_round(), js_or(), quant()
+    jsmath.py          the skeleton's JavaScript semantics: total(), n2(), to_number(), js_round(), js_or(),
+                       truthy(), js_max/js_min(), js_string(), parse_day(); each tested against JavaScript
     company.py         vocab() (the brain's words) and term_types() (pay kinds the company uses)
     facts.py           the owner's numbers: resolve(), latest_corrections() (stored rows, latest wins), validate()
     books.py           QuickBooks CSV exports -> snapshot pieces: kind_of() (report fingerprint), one reader per
-                       report, apply(); refusals returned verbatim, never raised
+                       report, apply(); refusals returned with the skeleton's reasons, never raised
     sales.py           weekly rows by unit and offering, the fit (seasons, swing, trend), tie_to_books()
-    model.py           build(data, brain) -> M; evaluate(M, idea) -> E; pay terms; pnl_months()
-    levers.py          blank_idea(), norm_idea(), levers_on(), FOCUS
+    model.py           check_snapshot(), build(data, brain) -> M, evaluate(M, idea) -> E, pay terms
+    levers.py          blank_idea(), norm_idea(), check_idea(), levers_on(), FOCUS
+    bridge.py          bridge(M, today, idea): what moves the monthly bottom line, one group at a time
     cash.py            cash_range(M, E): the 13-week range (seed and path count on the result)
-    measures.py        the measure library (18 + tax), view_measures/presets/keys; figures, never text
+    measures.py        the measure library, view_measures/presets/keys; figures and templates, never text
+    panels.py          the Overview's panels, layouts, cost_lines(), chart_for()
     tax.py             federal income tax planning estimate (off unless the brain switches it on)
     brain_check.py     check(brain, data): what blocks a company's pilot, what to read
     data/
@@ -163,7 +165,8 @@ tests/                 one test file per module area
 ```
 engine modules        risk, stress, questionnaire, compare, holdings, synthetic, charts,
                       profile, profile_config; small business: business_config, rand, jsmath,
-                      company, facts, books, sales, model, levers, cash, measures, tax, brain_check
+                      company, facts, books, sales, model, levers, bridge, cash, measures,
+                      panels, tax, brain_check (these must also be pure: test_layering checks)
       ^
 shared layer          analysis, paths, config, _env, data/
       ^
@@ -235,32 +238,40 @@ every turn --append_audit--> data/audit/audit.jsonl
   Loss figures there are sizes (kind `"loss"`), so a smaller loss is a negative change.
 
 ### Small-business engine (Phase 2: `model.py` and friends)
-- Ported from the FIS pilot skeleton (`app/engine.js`, `app/upload.js`) and held to it by
-  `tests/test_parity.py`: same numbers on the skeleton's three worked examples, to the bit
-  for everything computed directly and to the cent for the simulated ranges. Fixtures come
-  from `tests/fixtures/skeleton/capture.js` (and `tests/fixtures/qb/capture.js` for the CSV
-  readers), which record the skeleton's sha256; rerun them against a new skeleton
-  version, never edit the expected files by hand. Don't loosen a tolerance to pass: fix the
-  port (`rand.py` first if a cash figure moves).
+- Ported from the FIS pilot skeleton (`app/engine.js`, `app/upload.js`) step by step, each
+  step held to the skeleton's own output: fixtures under `tests/fixtures/skeleton/` and
+  `tests/fixtures/qb/` are written by capture scripts run on the skeleton (each records its
+  sha256; see the READMEs there). Never edit an expected file by hand: recapture. Figures
+  match exactly, except the simulated cash and tax ranges (to the cent) and the two figures
+  that go through a log (`fit.vol`, `fit.phi`, 1e-12). Don't loosen a tolerance to pass: fix
+  the port (`rand.py` first if a range moves). `tests/parity.py` compares, strictly (a
+  boolean must be a boolean; no keys the skeleton lacks beyond a short allowlist).
 - The data shape is the skeleton's `data.js`, QuickBooks-shaped (pnl, balance, sales by week,
   unit and offering, customers as shares and a Lorenz curve, ar/ap buckets, facts with `src`
   and `confirmed`, unitTerms). Adopt it; don't design another. A brain is config and holds
   no code: a company's own measure is a library measure with parameters
-  (`{"metric": "top_n_share", "n": 4}`), and anything new is engine code for everyone.
+  (`{"metric": "top_n_share", "n": 4}`); anything new is engine code for everyone.
 - **The engine returns numbers, never formatted text.** A measure is `{value, unit, decimals,
-  signed, tone, note, vars}`; a label or note that holds a figure is a template (`{name}`)
-  with the figure in `vars`. The browser formats (port the skeleton's `usdk` rules into
-  `web/src/lib/format.ts` when screens arrive; `tests/skeleton_format.py` is the reference).
-  A pre-formatted "$553.2K" would keep the raw value out of the tool output and make the
-  number check vacuous.
+  signed, tone, note, vars}`; a label, note or message that holds a figure is a template
+  (`{name}`) with the figure in `vars` (`plain: True` for counts the skeleton writes raw).
+  The browser formats; `tests/skeleton_format.py` is the reference, itself tested against the
+  skeleton's formatters (round the shortest decimal form, halves away from zero). The QuickBooks
+  readers' `lines` / `warnings` are the upload screen's words, not for the model.
 - Every uncalibrated number lives in `business_config.py`, marked `# DRAFT`, under
   `METHOD_VERSION`; results carry `method_status`.
-- JavaScript semantics matter for parity: add floats with `jsmath.total` (Python 3.12+
-  `sum()` is compensated), round with `js_round`, use `js_or` for `x || d` (NaN is truthy in
-  Python), read loose input with `n2`.
+- JavaScript semantics matter for parity: add with `jsmath.total` (floats from 0.0; Python
+  3.12+ `sum()` is compensated), round with `js_round`, `js_or` / `truthy` for `||` and `!!`
+  (NaN is truthy in Python, `{}` falsy), `js_max` for `Math.max`, `to_number` / `n2` for loose
+  input, `js_string` for `String()`.
+- Deliberate differences from the skeleton are refusals with a plain reason where it would
+  crash or give garbage (a malformed snapshot or idea, an impossible date), names every
+  JavaScript object inherits ("toString") not counting as config keys, and two privacy fixes in
+  the CSV readers. Each is tested next to what the skeleton does.
+- Known skeleton bug, matched and pinned: a calendar month with no sales in the window makes
+  the cash range NaN. Fix in both after the parity gate.
 - Not ported yet (Phase 4, assistant): `rulesPrompt`, `ideaFromAI`, `explainPrompt`,
   `resultSummary`, `plainWords`. `ideaFromAI` will follow `scenario.py`: the model proposes
-  an idea, the engine computes every result.
+  an idea (`levers.check_idea` refuses a malformed one), the engine computes every result.
 
 ### Household risk profile (`profile.py`, `profile_config.py`)
 - **All method numbers are draft placeholders**, uncalibrated and not reviewed by
