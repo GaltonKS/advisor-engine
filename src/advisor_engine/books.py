@@ -65,9 +65,10 @@ import copy
 import math
 import re
 from datetime import date, timedelta
+from decimal import Decimal
 from typing import Any, Iterable
 
-from .jsmath import fin, js_round, total
+from .jsmath import fin, js_round, js_string, total, truthy
 
 __all__ = [
     "REPORTS", "SLOTS", "CORE",
@@ -135,7 +136,15 @@ def _locale(n: float) -> str:
             return "-∞" if n < 0 else "∞"
         if n == int(n):
             n = int(n)
+    if isinstance(n, int) and abs(n) >= 2 ** 53:
+        # toLocaleString shows a double's shortest decimal digits, then zeros
+        n = int(Decimal(repr(float(n))))
     return f"{n:,}"
+
+
+def _js_name(slot: dict) -> str:
+    """`"file " + sl.name` in JavaScript: a missing name prints "undefined", null "null"."""
+    return "undefined" if "name" not in slot else js_string(slot["name"])
 
 
 def _usd0(v: float) -> str:
@@ -456,8 +465,10 @@ def kind_of(rows: list[list[str]]) -> str:
         return "balance"
     if _K_PNL.search(t):
         return "pnl:other" if _K_PNL_OTHER.search(t) else "pnl"
-    if "sales by customer" in t and "detail" not in t:
-        return "customers"
+    if "sales by customer" in t:
+        # Deliberate difference: the skeleton reads Sales by Customer Detail as a sales
+        # detail, and its customer group headings become offering names. It is refused.
+        return "customers" if "detail" not in t else "customers:detail"
     if _K_SALES.search(t):
         return "sales"
     for r in rows[:30]:
@@ -1135,9 +1146,12 @@ def read(text: str | None, name: str = "", *, unit_words: Iterable[str] = ()) ->
         out = read_customers(rows)
     elif kind == "sales":
         out = read_sales(rows, unit_words)
+    elif kind == "customers:detail":
+        out = _fail("customers", "This is Sales by Customer Detail, which lists customers by name. Export Sales by Customer Summary for customer shares, or Sales by Product/Service Detail (Desktop: Sales by Item Detail) for the sales.")
     else:
-        first = next((c for c in rows[0] if c), "")
-        out = _fail("", "This file was not recognized as one of the six reports. Expected a title like “Profit and Loss”, “Balance Sheet”, “A/R Aging Summary”, “A/P Aging Summary”, “Sales by Product/Service Detail” or “Sales by Customer Summary”. The first line says: “" + _utf16_prefix(first, 60) + "”.")
+        # Deliberate difference: the skeleton quotes the file's first line back here, which can
+        # be a customer's name (an untitled customer list). Customer names never come out.
+        out = _fail("", "This file was not recognized as one of the six reports. Expected a title like “Profit and Loss”, “Balance Sheet”, “A/R Aging Summary”, “A/P Aging Summary”, “Sales by Product/Service Detail” or “Sales by Customer Summary”.")
     out["name"] = name or ""
     out["rows"] = len(rows)
     lines = out.get("lines") or []
@@ -1200,7 +1214,13 @@ def apply(base: dict | None, slots: dict, *, now: str, system: str | None = None
     slots = slots or {}
     key = system or "quickbooks"
     D = copy.deepcopy(base)
-    got = [s["key"] for s in SLOTS if slots.get(s["key"]) and slots[s["key"]].get("data")]
+    # `slots[k] && slots[k].data` in JavaScript: an empty object counts as present
+    got = [s["key"] for s in SLOTS if truthy(slots.get(s["key"])) and truthy((slots[s["key"]] or {}).get("data"))]
+    for k in got:
+        # Deliberate difference: the skeleton throws a TypeError reading a slot whose data
+        # lacks its piece; this says which file and what is missing.
+        if not isinstance(slots[k]["data"], dict) or not isinstance(slots[k]["data"].get(k), dict):
+            raise ValueError(f"The {REPORTS[k]} file's data has no \u201c{k}\u201d piece to put in.")
 
     def has(k: str) -> bool:
         return k in got
@@ -1210,7 +1230,7 @@ def apply(base: dict | None, slots: dict, *, now: str, system: str | None = None
 
     notes: list[str] = []
     bs, bc = base.get("sales") or {}, base.get("customers") or {}
-    sales_customers = has("sales") and slots["sales"]["data"].get("customers")
+    sales_customers = has("sales") and truthy(slots["sales"]["data"].get("customers"))
 
     def replaced(s: dict) -> bool:
         rep = str(s.get("report") or "")
@@ -1228,7 +1248,7 @@ def apply(base: dict | None, slots: dict, *, now: str, system: str | None = None
         name = sl.get("name")
         D["sources"].append({"system": key, "report": sl.get("report") or REPORTS[k],
                              "api": "CSV export brought in by the owner",
-                             "detail": detail + (" · " if detail else "") + "file " + ("undefined" if name is None else str(name)),
+                             "detail": detail + (" · " if detail else "") + "file " + _js_name(sl),
                              "rows": sl.get("rows") or 0})
     if has("pnl"):
         D["pnl"] = piece("pnl")["pnl"]
@@ -1240,7 +1260,7 @@ def apply(base: dict | None, slots: dict, *, now: str, system: str | None = None
             D["balance"]["ar"] = b["ar"]
         if b.get("ap") is not None:
             D["balance"]["ap"] = b["ap"]
-        src = "Balance Sheet, your file " + str(slots["balance"].get("name")) + (", as of " + b["asOf"] if b.get("asOf") else "")
+        src = "Balance Sheet, your file " + _js_name(slots["balance"]) + (", as of " + b["asOf"] if b.get("asOf") else "")
         D["facts"] = D.get("facts") or []
         f = next((x for x in D["facts"] if x.get("k") == "cash0"), None)
         if f is not None:
@@ -1279,7 +1299,7 @@ def apply(base: dict | None, slots: dict, *, now: str, system: str | None = None
             D["customers"] = {"system": key, **piece("sales")["customers"]}
     if has("customers"):
         D["customers"] = {"system": key, **piece("customers")["customers"]}
-    if D.get("customers"):
+    if truthy(D.get("customers")):
         D["customers"]["system"] = D["customers"].get("system") or key
     if has("sales") and not has("customers") and not sales_customers:
         notes.append("The sales detail did not show the customer, so customer shares stay as they were.")
@@ -1297,9 +1317,9 @@ def apply(base: dict | None, slots: dict, *, now: str, system: str | None = None
     if not ds and has("sales"):
         ds.append(D["sales"]["weeks"][-1])
     bp, bsl = base.get("pnl"), base.get("sales")
-    base_has = {"pnl": bool(bp and bp.get("months")), "balance": bool(base.get("balance")),
-                "sales": bool(bsl and bsl.get("rows")), "ar": bool(base.get("ar")),
-                "ap": bool(base.get("ap")), "customers": bool(base.get("customers"))}
+    base_has = {"pnl": bool(truthy(bp) and isinstance(bp, dict) and bp.get("months")), "balance": truthy(base.get("balance")),
+                "sales": bool(truthy(bsl) and isinstance(bsl, dict) and bsl.get("rows")), "ar": truthy(base.get("ar")),
+                "ap": truthy(base.get("ap")), "customers": truthy(base.get("customers"))}
     still = [s["key"] for s in SLOTS if not has(s["key"]) and base_has[s["key"]]
              and not (s["key"] == "customers" and sales_customers)]
     all_core = all(has(k) for k in CORE)

@@ -27,7 +27,14 @@ From any directory other than the skeleton, with Node 20 or later:
 
 ```bash
 node tests/fixtures/qb/capture.js <path to the FIS pilot skeleton>
+node tests/fixtures/qb/capture_edges.js <path to the FIS pilot skeleton>
 ```
+
+`capture_edges.js` writes `expected/edges.json`: LF-only and CR-only line ends, `apply()` on
+bases with empty pieces and slots with a missing or null file name, and the two places the
+skeleton lets a customer name out (an unrecognised file's first line; Sales by Customer
+Detail read as a sales detail). The port refuses both of those on purpose; the fixture
+records what the skeleton does so the test can show the difference.
 
 It overwrites every file listed above. Then run `pytest tests/test_books.py`: the parity
 tests must pass with the new expectations. When `upload.js` changes, port the change to

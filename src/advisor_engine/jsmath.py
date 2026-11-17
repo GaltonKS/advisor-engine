@@ -229,6 +229,12 @@ def get(obj, key):
     return obj.get(key) if isinstance(obj, dict) else None
 
 
+def truthy(v) -> bool:
+    """JavaScript's `!!v`: only null, false, 0, NaN and "" are false. An empty object or list
+    is true, unlike Python's bool()."""
+    return not (v is None or v is False or v == "" or (isinstance(v, (int, float)) and (v != v or v == 0)))
+
+
 def js_or(v, default):
     """`v || default`: JavaScript's falsy values (NaN, 0, "", null, false) give the default.
 

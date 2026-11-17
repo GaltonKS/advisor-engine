@@ -21,6 +21,8 @@ from pathlib import Path
 
 import pytest
 
+from parity import same
+
 from advisor_engine import books as U
 from advisor_engine import model
 from advisor_engine.company import vocab
@@ -364,14 +366,21 @@ def _expected(name):
 
 @pytest.mark.parametrize("case_id", list(CASES))
 def test_read_matches_the_js_reader(case_id):
-    assert _rt(read_case(case_id)) == _expected(case_id)
+    want = _expected(case_id)
+    if case_id == "refuse-unknown":
+        # deliberate difference: the skeleton quotes the file's first line back (it can be a
+        # customer's name); the port's reason is the same without that sentence
+        got = read_case(case_id)
+        assert "The first line says" in want["error"] and want["error"].startswith(got["error"][:-1])
+        want = {**want, "error": got["error"]}
+    same(_rt(read_case(case_id)), want, case_id)
 
 
 @pytest.mark.parametrize("spec", MANIFEST["applies"], ids=lambda a: a["id"])
 def test_apply_matches_the_js(spec):
     slots = slots_of([_expected(i) for i in spec["reads"]])
     got = U.apply(data_of(spec["example"]), slots, now=spec["now"], system=spec["system"])
-    assert _rt(got) == _expected("apply-" + spec["id"])
+    same(_rt(got), _expected("apply-" + spec["id"]), spec["id"])
 
 
 HELPERS = _expected("helpers")
@@ -391,15 +400,72 @@ def test_csv_and_shares_match_the_js():
     for text, want in HELPERS["csv"]:
         assert U.parse_csv(text) == want, repr(text)
     for amounts, once, want in HELPERS["shares"]:
-        assert _rt(U.shares(amounts, once)) == want
+        if want is None:
+            assert U.shares(amounts, once) is None
+        else:
+            same(_rt(U.shares(amounts, once)), want, "shares")
 
 
 # --- the port's own guarantees --------------------------------------------------------------
 
-def test_refusals_are_returned_not_raised_and_keep_the_js_wording():
+def test_refusals_are_returned_not_raised():
     r = read("Co\nInventory Valuation\nItem,Qty\nA,1\nB,2\n", "z.csv")
     assert r["ok"] is False and r["data"] is None and r["kind"] == ""
-    assert r["error"].endswith("The first line says: “Co”.")
+    assert r["error"].endswith("or “Sales by Customer Summary”.") and "Co”" not in r["error"]
+
+
+# --- edges the generated exports do not reach (expected/edges.json, capture_edges.js) ---------
+
+EDGES = _expected("edges")
+
+
+@pytest.mark.parametrize("file", list(EDGES["lineEnds"]))
+def test_lf_only_and_cr_only_line_ends_read_as_the_js_does(file):
+    text = (QB / file).read_text().replace("\r\n", "\n")
+    words = tuple(EDGES["lineEnds"][file]["words"])
+    for kind, body in (("lf", text), ("cr", text.replace("\n", "\r"))):
+        same(_rt(U.read(body, file, unit_words=words)), EDGES["lineEnds"][file][kind], f"{file}.{kind}")
+
+
+@pytest.mark.parametrize("case", [k for k in EDGES["apply"] if k != "null_base"])
+def test_apply_edges_match_the_js(case):
+    """Empty pieces in the base count as present (JavaScript's !!{} is true), and a slot's
+    missing or null file name prints as "undefined" / "null", as in the skeleton."""
+    c = EDGES["apply"][case]
+    same(_rt(U.apply(c["base"], c["slots"], now=MANIFEST["now"], system="quickbooks")), c["result"], case)
+
+
+def test_a_null_base_is_an_empty_snapshot():
+    # deliberate difference: the skeleton throws reading a null base; the port starts from {}
+    c = EDGES["apply"]["null_base"]
+    assert c["result"]["error"].startswith("TypeError")
+    out = U.apply(None, c["slots"], now=MANIFEST["now"], system="quickbooks")
+    assert out["slots"] == ["pnl"] and out["data"]["pnl"] == c["slots"]["pnl"]["data"]["pnl"]
+
+
+def test_a_slot_without_its_piece_is_refused_with_a_reason():
+    with pytest.raises(ValueError, match="has no “customers” piece"):
+        U.apply({}, {"customers": {"name": "c.csv", "data": {"x": 1}}}, now=MANIFEST["now"])
+
+
+def test_a_dollar_total_beyond_2_to_the_53_prints_as_tolocalestring_does():
+    assert U._locale(18466 * 10 ** 15 + 10399232) == "18,466,000,000,010,400,000"
+    assert U._locale(9007199254740991) == "9,007,199,254,740,991"
+
+
+def test_no_customer_name_comes_out_where_the_skeleton_lets_one_out():
+    """Deliberate difference. The skeleton (1) quotes an unrecognised file's first line, which
+    for an untitled customer list is a customer's name, and (2) reads Sales by Customer Detail
+    as a sales detail, so customer group headings become offering names. Both are refused here
+    without the name."""
+    lst, det = EDGES["privacy"]["untitled_customer_list"], EDGES["privacy"]["sales_by_customer_detail"]
+    assert "Jane Q. Private" in lst["result"]["error"], "what the skeleton does"
+    assert "Jane Q. Private" in [o["name"] for o in det["result"]["data"]["sales"]["offerings"]], "what the skeleton does"
+    for case in (lst, det):
+        out = jdump(U.read(case["text"], "f.csv"))
+        assert "Jane" not in out and "John Roe" not in out
+    r = U.read(det["text"], "d.csv")
+    assert r["ok"] is False and "Sales by Customer Detail" in r["error"] and r["data"] is None
 
 
 def test_no_customer_name_reaches_any_output():
