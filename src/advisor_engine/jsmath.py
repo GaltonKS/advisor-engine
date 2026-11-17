@@ -147,6 +147,34 @@ def n2(v) -> float:
     return x if math.isfinite(x) else NAN
 
 
+def to_number(v) -> float:
+    """JavaScript's ToNumber, as arithmetic coerces an operand (`"40" / 100` is 0.4).
+
+    Unlike `n2`, null is 0 (null / 100 is 0) and "" is 0; undefined has no Python
+    counterpart here, since a missing key arrives as None. Infinities stay infinite."""
+    if v is None or v == "":
+        return 0.0
+    if v is True or v is False:
+        return 1.0 if v else 0.0
+    if isinstance(v, (int, float)):
+        return float(v)
+    if isinstance(v, str):
+        return _string_to_number(v)
+    if isinstance(v, list):
+        return _string_to_number(_js_string(v))
+    return NAN
+
+
+def js_div(a: float, b: float) -> float:
+    """`a / b` as JavaScript does it: dividing by zero gives NaN (0/0, NaN/0) or an infinity
+    with the sign of a * b, never an exception."""
+    if b == 0:
+        if a == 0 or _nan(a):
+            return NAN
+        return math.copysign(math.inf, a) * math.copysign(1, b)
+    return a / b
+
+
 def js_or(v, default):
     """`v || default`: JavaScript's falsy values (NaN, 0, "", null, false) give the default.
 

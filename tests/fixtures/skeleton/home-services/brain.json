@@ -1,0 +1,142 @@
+{
+ "version": 1,
+ "company": {
+  "name": "Sample Home Services Co.",
+  "short": "Sample Co.",
+  "owner": "Dana",
+  "sector": "a home services company (heating, cooling and plumbing)",
+  "logo": "",
+  "monogram": "S"
+ },
+ "theme": {
+  "accent": "#2a78d6",
+  "accentDark": "#3987e5"
+ },
+ "pilot": {
+  "termDays": 30,
+  "start": "",
+  "fullBuild": {
+   "fee": 2500,
+   "monthly": 400,
+   "what": "live QuickBooks plus one more system"
+  }
+ },
+ "vocab": {
+  "business": "company",
+  "unit": [
+   "technician",
+   "technicians"
+  ],
+  "offering": [
+   "job type",
+   "job types"
+  ],
+  "ticket": [
+   "job",
+   "jobs"
+  ],
+  "customer": [
+   "customer",
+   "customers"
+  ],
+  "unitsArePeople": true
+ },
+ "headline": [
+  "revenue_month",
+  "profit_month",
+  "avg_ticket",
+  "tickets_week",
+  "revenue_per_unit",
+  "cash_breach"
+ ],
+ "views": [
+  {
+   "id": "technicians",
+   "name": "Technician productivity",
+   "keys": [
+    "revenue_per_unit",
+    "top_unit_share",
+    "tickets_week",
+    "avg_ticket"
+   ]
+  }
+ ],
+ "panelViews": [
+  {
+   "id": "jobs",
+   "name": "Jobs and technicians",
+   "keys": [
+    "sources",
+    "tickets",
+    "avgticket",
+    "costs"
+   ]
+  }
+ ],
+ "metrics": {},
+ "systems": [
+  {
+   "key": "quickbooks",
+   "name": "QuickBooks Online",
+   "role": "Books, invoices and bank",
+   "status": "snapshot",
+   "feeds": "Income and expenses by month, cash, what customers owe, sales by job type and technician (class)"
+  },
+  {
+   "key": "fieldservice",
+   "name": "Scheduling and dispatch",
+   "role": "The job board the technicians work from",
+   "status": "none",
+   "feeds": "Hours on each job, call-backs, jobs booked against jobs done",
+   "ask": "Not part of this pilot. It can be the second connected system in the full build."
+  }
+ ],
+ "terms": {
+  "types": {
+   "wage": {
+    "label": "Salary",
+    "per": "month",
+    "def": 5600
+   },
+   "share": {
+    "label": "Subcontractor split",
+    "def": 40
+   }
+  },
+  "default": {
+   "type": "wage",
+   "wage": 5600,
+   "rate": 40
+  }
+ },
+ "levers": {
+  "units": true,
+  "unitPay": true,
+  "prices": true,
+  "volume": true,
+  "monthlyBills": true,
+  "costRates": true,
+  "oneTimeCash": true
+ },
+ "assumptions": {
+  "elasticity": -0.4,
+  "horizonWeeks": 13
+ },
+ "assistant": {
+  "name": "Galton",
+  "starters": [
+   "What happens to what we keep if we hire a seventh technician at $5,800 a month?",
+   "What if we raise the service call to $210?",
+   "Can we get through a slow spring if sales run 15% under last year?",
+   "What if Quinn R. moves from a 40% split to a $5,400 salary?",
+   "What does buying a $38,000 van in week 4 do to cash?"
+  ],
+  "sectorNotes": [
+   "A new technician usually takes two to three months to reach a full schedule. For the first months, about half of a typical technician's sales is a fair figure; say which one you used.",
+   "AC repair peaks from June to August and furnace repair from November to February.",
+   "Parts and materials are a cost of each job. They do not go up when the price goes up.",
+   "A subcontractor on a split is paid a percent of the jobs they bill; an employee on salary is paid the same whatever the month's sales."
+  ]
+ },
+ "coverage": ""
+}

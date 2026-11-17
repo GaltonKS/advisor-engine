@@ -1,0 +1,154 @@
+{
+ "version": 1,
+ "company": {
+  "name": "Sample Barbershop",
+  "short": "The shop",
+  "owner": "Jo",
+  "sector": "a barbershop",
+  "logo": "",
+  "monogram": "S"
+ },
+ "theme": {
+  "accent": "#1f7a5a",
+  "accentDark": "#3fbf86"
+ },
+ "pilot": {
+  "termDays": 30,
+  "start": "",
+  "fullBuild": {
+   "fee": 2500,
+   "monthly": 400,
+   "what": "live QuickBooks plus one more system"
+  }
+ },
+ "vocab": {
+  "business": "shop",
+  "unit": [
+   "barber",
+   "barbers"
+  ],
+  "offering": [
+   "service",
+   "services"
+  ],
+  "ticket": [
+   "ticket",
+   "tickets"
+  ],
+  "customer": [
+   "client",
+   "clients"
+  ],
+  "unitsArePeople": true
+ },
+ "headline": [
+  "revenue_month",
+  "tickets_week",
+  "avg_ticket",
+  "profit_month",
+  "top_unit_share",
+  "cash_breach"
+ ],
+ "views": [
+  {
+   "id": "chairs",
+   "name": "Barber productivity",
+   "keys": [
+    "revenue_per_unit",
+    "top_unit_share",
+    "tickets_week",
+    "avg_ticket"
+   ]
+  }
+ ],
+ "panelViews": [
+  {
+   "id": "chairs",
+   "name": "Chairs and visits",
+   "keys": [
+    "sources",
+    "tickets",
+    "avgticket",
+    "weekly"
+   ]
+  }
+ ],
+ "metrics": {
+  "top4_share": {
+   "l": "Top 4 barbers' share of sales",
+   "metric": "top_n_share",
+   "n": 4
+  }
+ },
+ "systems": [
+  {
+   "key": "quickbooks",
+   "name": "QuickBooks Online",
+   "role": "Books and bank",
+   "status": "snapshot",
+   "feeds": "Income and expenses by month, cash, rent and bills"
+  },
+  {
+   "key": "daysmart",
+   "name": "DaySmart",
+   "role": "Point of sale and appointment book",
+   "status": "snapshot",
+   "feeds": "Tickets, services, barbers and clients"
+  },
+  {
+   "key": "booksy",
+   "name": "Booksy",
+   "role": "Online booking the barbers also use",
+   "status": "none",
+   "feeds": "Appointments, no-shows, and sales taken through Booksy",
+   "ask": "No export received yet."
+  }
+ ],
+ "terms": {
+  "types": {
+   "share": {
+    "label": "Commission",
+    "def": 50
+   },
+   "fixedIn": {
+    "label": "Booth rent",
+    "per": "week",
+    "def": 250
+   }
+  },
+  "default": {
+   "type": "share",
+   "rate": 50,
+   "rent": 250
+  }
+ },
+ "levers": {
+  "units": true,
+  "unitPay": true,
+  "prices": true,
+  "volume": true,
+  "monthlyBills": true,
+  "costRates": true,
+  "oneTimeCash": true
+ },
+ "assumptions": {
+  "elasticity": -0.5,
+  "horizonWeeks": 13
+ },
+ "assistant": {
+  "name": "Galton",
+  "starters": [
+   "What would the top line look like if we add another barber seat, for someone who works only on weekends?",
+   "What if my top 20% of barbers stay on commission and everyone else pays booth rent?",
+   "What happens if we raise the adult haircut to $50?",
+   "Can the shop get through a slow winter if rent also goes up $500?"
+  ],
+  "sectorNotes": [
+   "On commission the shop keeps the rest of the sale and pays card fees and supplies. On booth rent the shop gets the rent, and the barber keeps their sales and pays their own card fees and supplies.",
+   "Friday and Saturday are the busiest days. A barber who works only weekends sells roughly 45% of what a full-time barber of the same level does.",
+   "A new barber has no clients yet. Say whether your sales figure is a full chair or a ramp-up.",
+   "Tips are not included in any figure."
+  ]
+ },
+ "coverage": ""
+}
