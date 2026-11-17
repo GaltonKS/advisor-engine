@@ -1,0 +1,737 @@
+{
+ "now": "2026-11-13T18:00:00.000Z",
+ "reads": [
+  {
+   "id": "home-services-qbo-pnl",
+   "file": "home-services-qbo-pnl.csv",
+   "name": "pnl.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "home-services-qbo-balance",
+   "file": "home-services-qbo-balance.csv",
+   "name": "bs.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "home-services-qbo-ar",
+   "file": "home-services-qbo-ar.csv",
+   "name": "ar.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "home-services-qbo-ap",
+   "file": "home-services-qbo-ap.csv",
+   "name": "ap.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "home-services-qbo-sales",
+   "file": "home-services-qbo-sales.csv",
+   "name": "sales.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "home-services-qbd-pnl",
+   "file": "home-services-qbd-pnl.csv",
+   "name": "pnl.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "home-services-qbd-balance",
+   "file": "home-services-qbd-balance.csv",
+   "name": "bs.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "home-services-qbd-ar",
+   "file": "home-services-qbd-ar.csv",
+   "name": "ar.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "home-services-qbd-ap",
+   "file": "home-services-qbd-ap.csv",
+   "name": "ap.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "home-services-qbd-sales",
+   "file": "home-services-qbd-sales.csv",
+   "name": "sales.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "barbershop-qbo-pnl",
+   "file": "barbershop-qbo-pnl.csv",
+   "name": "pnl.csv",
+   "example": "barbershop",
+   "unit_words": [
+    "barber",
+    "barbers"
+   ]
+  },
+  {
+   "id": "barbershop-qbo-balance",
+   "file": "barbershop-qbo-balance.csv",
+   "name": "bs.csv",
+   "example": "barbershop",
+   "unit_words": [
+    "barber",
+    "barbers"
+   ]
+  },
+  {
+   "id": "barbershop-qbo-sales",
+   "file": "barbershop-qbo-sales.csv",
+   "name": "sales.csv",
+   "example": "barbershop",
+   "unit_words": [
+    "barber",
+    "barbers"
+   ]
+  },
+  {
+   "id": "barbershop-qbd-pnl",
+   "file": "barbershop-qbd-pnl.csv",
+   "name": "pnl.csv",
+   "example": "barbershop",
+   "unit_words": [
+    "barber",
+    "barbers"
+   ]
+  },
+  {
+   "id": "barbershop-qbd-balance",
+   "file": "barbershop-qbd-balance.csv",
+   "name": "bs.csv",
+   "example": "barbershop",
+   "unit_words": [
+    "barber",
+    "barbers"
+   ]
+  },
+  {
+   "id": "barbershop-qbd-sales",
+   "file": "barbershop-qbd-sales.csv",
+   "name": "sales.csv",
+   "example": "barbershop",
+   "unit_words": [
+    "barber",
+    "barbers"
+   ]
+  },
+  {
+   "id": "home-services-tax-qbo-pnl",
+   "file": "home-services-tax-qbo-pnl.csv",
+   "name": "pnl.csv",
+   "example": "home-services-tax",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "home-services-tax-qbo-balance",
+   "file": "home-services-tax-qbo-balance.csv",
+   "name": "bs.csv",
+   "example": "home-services-tax",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "home-services-tax-qbo-ar",
+   "file": "home-services-tax-qbo-ar.csv",
+   "name": "ar.csv",
+   "example": "home-services-tax",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "home-services-tax-qbo-ap",
+   "file": "home-services-tax-qbo-ap.csv",
+   "name": "ap.csv",
+   "example": "home-services-tax",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "home-services-tax-qbo-sales",
+   "file": "home-services-tax-qbo-sales.csv",
+   "name": "sales.csv",
+   "example": "home-services-tax",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "home-services-tax-qbd-pnl",
+   "file": "home-services-tax-qbd-pnl.csv",
+   "name": "pnl.csv",
+   "example": "home-services-tax",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "home-services-tax-qbd-balance",
+   "file": "home-services-tax-qbd-balance.csv",
+   "name": "bs.csv",
+   "example": "home-services-tax",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "home-services-tax-qbd-ar",
+   "file": "home-services-tax-qbd-ar.csv",
+   "name": "ar.csv",
+   "example": "home-services-tax",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "home-services-tax-qbd-ap",
+   "file": "home-services-tax-qbd-ap.csv",
+   "name": "ap.csv",
+   "example": "home-services-tax",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "home-services-tax-qbd-sales",
+   "file": "home-services-tax-qbd-sales.csv",
+   "name": "sales.csv",
+   "example": "home-services-tax",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "variant-qbo-pnl-other",
+   "file": "variant-qbo-pnl-other.csv",
+   "name": "p.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "variant-qbd-pnl-other",
+   "file": "variant-qbd-pnl-other.csv",
+   "name": "p.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "variant-qbo-sales-short",
+   "file": "variant-qbo-sales-short.csv",
+   "name": "s.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "variant-qbo-sales-nounit",
+   "file": "variant-qbo-sales-nounit.csv",
+   "name": "s.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "variant-qbd-sales-nounit",
+   "file": "variant-qbd-sales-nounit.csv",
+   "name": "s.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "variant-qbo-sales-customers",
+   "file": "variant-qbo-sales-customers.csv",
+   "name": "s.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "variant-qbd-sales-customers",
+   "file": "variant-qbd-sales-customers.csv",
+   "name": "s.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "variant-qbo-sales-renamed",
+   "file": "variant-qbo-sales-renamed.csv",
+   "name": "s.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "variant-qbo-sales-midweek",
+   "file": "variant-qbo-sales-midweek.csv",
+   "name": "s.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "variant-qbd-sales-noperiod",
+   "file": "variant-qbd-sales-noperiod.csv",
+   "name": "s.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "refuse-pnl-byclass",
+   "file": "refuse-pnl-byclass.csv",
+   "name": "a.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "refuse-pnl-total-income",
+   "file": "refuse-pnl-total-income.csv",
+   "name": "b.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "refuse-pnl-net-income",
+   "file": "refuse-pnl-net-income.csv",
+   "name": "c.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "refuse-pnl-no-months",
+   "file": "refuse-pnl-no-months.csv",
+   "name": "d.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "refuse-pnl-dup-month",
+   "file": "refuse-pnl-dup-month.csv",
+   "name": "e.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "refuse-pnl-no-accounts",
+   "file": "refuse-pnl-no-accounts.csv",
+   "name": "f.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "refuse-pnl-no-income",
+   "file": "refuse-pnl-no-income.csv",
+   "name": "g.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "pnl-small-tied",
+   "file": "pnl-small-tied.csv",
+   "name": "h.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "warn-pnl-untied",
+   "file": "warn-pnl-untied.csv",
+   "name": "i.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "edge-pnl-months-in-first-column",
+   "file": "edge-pnl-months-in-first-column.csv",
+   "name": "j.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "refuse-balance-no-bank",
+   "file": "refuse-balance-no-bank.csv",
+   "name": "x.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "warn-balance-no-date",
+   "file": "warn-balance-no-date.csv",
+   "name": "x2.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "refuse-aging-no-buckets",
+   "file": "refuse-aging-no-buckets.csv",
+   "name": "y.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "refuse-aging-no-amounts",
+   "file": "refuse-aging-no-amounts.csv",
+   "name": "y2.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "warn-aging-no-total",
+   "file": "warn-aging-no-total.csv",
+   "name": "y3.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "warn-aging-total-off",
+   "file": "warn-aging-total-off.csv",
+   "name": "y4.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "refuse-unknown",
+   "file": "refuse-unknown.csv",
+   "name": "z.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "refuse-empty",
+   "file": "refuse-empty.csv",
+   "name": "e.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "customers-summary",
+   "file": "customers-summary.csv",
+   "name": "c.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "refuse-customers-no-column",
+   "file": "refuse-customers-no-column.csv",
+   "name": "c2.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "refuse-customers-few",
+   "file": "refuse-customers-few.csv",
+   "name": "c3.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "refuse-sales-no-columns",
+   "file": "refuse-sales-no-columns.csv",
+   "name": "s2.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "refuse-sales-no-dates",
+   "file": "refuse-sales-no-dates.csv",
+   "name": "s3.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  },
+  {
+   "id": "csv-bom-semicolon",
+   "file": "csv-bom-semicolon.csv",
+   "name": "semi.csv",
+   "example": "home-services",
+   "unit_words": [
+    "technician",
+    "technicians"
+   ]
+  }
+ ],
+ "applies": [
+  {
+   "id": "home-services-qbo-all",
+   "example": "home-services",
+   "reads": [
+    "home-services-qbo-pnl",
+    "home-services-qbo-balance",
+    "home-services-qbo-ar",
+    "home-services-qbo-ap",
+    "home-services-qbo-sales"
+   ],
+   "system": "quickbooks",
+   "now": "2026-11-13T18:00:00.000Z"
+  },
+  {
+   "id": "home-services-qbd-all",
+   "example": "home-services",
+   "reads": [
+    "home-services-qbd-pnl",
+    "home-services-qbd-balance",
+    "home-services-qbd-ar",
+    "home-services-qbd-ap",
+    "home-services-qbd-sales"
+   ],
+   "system": "quickbooks",
+   "now": "2026-11-13T18:00:00.000Z"
+  },
+  {
+   "id": "barbershop-qbo-all",
+   "example": "barbershop",
+   "reads": [
+    "barbershop-qbo-pnl",
+    "barbershop-qbo-balance",
+    "barbershop-qbo-sales"
+   ],
+   "system": "quickbooks",
+   "now": "2026-11-13T18:00:00.000Z"
+  },
+  {
+   "id": "barbershop-qbd-all",
+   "example": "barbershop",
+   "reads": [
+    "barbershop-qbd-pnl",
+    "barbershop-qbd-balance",
+    "barbershop-qbd-sales"
+   ],
+   "system": "quickbooks",
+   "now": "2026-11-13T18:00:00.000Z"
+  },
+  {
+   "id": "home-services-tax-qbo-all",
+   "example": "home-services-tax",
+   "reads": [
+    "home-services-tax-qbo-pnl",
+    "home-services-tax-qbo-balance",
+    "home-services-tax-qbo-ar",
+    "home-services-tax-qbo-ap",
+    "home-services-tax-qbo-sales"
+   ],
+   "system": "quickbooks",
+   "now": "2026-11-13T18:00:00.000Z"
+  },
+  {
+   "id": "home-services-tax-qbd-all",
+   "example": "home-services-tax",
+   "reads": [
+    "home-services-tax-qbd-pnl",
+    "home-services-tax-qbd-balance",
+    "home-services-tax-qbd-ar",
+    "home-services-tax-qbd-ap",
+    "home-services-tax-qbd-sales"
+   ],
+   "system": "quickbooks",
+   "now": "2026-11-13T18:00:00.000Z"
+  },
+  {
+   "id": "home-services-pnl-only",
+   "example": "home-services",
+   "reads": [
+    "home-services-qbd-pnl"
+   ],
+   "system": "quickbooks",
+   "now": "2026-11-13T18:00:00.000Z"
+  },
+  {
+   "id": "home-services-pnl-balance",
+   "example": "home-services",
+   "reads": [
+    "home-services-qbd-pnl",
+    "home-services-qbd-balance"
+   ],
+   "system": "quickbooks",
+   "now": "2026-11-13T18:00:00.000Z"
+  },
+  {
+   "id": "home-services-renamed",
+   "example": "home-services",
+   "reads": [
+    "variant-qbo-sales-renamed"
+   ],
+   "system": "quickbooks",
+   "now": "2026-11-13T18:00:00.000Z"
+  },
+  {
+   "id": "home-services-nounit",
+   "example": "home-services",
+   "reads": [
+    "variant-qbo-sales-nounit"
+   ],
+   "system": "quickbooks",
+   "now": "2026-11-13T18:00:00.000Z"
+  },
+  {
+   "id": "home-services-customers",
+   "example": "home-services",
+   "reads": [
+    "variant-qbo-sales-customers",
+    "customers-summary"
+   ],
+   "system": "quickbooks",
+   "now": "2026-11-13T18:00:00.000Z"
+  },
+  {
+   "id": "barbershop-balance-nodate",
+   "example": "barbershop",
+   "reads": [
+    "warn-balance-no-date"
+   ],
+   "system": "quickbooks",
+   "now": "2026-11-13T18:00:00.000Z"
+  }
+ ]
+}

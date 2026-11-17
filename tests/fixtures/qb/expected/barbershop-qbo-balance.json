@@ -1,0 +1,1 @@
+{"kind":"balance","report":"Balance Sheet","ok":true,"warnings":[],"data":{"balance":{"asOf":"2026-11-01","cash":15000,"ar":0,"ap":0}},"lines":["Cash in the bank $15,000, as of 2026-11-01","Owed by customers $0; owed to suppliers $0"],"summary":{"cash":15000,"ar":0,"ap":0,"asOf":"2026-11-01"},"name":"bs.csv","rows":20,"detail":"Cash in the bank $15,000, as of 2026-11-01"}

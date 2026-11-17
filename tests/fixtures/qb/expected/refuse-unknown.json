@@ -1,0 +1,1 @@
+{"kind":"","report":"","ok":false,"error":"This file was not recognized as one of the six reports. Expected a title like “Profit and Loss”, “Balance Sheet”, “A/R Aging Summary”, “A/P Aging Summary”, “Sales by Product/Service Detail” or “Sales by Customer Summary”. The first line says: “Co”.","warnings":[],"lines":[],"data":null,"name":"z.csv","rows":5,"detail":""}
