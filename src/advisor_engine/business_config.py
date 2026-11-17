@@ -11,7 +11,7 @@ simulation's settings are placeholders until a company's own history or a review
 replaces them.
 
 Each step of the port adds the numbers it reads: this holds what `model.build`,
-`model.evaluate` and `bridge.bridge` use.
+`model.evaluate`, `bridge.bridge` and `cash.cash_range` use.
 """
 
 from __future__ import annotations
@@ -63,3 +63,8 @@ TIE_TOLERANCE = 0.05  # DRAFT: detail within 5% of Profit and Loss income ties
 
 # --- the bridge: steps that move the monthly bottom line by less than this are not listed --
 BRIDGE_MIN_STEP = 1  # DRAFT: dollars a month
+
+# --- the cash range (cash) ------------------------------------------------------------
+CASH_SEED = 77           # DRAFT: fixed so every idea is run on the same draws, and a result is repeatable
+MAX_HORIZON_WEEKS = 104  # DRAFT: the longest look-ahead a brain may ask for
+MAX_PATHS = 100000       # DRAFT: the most simulated paths a caller may ask for

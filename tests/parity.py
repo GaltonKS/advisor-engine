@@ -41,16 +41,22 @@ RUNS = ["base", "corrected", "no_customers_ar_ap", "no_books", "weeks_30"]
 
 # Keys Python adds on purpose. Any other key the skeleton lacks is an error, so a renamed or
 # stray field cannot slip through.
-EXTRA = {"tie", "method_version", "method_status"}
+EXTRA = {"tie", "method_version", "method_status", "seed", "paths"}
 
 
-def same(py, js, path: str = "", loose: tuple[str, ...] = ()) -> None:
+CENT = 0.005
+
+
+def same(py, js, path: str = "", loose: tuple[str, ...] = (), cents: tuple[str, ...] = ()) -> None:
     """Assert `py` matches the skeleton's `js`, exactly.
 
     Every key the skeleton has must be present and match; Python may add only the keys in
     EXTRA. Numbers must be equal, except at paths ending in one of `loose`
     (figures that go through a log, exp, sin or cos, which V8 and the C library may round
-    differently in the last bit): those agree to 1e-12 of their size. A boolean must be a
+    differently in the last bit): those agree to 1e-12 of their size. Figures under a path
+    containing one of `cents` (the simulated cash range's percentiles) agree to the cent:
+    their draws pass through log/sin/cos and exp, and 2,000 paths add up the last bits. A
+    boolean must be a
     boolean (1 is not True). Python's NaN arrives here as None, like JavaScript's JSON null.
     """
     if isinstance(js, dict):
@@ -59,17 +65,22 @@ def same(py, js, path: str = "", loose: tuple[str, ...] = ()) -> None:
         assert not stray, f"{path}: keys the skeleton does not have: {sorted(stray)}"
         for k, v in js.items():
             assert k in py, f"{path}.{k}: missing"
-            same(py[k], v, f"{path}.{k}", loose)
+            same(py[k], v, f"{path}.{k}", loose, cents)
     elif isinstance(js, list):
         assert isinstance(py, list) and len(py) == len(js), \
             f"{path}: length {len(py) if isinstance(py, list) else py!r} vs {len(js)}"
         for i, (a, b) in enumerate(zip(py, js)):
-            same(a, b, f"{path}[{i}]", loose)
+            same(a, b, f"{path}[{i}]", loose, cents)
     elif isinstance(js, bool) or isinstance(py, bool):
         assert py is js, f"{path}: {py!r} vs {js!r}"
     elif isinstance(js, (int, float)):
         assert isinstance(py, (int, float)), f"{path}: {py!r} vs {js}"
-        tol = 1e-12 * max(1, abs(js)) if path.endswith(loose) and loose else 0
+        if cents and any(c in path for c in cents):
+            tol = CENT
+        elif loose and path.endswith(loose):
+            tol = 1e-12 * max(1, abs(js))
+        else:
+            tol = 0
         assert abs(py - js) <= tol, f"{path}: {py!r} vs {js!r}"
     else:
         assert py == js, f"{path}: {py!r} vs {js!r}"
