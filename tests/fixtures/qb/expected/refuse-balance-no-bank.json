@@ -1,0 +1,1 @@
+{"kind":"balance","report":"Balance Sheet","ok":false,"error":"The bank accounts total was not found (a row called Total Bank Accounts, or Total Checking/Savings in Desktop). Export the Balance Sheet Standard for all accounts.","warnings":[],"lines":[],"data":null,"name":"x.csv","rows":6,"detail":""}
