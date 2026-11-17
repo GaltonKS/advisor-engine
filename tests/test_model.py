@@ -188,7 +188,17 @@ def test_term_types_keep_the_brains_order_and_drop_unknown_kinds():
 
 def test_every_number_in_business_config_is_marked_draft():
     lines = Path(business_config.__file__).read_text().splitlines()
+    in_rules = False
     for line in lines:
+        # The tax rules table is DRAFT as a whole (its own line says so); its rows are the IRS
+        # figures it was read from, each with its source, not tunable numbers.
+        if line.startswith("TAX_RULES = {"):
+            assert "# DRAFT" in line, line
+            in_rules = True
+            continue
+        if in_rules:
+            in_rules = line != "}"
+            continue
         code = line.split("#")[0]
         if any(ch.isdigit() for ch in code) and ("=" in code or ":" in code) and not line.lstrip().startswith(("#", '"""')):
             if "label" in code and "def" not in code:

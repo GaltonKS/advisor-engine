@@ -12,8 +12,8 @@ measures and panels (four of each, no repeats, no id clashes, no tax numbers wit
 off); the snapshot can be read, has 12 weeks of sales (52 for seasons), units, a Profit and
 Loss and a Balance Sheet; pay terms name known units and pay kinds; starter questions that
 quote a name use one in the data; facts not yet confirmed; whether the detail ties to the
-books (and the brain says so when it does not). With taxes switched on, the tax profile's own
-checks come with the tax estimate (Phase 2, step 7).
+books (and the brain says so when it does not); with taxes switched on, that the tax profile
+is complete and holds nothing that looks like an EIN or a Social Security number.
 
 Deliberate differences from the skeleton: a brain's values are read as JavaScript writes
 them into a message, but a name every JavaScript object inherits ("toString") is not taken
@@ -23,6 +23,7 @@ system that is a list) are read as missing rather than crashing the check.
 
 from __future__ import annotations
 
+import json
 import re
 
 from .jsmath import get, js_string, truthy
@@ -30,7 +31,7 @@ from .levers import levers_on
 from .measures import GROUP, LIBRARY, esc
 from .model import build
 from .panels import PANELS, panel_list
-from .tax import tax_of
+from .tax import TAX_ENTITIES, TAX_PROFILE, tax_of
 
 
 def _count(n):
@@ -208,11 +209,34 @@ def check(brain: dict, data: dict) -> list[dict]:
     if get(lv, "taxes") is not None and not isinstance(lv["taxes"], bool):
         add("fix", "BRAIN.levers.taxes is true or false (left out means false: no tax estimate anywhere).")
     if tax_on:
-        # The tax profile's own checks (missing fields, unplaced accounts, government IDs)
-        # come with the tax estimate in step 7.
         X = tax_of(M)
         if not X or not X.get("ok"):
             add("fix", esc("Taxes are switched on but the estimate cannot be worked out: " + ((X and X.get("why")) or "no reason given")))
+        else:
+            if X["missing"]:
+                labels = dict(TAX_PROFILE)
+                add("fix", esc("The tax profile is missing: " + ", ".join(labels.get(k, k) for k in X["missing"]) + "."))
+            if not X["computed"]:
+                add("fix" if X["entity"] and X["entity"] not in TAX_ENTITIES else "note", esc("Tax: " + X["why"]))
+            uc = X["unconfirmed"]
+            if uc:
+                add("note", "{n} of {of} tax profile fields are not confirmed by the owner yet: "
+                    + esc(", ".join(p["l"] for p in uc[:6]) + ("\u2026" if len(uc) > 6 else "") + "."),
+                    {"n": _count(len(uc)), "of": _count(len(X["profile"]))})
+            um = X["unmapped"]
+            if um:
+                one = len(um) == 1
+                add("note", "{n} cost account" + (" has" if one else "s have") + " no tax category and " + ("is" if one else "are")
+                    + " taken as booked: " + esc(", ".join(_t(u["account"]) for u in um[:6]) + ("\u2026" if len(um) > 6 else "") + "."),
+                    {"n": _count(len(um))})
+            est = sum(1 for x in X["map"] if x["status"] == "estimate" and x["cat"] != "deductible")
+            if est:
+                add("note", "{n} tax categor" + ("y is an estimate" if est == 1 else "ies are estimates") + " for the accountant to review.",
+                    {"n": _count(est)})
+            # JSON.stringify(DATA.tax || {}): compact separators, non-ASCII kept
+            if re.search(r"\b\d{2}-\d{7}\b|\b\d{3}-\d{2}-\d{4}\b",
+                         json.dumps(data.get("tax") or {}, ensure_ascii=False, separators=(",", ":"))):
+                add("fix", "The tax data holds something that looks like an EIN or a Social Security number. Remove it: no government ID belongs in a pilot.")
     if not truthy(brain.get("coverage")) and cov and cov["ratio"] < 0.95:
         add("fix", "The data does not cover the whole business and BRAIN.coverage is empty.")
     return out
