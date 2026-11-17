@@ -21,9 +21,10 @@ import pytest
 from advisor_engine import cash, model
 from advisor_engine.jsmath import add_days, parse_day, plain, total
 from advisor_engine.levers import blank_idea
-from parity import EXAMPLES, fixture, load, same
+from parity import EXAMPLES, EXTRA, fixture, load, same
 
 PCT = ("p10", "p50", "p90")
+CASH_EXTRA = EXTRA | {"seed", "paths"}  # the range records its seed and path count
 
 
 def _model(ex, run):
@@ -37,7 +38,7 @@ def check(py, js, path):
     if js is None or "error" in (js or {}):
         assert py is None if js is None else False, f"{path}: the skeleton gave {js}"
         return
-    same(plain(py), js, path, cents=PCT)
+    same(plain(py), js, path, cents=PCT, extra=CASH_EXTRA)
 
 
 def _cases():
@@ -81,6 +82,20 @@ def test_variants_cover_the_edges():
     assert v["weeks_11"]["today"] is None, "under 12 weeks there is no range"
     assert v["weeks_12"]["today"]["H"] == 13 and v["horizon_26"]["today"]["H"] == 26
     assert v["floor_above_cash"]["today"]["pBreach"] == 1
+    assert [v[f"horizon_{h}"]["today"]["H"] for h in (4, 52, 104)] == [4, 52, 104]
+    assert v["brain_paths_1"]["today"]["p10"] == v["brain_paths_1"]["today"]["p90"], "one path: no spread"
+    flat = v["flat_sales"]["today"]
+    assert flat["p10"] == flat["p90"], "no swing: every path the same"
+    assert v["floor_equals_cash"]["today"]["pBreach"] in (0, 1)
+    assert v["last_week_before_year_end"]["today"]["dates"][:2] == ["2026-12-28", "2027-01-04"], "crosses the year end"
+
+
+def test_the_cent_tolerance_is_only_for_simulated_percentiles():
+    from parity import _cent_figure
+    assert _cent_figure("x.cash.p50[3]", PCT) and _cent_figure("top10.p90[13]", PCT)
+    assert not _cent_figure("x.cash.p50[0]", PCT), "week 0 is today's cash, exact"
+    assert not _cent_figure("top_p10_idea.pBreach", PCT) and not _cent_figure("x.taxOut[3]", PCT)
+    assert not _cent_figure("p10_named_idea.dates[3]", PCT)
 
 
 def test_a_month_with_no_sales_gives_a_range_of_nan_as_in_the_skeleton():

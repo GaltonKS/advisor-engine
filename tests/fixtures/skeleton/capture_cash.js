@@ -85,6 +85,15 @@ function variants(BRAIN, DATA) {
   { const B = clone(BRAIN); B.assumptions = Object.assign({}, B.assumptions, { horizonWeeks: 26 }); run("horizon_26", B, DATA); }
   { const B = clone(BRAIN); B.assumptions = Object.assign({}, B.assumptions, { paths: 300 }); run("brain_paths_300", B, DATA); }
   { const D = clone(DATA); D.facts.forEach(f => { if (f.k === "floor") f.v = 40000; }); run("floor_above_cash", BRAIN, D); }
+  for (const h of [4, 52, 104]) { const B = clone(BRAIN); B.assumptions = Object.assign({}, B.assumptions, { horizonWeeks: h }); run("horizon_" + h, B, DATA); }
+  { const B = clone(BRAIN); B.assumptions = Object.assign({}, B.assumptions, { paths: 1 }); run("brain_paths_1", B, DATA); }
+  { const B = clone(BRAIN); B.assumptions = Object.assign({}, B.assumptions, { paths: 3 }); run("brain_paths_3", B, DATA); }
+  /* every week the same: no swing (vol 0) and no carry-over (phi 0), so every path is identical */
+  { const D = clone(DATA); D.sales.rows = D.sales.rows.filter(r => r[0] === 0).flatMap(r => D.sales.weeks.map((w, i) => [i].concat(r.slice(1)))); run("flat_sales", BRAIN, D); }
+  { const D = clone(DATA), c0 = D.facts.find(f => f.k === "cash0").v; D.facts.forEach(f => { if (f.k === "floor") f.v = c0; }); run("floor_equals_cash", BRAIN, D); }
+  /* the last week moved to Dec 22, so the next 13 weeks cross the year end and two 1sts of the month */
+  { const D = clone(DATA), last = FIS.parseDay(D.sales.weeks[D.sales.weeks.length - 1]), shift = Math.round((new Date(2026, 11, 21) - last) / 864e5);
+    D.sales.weeks = D.sales.weeks.map(w => day(FIS.addDays(FIS.parseDay(w), shift))); run("last_week_before_year_end", BRAIN, D); }
   return out;
 }
 
