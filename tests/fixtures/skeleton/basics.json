@@ -838,6 +838,431 @@
    "out": "NaN"
   }
  ],
+ "toNumber": [
+  {
+   "tag": "null",
+   "v": null,
+   "out": 0
+  },
+  {
+   "tag": "str",
+   "v": "",
+   "out": 0
+  },
+  {
+   "tag": "str",
+   "v": "  ",
+   "out": 0
+  },
+  {
+   "tag": "str",
+   "v": "2600",
+   "out": 2600
+  },
+  {
+   "tag": "str",
+   "v": " 4.5 ",
+   "out": 4.5
+  },
+  {
+   "tag": "str",
+   "v": "0x10",
+   "out": 16
+  },
+  {
+   "tag": "str",
+   "v": "-0x10",
+   "out": "NaN"
+  },
+  {
+   "tag": "str",
+   "v": "1_000",
+   "out": "NaN"
+  },
+  {
+   "tag": "str",
+   "v": "1e5",
+   "out": 100000
+  },
+  {
+   "tag": "str",
+   "v": ".5",
+   "out": 0.5
+  },
+  {
+   "tag": "str",
+   "v": "5.",
+   "out": 5
+  },
+  {
+   "tag": "str",
+   "v": "+5",
+   "out": 5
+  },
+  {
+   "tag": "str",
+   "v": "Infinity",
+   "out": "Infinity"
+  },
+  {
+   "tag": "str",
+   "v": "inf",
+   "out": "NaN"
+  },
+  {
+   "tag": "str",
+   "v": "nan",
+   "out": "NaN"
+  },
+  {
+   "tag": "str",
+   "v": "abc",
+   "out": "NaN"
+  },
+  {
+   "tag": "str",
+   "v": "12abc",
+   "out": "NaN"
+  },
+  {
+   "tag": "str",
+   "v": "1,000",
+   "out": "NaN"
+  },
+  {
+   "tag": "str",
+   "v": " 7 ",
+   "out": 7
+  },
+  {
+   "tag": "bool",
+   "v": true,
+   "out": 1
+  },
+  {
+   "tag": "bool",
+   "v": false,
+   "out": 0
+  },
+  {
+   "tag": "num",
+   "v": 7,
+   "out": 7
+  },
+  {
+   "tag": "num",
+   "v": -0.25,
+   "out": -0.25
+  },
+  {
+   "tag": "num",
+   "v": 1e+308,
+   "out": 1e+308
+  },
+  {
+   "tag": "list",
+   "v": [],
+   "out": 0
+  },
+  {
+   "tag": "list",
+   "v": [
+    "3"
+   ],
+   "out": 3
+  },
+  {
+   "tag": "list",
+   "v": [
+    1,
+    2
+   ],
+   "out": "NaN"
+  },
+  {
+   "tag": "str",
+   "v": "0b101",
+   "out": 5
+  },
+  {
+   "tag": "str",
+   "v": "0o17",
+   "out": 15
+  },
+  {
+   "tag": "str",
+   "v": "0X1F",
+   "out": 31
+  },
+  {
+   "tag": "str",
+   "v": "٣",
+   "out": "NaN"
+  },
+  {
+   "tag": "str",
+   "v": "１２",
+   "out": "NaN"
+  },
+  {
+   "tag": "str",
+   "v": "\u001c5",
+   "out": "NaN"
+  },
+  {
+   "tag": "str",
+   "v": "5",
+   "out": "NaN"
+  },
+  {
+   "tag": "str",
+   "v": "﻿ ﻿5",
+   "out": 5
+  },
+  {
+   "tag": "str",
+   "v": " 5　",
+   "out": 5
+  },
+  {
+   "tag": "str",
+   "v": "-Infinity",
+   "out": "-Infinity"
+  },
+  {
+   "tag": "str",
+   "v": "1e999",
+   "out": "Infinity"
+  },
+  {
+   "tag": "str",
+   "v": "1e",
+   "out": "NaN"
+  },
+  {
+   "tag": "str",
+   "v": "--5",
+   "out": "NaN"
+  },
+  {
+   "tag": "list",
+   "v": [
+    null
+   ],
+   "out": 0
+  },
+  {
+   "tag": "list",
+   "v": [
+    ""
+   ],
+   "out": 0
+  },
+  {
+   "tag": "list",
+   "v": [
+    true
+   ],
+   "out": "NaN"
+  },
+  {
+   "tag": "list",
+   "v": [
+    false
+   ],
+   "out": "NaN"
+  },
+  {
+   "tag": "list",
+   "v": [
+    [
+     " 8 "
+    ]
+   ],
+   "out": 8
+  },
+  {
+   "tag": "list",
+   "v": [
+    1.5
+   ],
+   "out": 1.5
+  },
+  {
+   "tag": "obj",
+   "v": {},
+   "out": "NaN"
+  }
+ ],
+ "div": [
+  {
+   "a": 1,
+   "b": 0,
+   "out": "Infinity"
+  },
+  {
+   "a": -1,
+   "b": 0,
+   "out": "-Infinity"
+  },
+  {
+   "a": 0,
+   "b": 0,
+   "out": "NaN"
+  },
+  {
+   "a": 6,
+   "b": 3,
+   "out": 2
+  },
+  {
+   "a": 1,
+   "b": "-0",
+   "out": "-Infinity"
+  },
+  {
+   "a": 0,
+   "b": 5,
+   "out": 0
+  }
+ ],
+ "max": [
+  {
+   "xs": [
+    0,
+    5
+   ],
+   "max": 5,
+   "min": 0
+  },
+  {
+   "xs": [
+    0,
+    -5
+   ],
+   "max": 0,
+   "min": -5
+  },
+  {
+   "xs": [
+    0,
+    "NaN"
+   ],
+   "max": "NaN",
+   "min": "NaN"
+  },
+  {
+   "xs": [
+    "NaN",
+    3
+   ],
+   "max": "NaN",
+   "min": "NaN"
+  },
+  {
+   "xs": [
+    "-0",
+    0
+   ],
+   "max": 0,
+   "min": "-0"
+  }
+ ],
+ "string": [
+  {
+   "tag": "num",
+   "v": 5,
+   "out": "5"
+  },
+  {
+   "tag": "num",
+   "v": 5.5,
+   "out": "5.5"
+  },
+  {
+   "tag": "num",
+   "v": -0.25,
+   "out": "-0.25"
+  },
+  {
+   "tag": "num",
+   "v": 1e+21,
+   "out": "1e+21"
+  },
+  {
+   "tag": "num",
+   "v": 100000000000000000000,
+   "out": "100000000000000000000"
+  },
+  {
+   "tag": "num",
+   "v": 123456789012345680000,
+   "out": "123456789012345680000"
+  },
+  {
+   "tag": "num",
+   "v": 0.00001,
+   "out": "0.00001"
+  },
+  {
+   "tag": "num",
+   "v": 0.000001,
+   "out": "0.000001"
+  },
+  {
+   "tag": "num",
+   "v": 1.5e-7,
+   "out": "1.5e-7"
+  },
+  {
+   "tag": "num",
+   "v": -2e-7,
+   "out": "-2e-7"
+  },
+  {
+   "tag": "num",
+   "v": 0.30000000000000004,
+   "out": "0.30000000000000004"
+  },
+  {
+   "tag": "num",
+   "v": 0,
+   "out": "0"
+  },
+  {
+   "tag": "null",
+   "v": null,
+   "out": "null"
+  },
+  {
+   "tag": "bool",
+   "v": true,
+   "out": "true"
+  },
+  {
+   "tag": "str",
+   "v": "x",
+   "out": "x"
+  },
+  {
+   "tag": "list",
+   "v": [
+    1,
+    [
+     2,
+     3
+    ]
+   ],
+   "out": "1,2,3"
+  },
+  {
+   "tag": "list",
+   "v": [
+    null
+   ],
+   "out": ""
+  }
+ ],
  "parseDay": [
   {
    "s": "2026-11-03",

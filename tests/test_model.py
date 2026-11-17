@@ -151,6 +151,7 @@ def _broken(fn):
     (lambda d: d["pnl"]["lines"][0]["values"].__setitem__(0, "12"), "values that are not numbers"),
     (lambda d: d["pnl"].pop("lines"), "months list and a lines list"),
     (lambda d: d["facts"].append({"l": "no key"}), "needs a key"),
+    (lambda d: d["facts"][0].__setitem__("v", "15,000"), "not a number"),
 ])
 def test_a_snapshot_the_model_cannot_read_is_refused_with_a_reason(break_it, reason):
     brain, data = _broken(break_it)

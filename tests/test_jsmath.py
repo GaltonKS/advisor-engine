@@ -19,7 +19,8 @@ from pathlib import Path
 import pytest
 
 from advisor_engine.jsmath import (
-    add_days, clamp, fin, js_or, js_round, mean, month_label, n2, or_zero, parse_day, plain, quant, sd, total,
+    add_days, clamp, fin, js_div, js_max, js_min, js_or, js_round, js_string, mean, month_label, n2, or_zero, parse_day,
+    plain, quant, sd, to_number, total,
 )
 
 FIX = json.loads((Path(__file__).parent / "fixtures" / "skeleton" / "basics.json").read_text())
@@ -107,3 +108,37 @@ def test_fin_is_a_finite_number_and_not_a_boolean():
 def test_plain_turns_dates_and_nan_into_json():
     assert plain({"d": date(2026, 11, 3), "x": float("nan"), "t": (1, float("inf")), "f": len}) == \
         {"d": "2026-11-03", "x": None, "t": [1, None]}
+
+
+@pytest.mark.parametrize("case", FIX["toNumber"], ids=lambda c: f"{c['tag']}:{c['v']!r}")
+def test_to_number_is_what_arithmetic_does_to_an_operand(case):
+    assert same(to_number(case["v"]), case["out"]) or (case["out"] in ("Infinity", "-Infinity")
+                                                        and to_number(case["v"]) == float(case["out"].replace("Infinity", "inf")))
+
+
+@pytest.mark.parametrize("case", FIX["div"], ids=lambda c: f"{c['a']}/{c['b']}")
+def test_js_div_never_raises_and_matches(case):
+    got, want = js_div(case["a"], num(case["b"])), case["out"]
+    if want in ("Infinity", "-Infinity"):
+        assert got == float(want.replace("Infinity", "inf"))
+    else:
+        assert same(got, want)
+
+
+@pytest.mark.parametrize("case", FIX["max"], ids=lambda c: repr(c["xs"]))
+def test_js_max_and_min_keep_nan_and_signed_zero(case):
+    xs = [num(x) for x in case["xs"]]
+    assert same(js_max(*xs), case["max"]) and same(js_min(*xs), case["min"])
+
+
+@pytest.mark.parametrize("case", FIX["string"], ids=lambda c: repr(c["v"]))
+def test_js_string_is_string(case):
+    assert js_string(case["v"]) == case["out"]
+
+
+def test_an_integer_too_big_for_a_double_is_infinite_as_json_parse_makes_it():
+    from advisor_engine.jsmath import as_float
+    big = 10 ** 400
+    assert as_float(big) == math.inf and as_float(-big) == -math.inf and as_float(7) == 7.0
+    assert not fin(big) and math.isnan(n2(big)) and to_number(big) == math.inf
+    assert js_string(big) == "Infinity" and js_string(-big) == "-Infinity"

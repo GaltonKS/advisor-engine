@@ -41,6 +41,14 @@ out.stats = ARR.map(a => ({ a, sum: num(FIS.sum(a)), mean: num(FIS.mean(a)), sd:
 out.clamp = [[5, 0, 10], [-1, 0, 10], [11, 0, 10], [NaN, 0, 10], [5, 0, NaN], [5, NaN, 10]]
   .map(([v, a, b]) => ({ v: num(v), a: num(a), b: num(b), out: num(FIS.clamp(v, a, b)) }));
 
+/* what arithmetic does to an operand (ToNumber, via unary plus), division, Math.max/min, String() */
+out.toNumber = N2_INPUTS.filter(([t]) => t !== "undefined").map(([tag, v]) => ({ tag, v, out: num(+v) }));
+out.div = [[1, 0], [-1, 0], [0, 0], [6, 3], [1, -0], [0, 5]].map(([a, b]) => ({ a, b: num(b), out: num(a / b) }));
+out.max = [[0, 5], [0, -5], [0, NaN], [NaN, 3], [-0, 0]].map(xs => ({ xs: xs.map(num), max: num(Math.max(...xs)), min: num(Math.min(...xs)) }));
+out.string = [[5.0, "num"], [5.5, "num"], [-0.25, "num"], [1e21, "num"], [1e20, "num"], [123456789012345680000, "num"], [0.00001, "num"],
+  [0.000001, "num"], [1.5e-7, "num"], [-2e-7, "num"], [0.1 + 0.2, "num"], [-0, "num"], [null, "null"], [true, "bool"], ["x", "str"], [[1, [2, 3]], "list"], [[null], "list"]]
+  .map(([v, tag]) => ({ tag, v, out: String(v) }));
+
 /* dates: local calendar days (the skeleton builds every date with new Date(y, m, d)) */
 const day = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 /* the Python port refuses everything after "2026-1-5" on purpose (see jsmath.parse_day); recorded to show what JS does */

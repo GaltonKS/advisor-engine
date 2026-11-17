@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import math
 import re
+from decimal import Decimal
 from datetime import date, timedelta
 from typing import Iterable
 
@@ -75,14 +76,23 @@ def clamp(v: float, a: float, b: float) -> float:
     return NAN if _nan(a) or _nan(inner) else max(a, inner)
 
 
+def as_float(v: int | float) -> float:
+    """A number as JavaScript holds it. An integer too big for a double is what JSON.parse
+    makes of it, an infinity (Python's float() would raise OverflowError instead)."""
+    try:
+        return float(v)
+    except OverflowError:
+        return math.inf if v > 0 else -math.inf
+
+
 def fin(v) -> bool:
     """A finite number (booleans are not numbers here, as in JavaScript)."""
-    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(as_float(v))
 
 
 def finite(v) -> bool:
     """`isFinite(v)` on something already a number (NaN and infinities are not)."""
-    return isinstance(v, (int, float)) and math.isfinite(v)
+    return isinstance(v, (int, float)) and math.isfinite(as_float(v))
 
 
 # JavaScript's StringToNumber, exactly: the whitespace it trims (WhiteSpace and
@@ -107,6 +117,23 @@ def _string_to_number(text: str) -> float:
     return NAN
 
 
+def _number_string(x: float) -> str:
+    """JavaScript's Number::toString: the shortest digits that read back as `x` (as Python's
+    repr), written plainly from 1e-6 up to (not including) 1e21 and with an exponent outside
+    that ("1e+21", "1.5e-7"); NaN, Infinity, and 0 for -0."""
+    if _nan(x):
+        return "NaN"
+    if math.isinf(x):
+        return "Infinity" if x > 0 else "-Infinity"
+    if x == 0:
+        return "0"
+    if 1e-6 <= abs(x) < 1e21:
+        text = format(Decimal(repr(x)), "f")
+        return text.rstrip("0").rstrip(".") if "." in text else text
+    mantissa, exp = repr(x).split("e")
+    return f"{mantissa.removesuffix('.0')}e{'+' if int(exp) > 0 else '-'}{abs(int(exp))}"
+
+
 def _js_string(v) -> str:
     """`String(v)` for what a JSON value can hold, as `+v` sees it inside an array."""
     if v is None:
@@ -114,9 +141,7 @@ def _js_string(v) -> str:
     if v is True or v is False:
         return "true" if v else "false"
     if isinstance(v, (int, float)):
-        if isinstance(v, float) and v.is_integer() and math.isfinite(v):
-            return str(int(v))
-        return "NaN" if _nan(v) else repr(v)
+        return _number_string(as_float(v))
     if isinstance(v, list):
         return ",".join(_js_string(x) for x in v)
     if isinstance(v, dict):
@@ -137,7 +162,7 @@ def n2(v) -> float:
     if v is True or v is False:
         return 1.0 if v else 0.0
     if isinstance(v, (int, float)):
-        x = float(v)
+        x = as_float(v)
     elif isinstance(v, str):
         x = _string_to_number(v)
     elif isinstance(v, list):
@@ -157,7 +182,7 @@ def to_number(v) -> float:
     if v is True or v is False:
         return 1.0 if v else 0.0
     if isinstance(v, (int, float)):
-        return float(v)
+        return as_float(v)
     if isinstance(v, str):
         return _string_to_number(v)
     if isinstance(v, list):
@@ -173,6 +198,35 @@ def js_div(a: float, b: float) -> float:
             return NAN
         return math.copysign(math.inf, a) * math.copysign(1, b)
     return a / b
+
+
+def js_max(*xs: float) -> float:
+    """`Math.max`: NaN if any argument is NaN (Python's max can quietly return 0 instead),
+    and +0 beats -0."""
+    if any(_nan(x) for x in xs):
+        return NAN
+    m = max(xs)
+    return 0.0 if m == 0 and any(x == 0 and math.copysign(1, x) > 0 for x in xs) else m
+
+
+def js_min(*xs: float) -> float:
+    """`Math.min`: NaN if any argument is NaN, and -0 beats +0."""
+    if any(_nan(x) for x in xs):
+        return NAN
+    m = min(xs)
+    return -0.0 if m == 0 and any(x == 0 and math.copysign(1, float(x)) < 0 for x in xs) else m
+
+
+def js_string(v) -> str:
+    """`String(v)` for a JSON value: 5.0 is "5", null is "null", true is "true"."""
+    if v is None:
+        return "null"
+    return _js_string(v)
+
+
+def get(obj, key):
+    """`obj && obj[key]` for config and ideas: anything that is not an object reads as empty."""
+    return obj.get(key) if isinstance(obj, dict) else None
 
 
 def js_or(v, default):
