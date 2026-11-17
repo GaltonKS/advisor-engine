@@ -27,7 +27,7 @@ Views: an owner can choose which four measures lead (`view_keys`), from ready-ma
 from __future__ import annotations
 
 from .business_config import TONE
-from .jsmath import NAN, finite, fin, mean, parse_day, total
+from .jsmath import NAN, finite, fin, get, mean, parse_day, to_number, total, truthy
 from .tax import tax_of
 
 GROUP = {
@@ -70,6 +70,11 @@ def fig(value, unit: str, decimals: int = 0, signed: bool = False) -> dict:
     return out
 
 
+def plain_count(n) -> dict:
+    """A count the skeleton writes straight into the text (String(n), no thousands separators)."""
+    return {**fig(n, "count"), "plain": True}
+
+
 def text(value: str) -> dict:
     return {"text": str(value)}
 
@@ -90,7 +95,7 @@ def _na(note="", tone="") -> dict:
 # --- the library -------------------------------------------------------------------------
 
 def _revenue_month(M, T, C):
-    return _m(T["sales"], "usd", "Average of the last {weeks} weeks", {"weeks": fig(M["win"]["nWin"], "count")})
+    return _m(T["sales"], "usd", "Average of the last {weeks} weeks", {"weeks": plain_count(M["win"]["nWin"])})
 
 
 def _revenue_trend(M, T, C):
@@ -118,13 +123,13 @@ def _avg_ticket(M, T, C):
 
 
 def _tickets_week(M, T, C):
-    return _m(M["fit"]["qtyWk"], "count", "Average of the last {weeks} weeks", {"weeks": fig(M["win"]["nWin"], "count")})
+    return _m(M["fit"]["qtyWk"], "count", "Average of the last {weeks} weeks", {"weeks": plain_count(M["win"]["nWin"])})
 
 
 def _revenue_per_unit(M, T, C):
     n = sum(1 for r in T["rows"] if r["on"] and r["sales"] > 0)
     word = M["V"]["unit"] if n == 1 else M["V"]["units"]
-    return _m(T["sales"] / n if n else NAN, "usd", "{n} " + esc(word) + " with sales", {"n": fig(n, "count")})
+    return _m(T["sales"] / n if n else NAN, "usd", "{n} " + esc(word) + " with sales", {"n": plain_count(n)})
 
 
 def _on_by_sales(T):
@@ -144,16 +149,24 @@ def _top_unit_share(M, T, C):
 
 def _top_customers(M, T, C):
     c = M["customers"]
-    if c and fin(c.get("top20")):
+    if truthy(c) and fin(get(c, "top20")):
+        # num(count) in the skeleton: isFinite() coerces, so "12" is 12 and null is 0; a missing count is n/a
+        count = to_number(c["count"]) if "count" in c else NAN
         return _m(c["top20"], "share", "Of sales, from {count} " + esc(M["V"]["customers"]),
-                  {"count": fig(c.get("count"), "count")}, tone="warn" if c["top20"] > TONE["top_customers_warn"] else "")
+                  {"count": fig(count, "count")}, tone="warn" if c["top20"] > TONE["top_customers_warn"] else "")
     return _na(esc("Needs sales by " + M["V"]["customer"]))
 
 
 def _cash_on_hand(M, T, C):
     b = M["balance"]
-    if b and b.get("asOf"):
-        return _m(M["F"]["cash0"], "usd", "Balance sheet, {date}", {"date": {"date": parse_day(b["asOf"])}})
+    if truthy(b) and truthy(get(b, "asOf")):
+        try:
+            return _m(M["F"]["cash0"], "usd", "Balance sheet, {date}", {"date": {"date": parse_day(b["asOf"])}})
+        except ValueError:
+            # Deliberate difference: a date that cannot be read is left out of the note (the
+            # skeleton writes "Jan 1, 2027" for "2026-13-01" or "undefined NaN, NaN"); the cash
+            # figure itself stays.
+            return _m(M["F"]["cash0"], "usd", "Balance sheet")
     return _m(M["F"]["cash0"], "usd", "")
 
 
@@ -171,7 +184,7 @@ def _cash_breach(M, T, C):
     p = C["pBreach"]
     tone = "bad" if p > TONE["breach_bad"] else "warn" if p > TONE["breach_warn"] else "good"
     return _m(p, "share", "Next {weeks} weeks · floor {floor}",
-              {"weeks": fig(C["H"], "count"), "floor": fig(M["F"]["floor"], "usd")}, tone=tone)
+              {"weeks": plain_count(C["H"]), "floor": fig(M["F"]["floor"], "usd")}, tone=tone)
 
 
 def _bills_covered(M, T, C):
@@ -212,7 +225,7 @@ def _net_income(M, T, C):
 
 
 def _ar_open(M, T, C):
-    if not M["ar"]:
+    if not truthy(M["ar"]):
         return _na("Needs A/R Aging")
     b = M["ar"]["buckets"]
     tot, late = total(x[1] for x in b), total(x[1] for x in b[2:])
@@ -221,7 +234,7 @@ def _ar_open(M, T, C):
 
 
 def _ap_open(M, T, C):
-    if not M["ap"]:
+    if not truthy(M["ap"]):
         return _na("Needs A/P Aging")
     return _m(total(x[1] for x in M["ap"]["buckets"]), "usd", "A/P Aging")
 

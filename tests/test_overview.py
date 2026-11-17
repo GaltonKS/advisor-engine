@@ -45,6 +45,11 @@ def variant(ex, run):
     return brain, data, M, T, cash.cash_range(M, T)
 
 
+def _rendered_panels(items):
+    """A panel label that holds a figure is a template; render it as the skeleton writes it."""
+    return [{k: v for k, v in {**p, "l": render(p["l"], p.get("vars"))}.items() if k != "vars"} for p in items]
+
+
 def text(m):
     return "n/a" if m["value"] is None else figure(m)
 
@@ -77,7 +82,7 @@ def test_views_match(ex, run):
 def test_panels_and_cost_lines_match(ex, run):
     want = fixture(ex, "overview")["runs"][run]
     _, _, M, T, C = variant(ex, run)
-    same(panels.panel_list(M), want["panelList"], "panelList")
+    same(_rendered_panels(panels.panel_list(M)), want["panelList"], "panelList")
     same(panels.panel_presets(M), want["panelPresets"], "panelPresets")
     assert panels.panel_default(M) == want["panelDefault"]
     for case in want["panelKeys"]:
@@ -209,3 +214,27 @@ def test_apply_idea_gives_both_sides_the_bridge_and_the_chart():
     assert A["bridge"]["from"] == A["today"]["profit"] and abs(A["bridge"]["to"] - A["idea"]["profit"]) < 1e-9
     assert [s["label"] for s in A["bridge"]["steps"]] == ["Sales volume", "Monthly bills"]
     assert A["cash_idea"]["seed"] == A["cash_today"]["seed"] and set(A["chart_for"]) == {"sales", "profit", "units", "cash"}
+
+
+def _measure_cases():
+    return json.loads((FIX / "check_cases.json").read_text())["measureCases"]
+
+
+@pytest.mark.parametrize("name", list(_measure_cases()))
+def test_measures_on_loose_data_match(name):
+    """Loose data the review found: a balance date with spaces, a customer count given as
+    text, null or missing, A/R and A/P given as empty objects. An impossible balance date is
+    the one deliberate difference: the cash figure stays and the note leaves the date out
+    (the skeleton writes "Jan 1, 2027" for "2026-13-01")."""
+    c = _measure_cases()[name]
+    M = model.build(c["data"], c["brain"])
+    T = model.evaluate(M)
+    C = cash.cash_range(M, T)
+    for key, js in c["metrics"].items():
+        m = measures.measure(M, key, T, C)
+        got = {"l": m["label"], "t": text(m), "s": render(m["note"], m["vars"]), "tone": m["tone"]}
+        want = {"l": js["l"], "t": js["t"], "s": js.get("s") or "", "tone": js.get("tone") or ""}
+        if name == "asof_impossible" and key == "cash_on_hand":
+            assert js["s"] == "Balance sheet, Jan 1, 2027", "what the skeleton does"
+            want["s"] = "Balance sheet"
+        assert got == want, key

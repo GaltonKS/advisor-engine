@@ -56,7 +56,8 @@ PANELS = {
                       "ok": lambda M: bool(M["customers"] and isinstance(M["customers"].get("lorenz"), list)
                                            and len(M["customers"]["lorenz"]) >= 3
                                            and fin(M["customers"].get("top20")))},
-    "cash": {"group": "Cash", "kind": "Range chart", "l": lambda V, M: f"Cash in the bank, next {M['A']['horizonWeeks']} weeks",
+    "cash": {"group": "Cash", "kind": "Range chart", "l": lambda V, M: "Cash in the bank, next {weeks} weeks",
+             "vars": lambda M: {"weeks": {"value": M["A"]["horizonWeeks"], "unit": "count", "decimals": 0, "plain": True}},
              "ok": lambda M: len(M["weeks"]) >= 12},
     "books": {"group": "The books", "kind": "Table", "l": lambda V, M: "The books", "ok": lambda M: len(M["pnl"]["months"]) > 0},
     "income": {"group": "The books", "kind": "Bar chart", "l": lambda V, M: "Income by month", "ok": lambda M: len(M["pnl"]["months"]) >= 2},
@@ -94,7 +95,11 @@ def panel_list(M: dict) -> list[dict]:
         except Exception:  # noqa: BLE001 - a panel that cannot be checked is not offered
             ok = False
         if ok:
-            out.append({"key": k, "l": p["l"](M["V"], M), "group": p["group"], "kind": p["kind"]})
+            # a label that holds a figure is a template, its figure in vars (as in measures.py)
+            entry = {"key": k, "l": p["l"](M["V"], M), "group": p["group"], "kind": p["kind"]}
+            if "vars" in p:
+                entry["vars"] = p["vars"](M)
+            out.append(entry)
     return out
 
 

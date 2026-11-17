@@ -34,7 +34,18 @@ from .tax import tax_of
 
 
 def _count(n):
-    return {"value": n, "unit": "count", "decimals": 0}
+    """A count the skeleton writes straight into the message (no thousands separators)."""
+    return {"value": n, "unit": "count", "decimals": 0, "plain": True}
+
+
+def _id(v):
+    """A view or layout id as a JavaScript Set tells ids apart: 1 and "1" differ, and two
+    objects are never the same."""
+    try:
+        hash(v)
+        return (type(v).__name__, v)
+    except TypeError:
+        return ("object", id(v))
 
 
 def _t(v) -> str:
@@ -69,8 +80,10 @@ def check(brain: dict, data: dict) -> list[dict]:
         add("note", "No logo yet: the header shows the company's initial instead.")
     if not truthy(get(brain.get("theme"), "accent")):
         add("note", "No accent color set: the default blue is used.")
-    sys = brain.get("systems") if isinstance(brain.get("systems"), list) else []
-    if not sys:
+    # `BRAIN.systems || []`, then `!sys.length` and `sys[0].key`: a non-empty string has a length
+    # (and no .key), an object has none
+    sys = brain.get("systems") if truthy(brain.get("systems")) else []
+    if not (isinstance(sys, (list, str)) and len(sys)):
         add("fix", "No connected systems are listed.")
     elif get(sys[0], "key") != "quickbooks":
         add("note", "QuickBooks is not the first system listed. It is the spine of the product and should lead.")
@@ -87,7 +100,8 @@ def check(brain: dict, data: dict) -> list[dict]:
     own = brain.get("metrics") if isinstance(brain.get("metrics"), dict) else {}
 
     def known(k):
-        return _named(k, LIBRARY) or _named(k, own)
+        # `METRICS[k] || (BRAIN.metrics || {})[k]`: an own entry that is null counts as missing
+        return _named(k, LIBRARY) or (_named(k, own) and truthy(own[k]))
 
     headline = brain.get("headline") if isinstance(brain.get("headline"), list) else []
     for k in headline:
@@ -96,7 +110,7 @@ def check(brain: dict, data: dict) -> list[dict]:
     tax_on = levers_on(brain).get("taxes")
 
     def is_tax(k):
-        return isinstance(k, str) and GROUP.get(k) == "Taxes" and k not in own
+        return isinstance(k, str) and GROUP.get(k) == "Taxes" and not truthy(own.get(k))
 
     for k in headline:
         if not tax_on and is_tax(k):
@@ -111,9 +125,9 @@ def check(brain: dict, data: dict) -> list[dict]:
         ks = get(v, "keys") if isinstance(get(v, "keys"), list) else []
         if not truthy(vid) or not truthy(get(v, "name")):
             add("fix", "A view in BRAIN.views needs an id and a name.")
-        elif _t(vid) in seen_v or vid in ("default", "custom"):
+        elif _id(vid) in seen_v or vid in ("default", "custom"):
             add("fix", esc(f"View id “{_t(vid)}” is already taken. Pick another."))
-        seen_v.add(_t(vid))
+        seen_v.add(_id(vid))
         if len(ks) != 4:
             add("fix", esc(f"View “{nm}” has ") + "{n} numbers; a view is exactly four.", {"n": _count(len(ks))})
         for k in ks:
@@ -142,9 +156,9 @@ def check(brain: dict, data: dict) -> list[dict]:
         ks = get(v, "keys") if isinstance(get(v, "keys"), list) else []
         if not truthy(vid) or not truthy(get(v, "name")):
             add("fix", "A layout in BRAIN.panelViews needs an id and a name.")
-        elif _t(vid) in seen_p or vid in ("default", "custom"):
+        elif _id(vid) in seen_p or vid in ("default", "custom"):
             add("fix", esc(f"Panel layout id “{_t(vid)}” is already taken. Pick another."))
-        seen_p.add(_t(vid))
+        seen_p.add(_id(vid))
         if len(ks) != 4:
             add("fix", esc(f"Panel layout “{nm}” has ") + "{n} panels; a layout is exactly four.", {"n": _count(len(ks))})
         for i, k in enumerate(ks):
@@ -164,7 +178,7 @@ def check(brain: dict, data: dict) -> list[dict]:
         add("fix", esc("No " + M["V"]["units"] + " in the sales data."))
     if not M["pnl"]["months"]:
         add("note", "No Profit and Loss loaded: the books table is empty.")
-    if not M["balance"]:
+    if not truthy(M["balance"]):
         add("note", "No Balance Sheet loaded: cash in the bank is typed in, not read from the books.")
     for n, t in (M["unitTerms"].items() if isinstance(M["unitTerms"], dict) else ()):
         if not any(u["name"] == n for u in M["units"]):
@@ -199,6 +213,6 @@ def check(brain: dict, data: dict) -> list[dict]:
         X = tax_of(M)
         if not X or not X.get("ok"):
             add("fix", esc("Taxes are switched on but the estimate cannot be worked out: " + ((X and X.get("why")) or "no reason given")))
-    if not brain.get("coverage") and cov and cov["ratio"] < 0.95:
+    if not truthy(brain.get("coverage")) and cov and cov["ratio"] < 0.95:
         add("fix", "The data does not cover the whole business and BRAIN.coverage is empty.")
     return out

@@ -49,6 +49,13 @@ out.string = [[5.0, "num"], [5.5, "num"], [-0.25, "num"], [1e21, "num"], [1e20, 
   [0.000001, "num"], [1.5e-7, "num"], [-2e-7, "num"], [0.1 + 0.2, "num"], [-0, "num"], [null, "null"], [true, "bool"], ["x", "str"], [[1, [2, 3]], "list"], [[null], "list"]]
   .map(([v, tag]) => ({ tag, v, out: String(v) }));
 
+/* the display formatters, on the halfway and switch-over values where rounding goes wrong:
+   tests/skeleton_format.py, which renders engine figures for the parity tests, must match these */
+const FV = [0, -0, 0.5, 1.5, 2.5, -2.5, 1.005, 1.45, 4.35, 2.675, 0.285, 0.995, 0.105, 99.995, 999.95, 1234.5, 9999.5, 9999.95, 10000,
+  14450, 14449.999, 99999.95, 999949.9, 999950, 999999.5, 1e6, 1004999, 1005000, 12345678.9, -14450, -0.004, 1e15, 0.1 + 0.2];
+out.formats = FV.map(v => ({ v: num(v), usd: FIS.usd(v), usdk: FIS.usdk(v), num0: FIS.num(v), num1: FIS.num(v, 1), num2: FIS.num(v, 2),
+  pct0: FIS.pct(v / 100), pct1: FIS.pct(v / 100, 1), grp2: FIS.grp(v, 2), signed1: FIS.signed(v / 100, x => FIS.pct(x, 1)) }));
+
 /* dates: local calendar days (the skeleton builds every date with new Date(y, m, d)) */
 const day = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 /* the Python port refuses everything after "2026-1-5" on purpose (see jsmath.parse_day); recorded to show what JS does */

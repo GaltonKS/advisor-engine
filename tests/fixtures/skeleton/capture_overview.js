@@ -88,5 +88,26 @@ const cases = {};
   cases.eight_weeks_with_coverage = { brain: B, data: D }; }
 { const { BRAIN, DATA } = load("home-services"), B = clone(BRAIN), D = clone(DATA); D.facts.forEach(f => { f.confirmed = true; }); D.meta.sample = false;
   cases.all_confirmed_real = { brain: B, data: D }; }
+{ const { BRAIN, DATA } = load("home-services"), B = clone(BRAIN), D = clone(DATA);
+  /* JavaScript's truthiness and Set identity, as a first review found them */
+  D.balance = {}; B.coverage = {}; D.sales.byMonth = D.sales.byMonth.map(m => ({ month: m.month, amount: m.amount * 0.8 }));
+  B.views = [{ id: 1, name: "One", keys: ["revenue_month", "profit_month", "cash_on_hand", "ar_open"] }, { id: "1", name: "One as text", keys: ["revenue_month", "profit_month", "cash_on_hand", "ar_open"] },
+    { name: "No id" }, { id: "null", name: "Null as text", keys: ["revenue_month", "profit_month", "cash_on_hand", "ar_open"] }];
+  B.metrics = { foo: null, tax_cash_90d: null }; B.headline = ["foo", "tax_cash_90d", "revenue_month"]; B.systems = "quickbooks";
+  cases.js_truthiness_and_ids = { brain: B, data: D }; }
+{ const { BRAIN, DATA } = load("home-services"), B = clone(BRAIN);
+  B.views = [{ id: "big", name: "Many", keys: Array.from({ length: 1000 }, () => "revenue_month") }];
+  cases.a_view_of_a_thousand = { brain: B, data: clone(DATA) }; }
 for (const k of Object.keys(cases)) cases[k].check = FIS.check(cases[k].brain, cases[k].data);
-fs.writeFileSync(path.join(out, "check_cases.json"), JSON.stringify({ engine_sha256: sha, cases }) + "\n");
+
+/* measures on loose data, each with its brain and data */
+const measureCases = {};
+{ const { BRAIN, DATA } = load("home-services"), mk = (name, f) => { const D = clone(DATA); f(D); const M = FIS.build(D, BRAIN, {}), T = FIS.evaluate(M, null), C = FIS.cash(M, T);
+    measureCases[name] = { brain: clone(BRAIN), data: D, metrics: Object.fromEntries(["cash_on_hand", "top_customers", "ar_open", "ap_open"].map(k => [k, FIS.metric(M, k, T, C)])) }; };
+  mk("asof_with_spaces", D => { D.balance.asOf = " 2026-11-01"; });
+  mk("customer_count_as_text", D => { D.customers.count = "12"; });
+  mk("customer_count_null", D => { D.customers.count = null; });
+  mk("customer_count_missing", D => { delete D.customers.count; });
+  mk("ar_ap_empty_objects", D => { D.ar = {}; D.ap = {}; });
+  mk("asof_impossible", D => { D.balance.asOf = "2026-13-01"; }); }
+fs.writeFileSync(path.join(out, "check_cases.json"), JSON.stringify({ engine_sha256: sha, cases, measureCases }) + "\n");
