@@ -4,6 +4,7 @@ tests/fixtures/skeleton/). Shared by the parity tests of each step of the port."
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 FIX = Path(__file__).parent / "fixtures" / "skeleton"
@@ -41,35 +42,54 @@ RUNS = ["base", "corrected", "no_customers_ar_ap", "no_books", "weeks_30"]
 
 # Keys Python adds on purpose. Any other key the skeleton lacks is an error, so a renamed or
 # stray field cannot slip through.
-EXTRA = {"tie", "method_version", "method_status"}
+EXTRA = frozenset({"tie", "method_version", "method_status"})
 
 
-def same(py, js, path: str = "", loose: tuple[str, ...] = ()) -> None:
+CENT = 0.005
+
+
+def _cent_figure(path: str, cents: tuple[str, ...]) -> bool:
+    """A percentile of a simulated week: the last key is one of `cents` and the week is 1 or
+    later (week 0 is today's cash, which is exact)."""
+    m = re.search(r"\.(\w+)\[(\d+)\]$", path)
+    return bool(m and m.group(1) in cents and int(m.group(2)) > 0)
+
+
+def same(py, js, path: str = "", loose: tuple[str, ...] = (), cents: tuple[str, ...] = (),
+         extra: frozenset = EXTRA) -> None:
     """Assert `py` matches the skeleton's `js`, exactly.
 
     Every key the skeleton has must be present and match; Python may add only the keys in
-    EXTRA. Numbers must be equal, except at paths ending in one of `loose`
+    `extra` (EXTRA unless a test widens it for its own figures). Numbers must be equal, except at paths ending in one of `loose`
     (figures that go through a log, exp, sin or cos, which V8 and the C library may round
-    differently in the last bit): those agree to 1e-12 of their size. A boolean must be a
+    differently in the last bit): those agree to 1e-12 of their size. A percentile of a
+    simulated week (last key in `cents`, week 1 or later) agrees to the cent:
+    their draws pass through log/sin/cos and exp, and 2,000 paths add up the last bits. A
+    boolean must be a
     boolean (1 is not True). Python's NaN arrives here as None, like JavaScript's JSON null.
     """
     if isinstance(js, dict):
         assert isinstance(py, dict), f"{path}: expected an object, got {py!r:.80}"
-        stray = set(py) - set(js) - EXTRA
+        stray = set(py) - set(js) - extra
         assert not stray, f"{path}: keys the skeleton does not have: {sorted(stray)}"
         for k, v in js.items():
             assert k in py, f"{path}.{k}: missing"
-            same(py[k], v, f"{path}.{k}", loose)
+            same(py[k], v, f"{path}.{k}", loose, cents, extra)
     elif isinstance(js, list):
         assert isinstance(py, list) and len(py) == len(js), \
             f"{path}: length {len(py) if isinstance(py, list) else py!r} vs {len(js)}"
         for i, (a, b) in enumerate(zip(py, js)):
-            same(a, b, f"{path}[{i}]", loose)
+            same(a, b, f"{path}[{i}]", loose, cents, extra)
     elif isinstance(js, bool) or isinstance(py, bool):
         assert py is js, f"{path}: {py!r} vs {js!r}"
     elif isinstance(js, (int, float)):
         assert isinstance(py, (int, float)), f"{path}: {py!r} vs {js}"
-        tol = 1e-12 * max(1, abs(js)) if path.endswith(loose) and loose else 0
+        if cents and _cent_figure(path, cents):
+            tol = CENT
+        elif loose and path.endswith(loose):
+            tol = 1e-12 * max(1, abs(js))
+        else:
+            tol = 0
         assert abs(py - js) <= tol, f"{path}: {py!r} vs {js!r}"
     else:
         assert py == js, f"{path}: {py!r} vs {js!r}"
