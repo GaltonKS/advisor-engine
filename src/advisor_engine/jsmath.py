@@ -224,6 +224,11 @@ def js_string(v) -> str:
     return _js_string(v)
 
 
+def js_join(values, sep: str = ",") -> str:
+    """`Array.prototype.join`: null and undefined (None) become "", anything else String()."""
+    return sep.join("" if v is None else v if isinstance(v, str) else js_string(v) for v in values)
+
+
 def get(obj, key):
     """`obj && obj[key]` for config and ideas: anything that is not an object reads as empty."""
     return obj.get(key) if isinstance(obj, dict) else None

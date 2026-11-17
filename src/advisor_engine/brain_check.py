@@ -26,7 +26,7 @@ from __future__ import annotations
 import json
 import re
 
-from .jsmath import get, js_string, truthy
+from .jsmath import get, js_join, js_string, truthy
 from .levers import levers_on
 from .measures import GROUP, LIBRARY, esc
 from .model import build
@@ -227,7 +227,7 @@ def check(brain: dict, data: dict) -> list[dict]:
             if um:
                 one = len(um) == 1
                 add("note", "{n} cost account" + (" has" if one else "s have") + " no tax category and " + ("is" if one else "are")
-                    + " taken as booked: " + esc(", ".join(_t(u["account"]) for u in um[:6]) + ("\u2026" if len(um) > 6 else "") + "."),
+                    + " taken as booked: " + esc(js_join((u.get("account") for u in um[:6]), ", ") + ("\u2026" if len(um) > 6 else "") + "."),
                     {"n": _count(len(um))})
             est = sum(1 for x in X["map"] if x["status"] == "estimate" and x["cat"] != "deductible")
             if est:

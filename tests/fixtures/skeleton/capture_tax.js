@@ -108,5 +108,29 @@ vary("as_of_mid_year", D => { D.meta.asOf = "2026-07-20"; });
 vary("as_of_missing", D => { delete D.meta.asOf; });
 vary("pnl_short_8_months", D => { D.pnl.months = D.pnl.months.slice(-8); D.pnl.lines.forEach(l => { l.values = l.values.slice(-8); }); });
 
-fs.writeFileSync(path.join(d, "tax.json"), JSON.stringify({ engine_sha256: sha, example: ex, runs, variants }) + "\n");
+/* edges a first review found unpinned */
+for (const ye of [1, 2, 5, 7, 11]) vary("year_end_" + ye, (D, P) => { P.yearEndMonth.v = ye; });
+vary("as_of_on_an_installment_date", D => { D.meta.asOf = "2026-12-15"; });
+vary("as_of_on_a_weekend_installment", (D, P) => { P.yearEndMonth.v = 3; D.meta.asOf = "2026-03-15"; });
+vary("accounts_without_text_names", D => { D.pnl.lines.push({ group: "expense", tax: "nondeductible", values: D.pnl.months.map(() => 40) },
+  { account: 6100, group: "expense", tax: "nondeductible", values: D.pnl.months.map(() => 25) }, { group: "expense", values: D.pnl.months.map(() => 15) }); });
+vary("confirmed_and_src_as_lists", (D, P) => { P.priorYearTax.confirmed = []; P.taxDepreciation.confirmed = []; P.taxDepreciation.src = []; P.state.src = []; });
+
+/* the rules table overridden: a later rate, a rate with an end year, a date or balance-due row missing */
+const rulesVariants = {}, R = FIS.TAX_RULES;
+const withRules = (name, rows) => { const rules = Object.assign({}, R, { rows }), M = FIS.build(DATA, BRAIN, {}), T = FIS.evaluate(M, null);
+  rulesVariants[name] = { rules: plain(rules), today: safe(() => FIS.tax(M, T, { base: T, rules })) }; };
+withRules("later_rate_from_2027", R.rows.concat([Object.assign({}, R.rows[0], { id: "rate-2027", value: 0.25, fromYear: 2027 })]));
+withRules("rate_ends_2025", R.rows.map(r => r.kind === "rate" ? Object.assign({}, r, { toYear: 2025 }) : r));
+withRules("no_installment_dates", R.rows.filter(r => r.kind !== "estDates"));
+withRules("no_balance_due_row", R.rows.filter(r => r.kind !== "balanceDue"));
+withRules("no_meals_row", R.rows.filter(r => r.kind !== "mealsDeductible"));
+
+/* the brain's asset life, written into the bridge and the notes as the skeleton writes it */
+const brainVariants = {};
+for (const life of [2.5, 1500]) { const B = Object.assign({}, BRAIN, { tax: Object.assign({}, BRAIN.tax, { assetLifeYears: life }) }), M = FIS.build(DATA, B, {}), T = FIS.evaluate(M, null);
+  const I = FIS.blankIdea(M); I.assets.push({ l: "Van", cost: 38000, wk: 4 });
+  brainVariants["asset_life_" + life] = { assetLifeYears: life, idea: plain(I), tax: safe(() => FIS.tax(M, FIS.evaluate(M, I), { base: T })) }; }
+
+fs.writeFileSync(path.join(d, "tax.json"), JSON.stringify({ engine_sha256: sha, example: ex, runs, variants, rulesVariants, brainVariants }) + "\n");
 process.stderr.write(ex + ": " + Object.keys(variants).length + " variants\n");

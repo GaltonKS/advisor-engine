@@ -44,7 +44,7 @@ from datetime import date
 
 from .business_config import ASSET_LIFE_YEARS, METHOD_STATUS, METHOD_VERSION, TAX_PATHS, TAX_RULES, TAX_SEED
 from .jsmath import (
-    MONTHS, add_days, clamp, finite, get, js_max, js_min, js_or, js_round, js_string, mean, month_label, n2, parse_day, quant,
+    MONTHS, add_days, clamp, finite, get, js_join, js_max, js_min, js_or, js_round, js_string, mean, month_label, n2, parse_day, quant,
     to_number, total, truthy,
 )
 from .levers import levers_on
@@ -76,6 +76,11 @@ def _exp(x: float) -> float:
         return math.exp(x)
     except OverflowError:
         return math.inf
+
+
+def _plain_count(n) -> dict:
+    """A number the skeleton writes straight into text (String(n): 2.5, 1500)."""
+    return {"value": n if finite(n) else None, "unit": "count", "decimals": 0, "plain": True}
 
 
 def _fig(value, unit, decimals=0):
@@ -152,7 +157,7 @@ def tax_map(M: dict) -> list[dict]:
                 cat, status, reason = g[0], "estimate", g[1] + ". Suggested from the account name; needs review."
         if cat == "meals" and not rule:
             rule = "us-fed-meals"
-        out.append({"account": line.get("account"), "group": line.get("group"), "cat": cat,
+        out.append({**({"account": line["account"]} if "account" in line else {}), "group": line.get("group"), "cat": cat,
                     "label": TAX_CATS[cat] if cat else "Not reviewed: taken as booked", "status": status,
                     "statusLabel": TAX_STATUS[status], "reason": reason, "rule": rule, "vals": vals, "total12": total(vals[-12:])})
     return out
@@ -265,7 +270,7 @@ def tax(M: dict, E: dict | None = None, *, base: dict | None = None, rules: dict
 
     cur_y = ty_of(last_key)
     adj_list = prof.get("adjustments") if isinstance(prof.get("adjustments"), list) else []
-    nd_accounts = ", ".join(x["account"] for x in tmap if x["cat"] == "nondeductible")
+    nd_accounts = js_join((x.get("account") for x in tmap if x["cat"] == "nondeductible"), ", ")
 
     def year(Y):
         keys = [tax_key(Y, ye - i) for i in range(11, -1, -1)]
@@ -298,11 +303,11 @@ def tax(M: dict, E: dict | None = None, *, base: dict | None = None, rules: dict
         if book_dep + extra:
             rows.append({"k": "bookDep", "l": "Depreciation in the books, added back", "v": book_dep + extra,
                          "src": "Profit and Loss" + (", plus the idea's purchase over {life} years" if extra else ""), "status": "",
-                         "vars": {"life": _fig(life, "count")} if extra else {}})
+                         "vars": {"life": _plain_count(life)} if extra else {}})
         if book_dep + extra or td_year:
             rows.append({"k": "taxDep", "l": "Depreciation allowed for tax", "v": -tax_dep,
-                         "src": (td.get("src") or "Tax profile") if td_year else "Taken as equal to the books until the accountant gives the tax figure",
-                         "status": ("reviewed" if td.get("confirmed") else "estimate") if td_year else "estimate"})
+                         "src": js_or(td.get("src"), "Tax profile") if td_year else "Taken as equal to the books until the accountant gives the tax figure",
+                         "status": ("reviewed" if truthy(td.get("confirmed")) else "estimate") if td_year else "estimate"})
         for a in adjs:
             rows.append({"k": "adj", "l": _text(js_or(a.get("l"), "Adjustment")), "v": n2(a.get("amount")),
                          "src": js_or(a.get("src"), js_or(a.get("reason"), "Tax profile")), "rule": js_or(a.get("rule"), ""),
@@ -443,7 +448,7 @@ def tax(M: dict, E: dict | None = None, *, base: dict | None = None, rules: dict
         notes.append({"k": "salary", "t": "Owner salary is taken as deductible for the business. Payroll taxes on it and the owner's own income tax are not included.", "vars": {}})
     if bought:
         notes.append({"k": "asset", "t": "A purchase is spread evenly over {life} years, in the books and for tax. Writing more of it off in the first year is a choice to take up with the accountant; it is not modeled yet.",
-                      "vars": {"life": _fig(life, "count")}})
+                      "vars": {"life": _plain_count(life)}})
     notes.append({"k": "scope", "t": "Federal income tax only. State income tax, sales tax and payroll taxes are not included.", "vars": {}})
 
     unmapped = [x for x in tmap if x["status"] == "unmapped" and x["total12"] != 0]
@@ -453,7 +458,7 @@ def tax(M: dict, E: dict | None = None, *, base: dict | None = None, rules: dict
         if not isinstance(p, dict) or p.get("v") is None or p.get("v") == "":
             continue
         v = p["v"]
-        entry = {"k": k, "l": label, "v": v, "src": p.get("src") or "", "confirmed": bool(p.get("confirmed")), "vars": {}}
+        entry = {"k": k, "l": label, "v": v, "src": js_or(p.get("src"), ""), "confirmed": truthy(p.get("confirmed")), "vars": {}}
         if k == "entity":
             entry["text"] = TAX_ENTITIES[v] if _known(v, TAX_ENTITIES) else _text(v)
         elif k == "yearEndMonth":
@@ -468,7 +473,7 @@ def tax(M: dict, E: dict | None = None, *, base: dict | None = None, rules: dict
     return {
         "ok": True, "computed": computed, "why": why, "entity": entity,
         "entityLabel": TAX_ENTITIES[entity] if _known(entity, TAX_ENTITIES) else (entity or "Not given"), "yearEnd": ye, "asOf": as_of,
-        "rulesVersion": rules.get("version") or "", "cur": cur, "next": nxt, "bridge": cur["rows"], "map": tmap,
+        "rulesVersion": js_or(rules.get("version"), ""), "cur": cur, "next": nxt, "bridge": cur["rows"], "map": tmap,
         "unmapped": unmapped, "payments": payments, "ahead": ahead, "nextPayment": ahead[0] if ahead else None,
         "cash90": total(p["amount"] for p in ahead if p["date"] <= d90), "cash12": total(m["paid"] for m in months),
         "range": rng_out, "months": months, "notes": notes, "profile": profile,

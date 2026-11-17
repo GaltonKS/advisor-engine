@@ -149,4 +149,27 @@ def test_every_figure_in_the_tax_picture_is_a_number():
         if isinstance(p["v"], (int, float)) and not isinstance(p["v"], bool) and p["k"] != "yearEndMonth":
             assert p["text"] == "{v}", p
     for pay in X["payments"]:
-        assert isinstance(pay["amount"], float) and "{" in pay["l"] or "installment" not in pay["l"]
+        assert isinstance(pay["amount"], float), pay
+        if pay["kind"] == "installment":
+            assert pay["l"] == "Estimated tax, installment {n} of {of}" and set(pay["vars"]) == {"n", "of"}
+
+
+@pytest.mark.parametrize("name", list(FIXTURE["rulesVariants"]))
+def test_a_rules_table_override_is_read_as_the_skeleton_reads_it(name):
+    """A later rate row, a rate row with an end year, and the date, balance-due or meals row
+    missing: the rules table decides, and each case matches the skeleton."""
+    v = FIXTURE["rulesVariants"][name]
+    brain, data = load("home-services-tax")
+    M = model.build(data, brain)
+    T = model.evaluate(M)
+    check(tax.tax(M, T, base=T, rules=v["rules"]), v["today"], name)
+
+
+@pytest.mark.parametrize("name", list(FIXTURE["brainVariants"]))
+def test_the_brains_asset_life_is_written_as_the_skeleton_writes_it(name):
+    v = FIXTURE["brainVariants"][name]
+    brain, data = load("home-services-tax")
+    brain["tax"] = {**brain["tax"], "assetLifeYears": v["assetLifeYears"]}
+    M = model.build(data, brain)
+    T = model.evaluate(M)
+    check(tax.tax(M, model.evaluate(M, v["idea"]), base=T), v["tax"], name)
