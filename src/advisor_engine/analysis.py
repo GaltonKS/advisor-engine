@@ -10,9 +10,12 @@ from __future__ import annotations
 
 import pandas as pd
 
+from . import __version__, cash, charts, compare, measures, model, tax
 from .data import as_of as returns_as_of
 from .data import get_market_data
 from .holdings import COLUMNS, validate_holdings
+from .jsmath import plain
+from .levers import FOCUS, levers_on
 from .risk import risk_profile
 
 # Labels for the synthetic data (the default source). With real data the labels come from
@@ -85,3 +88,51 @@ def apply_changes(holdings: pd.DataFrame, tool_input: dict) -> pd.DataFrame:
     if df.empty:
         raise ValueError("The change would leave no holdings.")
     return validate_holdings(df)
+
+
+# --- small business: a company's snapshot and brain -> engine output -------------------
+# The two operations the tools and routes for the small-business product will call. Both
+# return plain JSON (dates as YYYY-MM-DD, NaN as None) and every figure as a number. Neither
+# reads anything: the caller passes the snapshot (QuickBooks-shaped, see model.py), the
+# brain, and the owner's corrections (facts.latest_corrections makes them from stored rows).
+
+def _business_model(data: dict, brain: dict, facts: dict | None, confirmed: dict | None, basis: int) -> dict:
+    return model.build(data, brain, facts=facts, confirmed=confirmed, basis=basis)
+
+
+def company_profile(data: dict, brain: dict, *, facts: dict | None = None, confirmed: dict | None = None,
+                    basis: int = 12, view=None, panels=None) -> dict:
+    """Today's picture for one company: the model base, today's setup evaluated, the
+    13-week cash range, the four headline measures for the owner's saved `view` choice and
+    the four panels for their `panels` choice, the tie between sales detail and books, and
+    (when the brain switches taxes on) the tax picture."""
+    M = _business_model(data, brain, facts, confirmed, basis)
+    T = model.evaluate(M)
+    C = cash.cash_range(M, T)
+    keys = measures.view_keys(M, view, T, C)
+    return plain({
+        "engine_version": __version__, "method_version": M["method_version"], "method_status": M["method_status"],
+        "model": model.model_view(M), "today": T, "cash": C, "tie": M["tie"],
+        "headline": [measures.measure(M, k, T, C) for k in keys],
+        "panels": charts.panel_keys(M, panels), "tax": tax.tax_of(M, T),
+    })
+
+
+def apply_idea(data: dict, brain: dict, idea: dict, *, facts: dict | None = None, confirmed: dict | None = None,
+               basis: int = 12) -> dict:
+    """One idea against today's setup: both evaluated, both cash ranges (on the same draws),
+    the bridge from today's monthly bottom line to the idea's, the chart that answers each
+    kind of question, and with taxes on both tax pictures (the idea's cash range then
+    carries its tax payments). Differences come from `compare.bridge`, never from a caller."""
+    M = _business_model(data, brain, facts, confirmed, basis)
+    T = model.evaluate(M)
+    E = model.evaluate(M, idea)
+    out = {"engine_version": __version__, "method_version": M["method_version"], "method_status": M["method_status"],
+           "today": T, "idea": E, "bridge": compare.bridge(M, T["idea"], E["idea"]),
+           "chart_for": {f: charts.chart_for(M, f, T, E) for f in FOCUS}}
+    if levers_on(brain).get("taxes"):
+        XT, XE = tax.tax(M, T, base=T), tax.tax(M, E, base=T)
+        out.update(tax_today=XT, tax_idea=XE, cash_today=cash.cash_range(M, T, tax=XT), cash_idea=cash.cash_range(M, E, tax=XE))
+    else:
+        out.update(cash_today=cash.cash_range(M, T), cash_idea=cash.cash_range(M, E))
+    return plain(out)
