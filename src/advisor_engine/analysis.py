@@ -10,10 +10,15 @@ from __future__ import annotations
 
 import pandas as pd
 
+from . import __version__, cash, measures, model, panels
+from .bridge import bridge
 from .data import as_of as returns_as_of
 from .data import get_market_data
 from .holdings import COLUMNS, validate_holdings
+from .jsmath import plain
+from .levers import FOCUS
 from .risk import risk_profile
+from .tax import tax_of
 
 # Labels for the synthetic data (the default source). With real data the labels come from
 # the configured source: see `data.get_market_data()`.
@@ -85,3 +90,43 @@ def apply_changes(holdings: pd.DataFrame, tool_input: dict) -> pd.DataFrame:
     if df.empty:
         raise ValueError("The change would leave no holdings.")
     return validate_holdings(df)
+
+
+# --- small business: a company's snapshot and brain -> engine output -------------------
+# The two operations the small-business tools and routes will call. Both return plain JSON
+# (dates as YYYY-MM-DD, NaN as None) with every figure a number, and read nothing: the caller
+# passes the snapshot (QuickBooks-shaped, see model.py), the brain, and the owner's
+# corrections (facts.latest_corrections makes them from stored rows).
+
+def company_profile(data: dict, brain: dict, *, facts: dict | None = None, confirmed: dict | None = None,
+                    basis: int = 12, view=None, panel_choice=None) -> dict:
+    """Today's picture for one company: the model base, today's setup evaluated, the cash
+    range, the headline measures for the owner's saved `view` choice and the four panels for
+    their `panel_choice`, the tie between sales detail and books, and the tax picture
+    (None while the brain has taxes off)."""
+    M = model.build(data, brain, facts=facts, confirmed=confirmed, basis=basis)
+    T = model.evaluate(M)
+    C = cash.cash_range(M, T)
+    keys = measures.view_keys(M, view, T, C)
+    return plain({
+        "engine_version": __version__, "method_version": M["method_version"], "method_status": M["method_status"],
+        "model": model.model_view(M), "today": T, "cash": C, "tie": M["tie"],
+        "headline": [measures.measure(M, k, T, C) for k in keys],
+        "panels": panels.panel_keys(M, panel_choice), "tax": tax_of(M, T),
+    })
+
+
+def apply_idea(data: dict, brain: dict, idea: dict, *, facts: dict | None = None, confirmed: dict | None = None,
+               basis: int = 12) -> dict:
+    """One idea against today's setup: both evaluated, both cash ranges (on the same draws),
+    the bridge from today's monthly bottom line to the idea's, and the chart that answers each
+    kind of question. Differences come from `bridge`, never from a caller."""
+    M = model.build(data, brain, facts=facts, confirmed=confirmed, basis=basis)
+    T = model.evaluate(M)
+    E = model.evaluate(M, idea)
+    return plain({
+        "engine_version": __version__, "method_version": M["method_version"], "method_status": M["method_status"],
+        "today": T, "idea": E, "bridge": bridge(M, T["idea"], E["idea"]),
+        "cash_today": cash.cash_range(M, T), "cash_idea": cash.cash_range(M, E),
+        "chart_for": {f: panels.chart_for(M, f, T, E) for f in FOCUS},
+    })

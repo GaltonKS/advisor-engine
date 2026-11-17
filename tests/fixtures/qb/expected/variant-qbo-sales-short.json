@@ -1,0 +1,1 @@
+{"kind":"sales","report":"Sales detail","ok":false,"error":"Only 8 whole weeks of sales were found. At least 12 are needed to work out the cash range; a year is better. Export a longer period.","warnings":[],"lines":[],"data":null,"name":"s.csv","rows":208,"detail":""}

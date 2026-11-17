@@ -229,6 +229,12 @@ def get(obj, key):
     return obj.get(key) if isinstance(obj, dict) else None
 
 
+def truthy(v) -> bool:
+    """JavaScript's `!!v`: only null, false, 0, NaN and "" are false. An empty object or list
+    is true, unlike Python's bool()."""
+    return not (v is None or v is False or v == "" or (isinstance(v, (int, float)) and (v != v or v == 0)))
+
+
 def js_or(v, default):
     """`v || default`: JavaScript's falsy values (NaN, 0, "", null, false) give the default.
 
@@ -263,7 +269,7 @@ def parse_day(s) -> date:
     file, and this refuses it rather than moving the week. So does anything else that is not
     YYYY-MM or YYYY-MM-DD in ASCII digits with a four-digit year (JavaScript reads "0099" as
     1999 and "2026-11-" as the 1st)."""
-    m = _DAY.fullmatch(str(s))
+    m = _DAY.fullmatch(str(s).strip())  # JavaScript's Number() trims each part
     try:
         if not m or int(m.group(1)) < 1000:
             raise ValueError

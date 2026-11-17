@@ -18,10 +18,12 @@ PKG = Path(__file__).resolve().parents[1] / "src" / "advisor_engine"
 ENGINE = ["risk", "stress", "questionnaire", "compare", "holdings", "synthetic", "charts",
           "profile", "profile_config",
           # the small-business engine (Phase 2 port of the FIS skeleton)
-          "rand", "jsmath", "business_config", "company", "facts", "sales", "model", "levers", "bridge", "cash"]
+          "rand", "jsmath", "business_config", "company", "facts", "sales", "model", "levers", "bridge", "cash", "books",
+          "tax", "measures", "panels", "brain_check"]
 # Small-business engine modules, which must also be pure: no I/O, no clock, no environment,
 # no unseeded randomness. The same snapshot and brain must always give the same figures.
-PURE = ["rand", "jsmath", "business_config", "company", "facts", "sales", "model", "levers", "bridge", "cash"]
+PURE = ["rand", "jsmath", "business_config", "company", "facts", "sales", "model", "levers", "bridge", "cash", "books",
+          "tax", "measures", "panels", "brain_check"]
 SHARED = ["analysis", "paths", "config", "_env", "data"]
 
 
