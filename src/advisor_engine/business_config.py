@@ -11,7 +11,7 @@ simulation's settings are placeholders until a company's own history or a review
 replaces them.
 
 Each step of the port adds the numbers it reads: this holds what `model.build`,
-`model.evaluate`, `bridge.bridge` and `cash.cash_range` use.
+`model.evaluate`, `bridge.bridge`, `cash.cash_range` and `measures` use.
 """
 
 from __future__ import annotations
@@ -68,3 +68,17 @@ BRIDGE_MIN_STEP = 1  # DRAFT: dollars a month
 CASH_SEED = 77           # DRAFT: fixed so every idea is run on the same draws, and a result is repeatable
 MAX_HORIZON_WEEKS = 104  # DRAFT: the longest look-ahead a brain may ask for
 MAX_PATHS = 100000       # DRAFT: the most simulated paths a caller may ask for
+
+# --- tones on the headline measures (measures.py) ----------------------------------------
+TONE = {
+    "trend_bad": -0.05,           # DRAFT: year-on-year trend below this is "bad"
+    "trend_good": 0.05,           # DRAFT: above this is "good"
+    "top_customers_warn": 0.8,    # DRAFT: top 20% of customers above this share warns
+    "breach_bad": 0.25,           # DRAFT: chance of dipping under the floor above this is "bad"
+    "breach_warn": 0.1,           # DRAFT: above this warns
+    "bills_bad": 1,               # DRAFT: under a month of bills in the bank is "bad"
+    "bills_warn": 2,              # DRAFT: under two months warns
+    "ar_late_warn": 0.25,         # DRAFT: over 30 days late above this share of A/R warns
+    "top_unit_over_even": 2,      # DRAFT: top unit above this multiple of an even split warns
+    "tax_due_soon_days": 30,      # DRAFT: a tax payment due within this many days warns
+}

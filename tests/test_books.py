@@ -10,7 +10,7 @@ Two halves:
   reader produced for it, exactly, after a JSON round trip.
 
 Parts of the JS tests that run the skeleton's model (FIS.build / FIS.check) use the
-Phase 2 engine port (advisor_engine.model.build; the brain check's part comes with step 6).
+Phase 2 engine port (advisor_engine.model.build and advisor_engine.brain_check.check).
 """
 
 import json
@@ -24,7 +24,7 @@ import pytest
 from parity import same
 
 from advisor_engine import books as U
-from advisor_engine import model
+from advisor_engine import brain_check, model
 from advisor_engine.company import vocab
 
 FIX = Path(__file__).parent / "fixtures"
@@ -324,9 +324,9 @@ def test_putting_the_files_into_the_snapshot_the_model_reads_it():
     for o in M1["offerings"]:
         b = next(x for x in M0["offerings"] if x["name"] == o["name"])
         near(o["cost"], b["cost"], 1e-9, "direct cost kept for " + o["name"])
-    # The JS test also requires FIS.check(BRAIN, A.data) to have no "fix" item: the brain
-    # check is ported in step 6, which adds that assertion here.
     assert M1["tie"]["status"] == "ties"
+    bad = [c for c in brain_check.check(brain, D) if c["level"] == "fix"]
+    assert bad == [], json.dumps(bad, default=str)
 
 
 def test_a_partial_upload_keeps_the_rest_and_says_so():
