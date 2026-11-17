@@ -269,7 +269,7 @@ def parse_day(s) -> date:
     file, and this refuses it rather than moving the week. So does anything else that is not
     YYYY-MM or YYYY-MM-DD in ASCII digits with a four-digit year (JavaScript reads "0099" as
     1999 and "2026-11-" as the 1st)."""
-    m = _DAY.fullmatch(str(s))
+    m = _DAY.fullmatch(str(s).strip())  # JavaScript's Number() trims each part
     try:
         if not m or int(m.group(1)) < 1000:
             raise ValueError
