@@ -39,17 +39,24 @@ def variant(data: dict, run: str) -> dict:
 RUNS = ["base", "corrected", "no_customers_ar_ap", "no_books", "weeks_30"]
 
 
+# Keys Python adds on purpose. Any other key the skeleton lacks is an error, so a renamed or
+# stray field cannot slip through.
+EXTRA = {"tie", "method_version", "method_status"}
+
+
 def same(py, js, path: str = "", loose: tuple[str, ...] = ()) -> None:
     """Assert `py` matches the skeleton's `js`, exactly.
 
-    Every key the skeleton has must be present and match; keys only Python has are allowed
-    (method_status, tie, ...). Numbers must be equal, except at paths ending in one of `loose`
+    Every key the skeleton has must be present and match; Python may add only the keys in
+    EXTRA. Numbers must be equal, except at paths ending in one of `loose`
     (figures that go through a log, exp, sin or cos, which V8 and the C library may round
     differently in the last bit): those agree to 1e-12 of their size. A boolean must be a
     boolean (1 is not True). Python's NaN arrives here as None, like JavaScript's JSON null.
     """
     if isinstance(js, dict):
         assert isinstance(py, dict), f"{path}: expected an object, got {py!r:.80}"
+        stray = set(py) - set(js) - EXTRA
+        assert not stray, f"{path}: keys the skeleton does not have: {sorted(stray)}"
         for k, v in js.items():
             assert k in py, f"{path}.{k}: missing"
             same(py[k], v, f"{path}.{k}", loose)

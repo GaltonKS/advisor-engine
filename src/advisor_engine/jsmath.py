@@ -76,14 +76,23 @@ def clamp(v: float, a: float, b: float) -> float:
     return NAN if _nan(a) or _nan(inner) else max(a, inner)
 
 
+def as_float(v: int | float) -> float:
+    """A number as JavaScript holds it. An integer too big for a double is what JSON.parse
+    makes of it, an infinity (Python's float() would raise OverflowError instead)."""
+    try:
+        return float(v)
+    except OverflowError:
+        return math.inf if v > 0 else -math.inf
+
+
 def fin(v) -> bool:
     """A finite number (booleans are not numbers here, as in JavaScript)."""
-    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(as_float(v))
 
 
 def finite(v) -> bool:
     """`isFinite(v)` on something already a number (NaN and infinities are not)."""
-    return isinstance(v, (int, float)) and math.isfinite(v)
+    return isinstance(v, (int, float)) and math.isfinite(as_float(v))
 
 
 # JavaScript's StringToNumber, exactly: the whitespace it trims (WhiteSpace and
@@ -132,7 +141,7 @@ def _js_string(v) -> str:
     if v is True or v is False:
         return "true" if v else "false"
     if isinstance(v, (int, float)):
-        return _number_string(float(v))
+        return _number_string(as_float(v))
     if isinstance(v, list):
         return ",".join(_js_string(x) for x in v)
     if isinstance(v, dict):
@@ -153,7 +162,7 @@ def n2(v) -> float:
     if v is True or v is False:
         return 1.0 if v else 0.0
     if isinstance(v, (int, float)):
-        x = float(v)
+        x = as_float(v)
     elif isinstance(v, str):
         x = _string_to_number(v)
     elif isinstance(v, list):
@@ -173,7 +182,7 @@ def to_number(v) -> float:
     if v is True or v is False:
         return 1.0 if v else 0.0
     if isinstance(v, (int, float)):
-        return float(v)
+        return as_float(v)
     if isinstance(v, str):
         return _string_to_number(v)
     if isinstance(v, list):

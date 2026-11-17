@@ -24,7 +24,8 @@ const plain = v => {
   if (Array.isArray(v)) return v.map(plain);
   if (v instanceof Map || typeof v === "function") return undefined;
   if (typeof v === "number") return isFinite(v) ? v : null;
-  if (v && typeof v === "object") { const o = {}; for (const k of Object.keys(v)) { const x = plain(v[k]); if (x !== undefined) o[k] = x; } return o; }
+  /* defineProperty, so a key named __proto__ is kept as data rather than setting the prototype */
+  if (v && typeof v === "object") { const o = {}; for (const k of Object.keys(v)) { const x = plain(v[k]); if (x !== undefined) Object.defineProperty(o, k, { value: x, enumerable: true, writable: true, configurable: true }); } return o; }
   return v;
 };
 

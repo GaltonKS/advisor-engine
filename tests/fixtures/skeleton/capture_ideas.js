@@ -22,7 +22,8 @@ const plain = v => {
   if (Array.isArray(v)) return v.map(plain);
   if (v instanceof Map || typeof v === "function") return undefined;
   if (typeof v === "number") return isFinite(v) ? v : null;
-  if (v && typeof v === "object") { const o = {}; for (const k of Object.keys(v)) { const x = plain(v[k]); if (x !== undefined) o[k] = x; } return o; }
+  /* defineProperty, so a key named __proto__ is kept as data rather than setting the prototype */
+  if (v && typeof v === "object") { const o = {}; for (const k of Object.keys(v)) { const x = plain(v[k]); if (x !== undefined) Object.defineProperty(o, k, { value: x, enumerable: true, writable: true, configurable: true }); } return o; }
   return v;
 };
 
@@ -85,6 +86,26 @@ function looseIdeas(M) {
   return list;
 }
 
+/* Brain and data variants no example covers, on the barbershop. Each stores its exact brain and data. */
+function variants(BRAIN, DATA) {
+  const out = {}, clone = x => JSON.parse(JSON.stringify(x));
+  const run = (name, B, D) => { const M = FIS.build(D, B, {}), r = { brain: plain(B), data: plain(D), ideas: {} };
+    const list = ideas(M).filter(([n]) => ["today", "unit_to_wage", "unit_to_fixed_rent", "add_unit_wage", "add_two_units_one_unnamed", "remove_unit_keep_50", "everything"].includes(n));
+    /* JSON.parse, so these are own keys (a literal "__proto__" key would set the prototype instead) */
+    list.push(["builtin_names_in_idea", JSON.parse('{"terms":{"__proto__":{"on":false},"constructor":{"type":"fixedIn","rent":100}},"price":{"toString":5}}')]);
+    for (const [n, idea] of list) r.ideas[n] = { idea: plain(idea), evaluate: plain(Object.assign({}, FIS.evaluate(M, idea), { by: undefined })), bridge: plain(FIS.bridge(M, FIS.blankIdea(M), idea)) };
+    out[name] = r; };
+  { const B = clone(BRAIN); B.terms = { types: { wage: { label: "Salary", per: "year", def: 50000 }, share: {} }, default: { type: "wage", wage: 48000 } }; run("wage_per_year", B, DATA); }
+  { const B = clone(BRAIN); B.terms.default = { type: "wage", wage: 3000 }; run("default_kind_not_offered", B, DATA); }
+  { const D = clone(DATA); D.sales.units[1] = D.sales.units[0]; run("duplicate_unit_names", BRAIN, D); }
+  { const D = clone(DATA), [a, b] = D.sales.units; D.sales.units[0] = "toString"; D.sales.units[1] = "constructor";
+    const t = {}; Object.keys(D.unitTerms).forEach(k => { const n = k === a ? "toString" : k === b ? "constructor" : k; Object.defineProperty(t, n, { value: D.unitTerms[k], enumerable: true }); });
+    D.unitTerms = t; run("units_named_like_builtins", BRAIN, D); }
+  /* deliberate difference, recorded to show it: JS takes "toString" as a pay kind because every object inherits it */
+  { const B = clone(BRAIN), D = clone(DATA); B.terms.default = { type: "toString" }; D.unitTerms = {}; run("default_kind_toString", B, D); }
+  return out;
+}
+
 for (const ex of ["barbershop", "home-services", "home-services-tax"]) {
   const d = path.join(out, ex), BRAIN = JSON.parse(fs.readFileSync(path.join(d, "brain.json"))), DATA = JSON.parse(fs.readFileSync(path.join(d, "data.json")));
   const runs = {};
@@ -105,6 +126,7 @@ for (const ex of ["barbershop", "home-services", "home-services-tax"]) {
   run("base", {});
   { const M0 = FIS.build(DATA, BRAIN, {}), f0 = M0.rates[0], x0 = M0.fixed[0];
     run("corrected", { facts: { [x0.k]: M0.F[x0.k] + 1000, [f0.k]: M0.F[f0.k] + 1.4 }, confirmed: { [x0.k]: true }, basis: 3 }); }
+  if (ex === "barbershop") Object.assign(runs, variants(BRAIN, DATA));
   fs.writeFileSync(path.join(d, "ideas.json"), JSON.stringify({ engine_sha256: sha, example: ex, runs }) + "\n");
   process.stderr.write(ex + ": " + Object.values(runs).reduce((n, r) => n + Object.keys(r.ideas).length, 0) + " ideas\n");
 }

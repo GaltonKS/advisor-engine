@@ -26,7 +26,7 @@ import copy
 
 from .business_config import BRIDGE_MIN_STEP
 from .jsmath import plain
-from .levers import norm_idea
+from .levers import check_idea, norm_idea
 from .model import evaluate, term_of
 
 
@@ -37,6 +37,8 @@ def _clone(x):
 
 def bridge(M: dict, today: dict | None, idea: dict | None) -> dict:
     """`{from, to, steps: [{label, delta}]}` from `today` to `idea`. See the module docstring."""
+    check_idea(today)
+    check_idea(idea)
     today = norm_idea(M, today)
     idea = norm_idea(M, idea)
     p = _clone(today)

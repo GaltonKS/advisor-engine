@@ -134,3 +134,11 @@ def test_js_max_and_min_keep_nan_and_signed_zero(case):
 @pytest.mark.parametrize("case", FIX["string"], ids=lambda c: repr(c["v"]))
 def test_js_string_is_string(case):
     assert js_string(case["v"]) == case["out"]
+
+
+def test_an_integer_too_big_for_a_double_is_infinite_as_json_parse_makes_it():
+    from advisor_engine.jsmath import as_float
+    big = 10 ** 400
+    assert as_float(big) == math.inf and as_float(-big) == -math.inf and as_float(7) == 7.0
+    assert not fin(big) and math.isnan(n2(big)) and to_number(big) == math.inf
+    assert js_string(big) == "Infinity" and js_string(-big) == "-Infinity"

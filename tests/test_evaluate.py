@@ -22,7 +22,10 @@ from advisor_engine.jsmath import plain, total
 from advisor_engine.levers import blank_idea, check_idea, levers_on, norm_idea
 from parity import EXAMPLES, fixture, load, same
 
+HS, BS = load("home-services"), load("barbershop")
+M_HS, M_BS = model.build(HS[1], HS[0]), model.build(BS[1], BS[0])
 RUNS = ["base", "corrected"]
+VARIANTS = [r for r in fixture("barbershop", "ideas")["runs"] if r not in RUNS]
 # wrong shapes: refused here, and what the skeleton did with each
 REFUSED = {
     "price_not_an_object": "ignored",
@@ -68,6 +71,77 @@ def test_evaluate_and_bridge_match_the_skeleton(ex, run, name):
     same(plain(bridge(M, blank_idea(M), case["idea"])), case["bridge"], f"{name}.bridge")
 
 
+def _variant_cases():
+    for run in VARIANTS:
+        if run == "default_kind_toString":
+            continue  # a deliberate difference, tested below
+        for name in fixture("barbershop", "ideas")["runs"][run]["ideas"]:
+            yield pytest.param(run, name, id=f"{run}-{name}")
+
+
+@pytest.mark.parametrize("run, name", list(_variant_cases()))
+def test_brain_and_data_variants_match_the_skeleton(run, name):
+    """per: "year" pay, a default pay kind the brain does not offer, duplicate unit names,
+    units named like built-ins, and ideas whose keys are __proto__ / constructor / toString."""
+    r = fixture("barbershop", "ideas")["runs"][run]
+    M = model.build(r["data"], r["brain"])
+    case = r["ideas"][name]
+    same(plain(model.evaluate(M, case["idea"])), case["evaluate"], f"{run}.{name}.evaluate")
+    same(plain(bridge(M, blank_idea(M), case["idea"])), case["bridge"], f"{run}.{name}.bridge")
+
+
+def test_a_default_pay_kind_named_like_a_builtin_is_not_a_pay_kind():
+    """Deliberate difference. JavaScript's `ty["toString"]` is true (every object inherits
+    it), so the skeleton takes "toString" as the default pay kind and every unit lands on no
+    pay at all. Here only a kind the brain offers counts; the default falls to the first."""
+    r = fixture("barbershop", "ideas")["runs"]["default_kind_toString"]
+    js = r["ideas"]["today"]["evaluate"]
+    assert {row["t"]["type"] for row in js["rows"]} == {"toString"}, "what the skeleton did"
+    M = model.build(r["data"], r["brain"])
+    E = model.evaluate(M)
+    assert {row["t"]["type"] for row in E["rows"]} == {"share"}
+    assert E["profit"] < js["profit"], "the barbers are paid their commission again"
+    r["brain"]["terms"]["default"] = {"type": ["share"]}
+    assert model.term_defaults(model.build(r["data"], r["brain"]))["type"] == "share"
+
+
+BIG = 10 ** 400  # what JSON.parse makes Infinity
+
+
+@pytest.mark.parametrize("idea, same_as", [
+    ({"price": {"Adult haircut": BIG}}, {}),          # an infinite price is not a price: ignored
+    ({"rate": {"supplies": BIG}}, {}),                # not a finite rate: the fact stands
+    ({"shock": BIG}, {}),                             # n2(Infinity) is NaN, so no change
+    ({"fixed": [{"l": "x", "mo": BIG}]}, {}),          # not finite: no bill added
+    ({"keep": BIG, "terms": {"Luis R.": {"on": False}}}, {"keep": 0, "terms": {"Luis R.": {"on": False}}}),
+    ({"terms": {"Marcus T.": {"type": "share", "rate": BIG}}}, {"terms": {"Marcus T.": {"type": "share", "rate": 0}}}),
+])
+def test_a_number_too_big_for_a_double_reads_as_javascript_reads_it(idea, same_as):
+    """An idea from a JSON body can hold a 400-digit number; JSON.parse makes it Infinity.
+    It must give what the skeleton gives (checked against Node in review), never an
+    OverflowError."""
+    M = M_BS
+    assert model.evaluate(M, idea)["profit"] == model.evaluate(M, same_as)["profit"]
+    assert bridge(M, None, idea)["to"] == model.evaluate(M, same_as)["profit"]
+
+
+@pytest.mark.parametrize("idea", [None, "", 0, False, [], {}, {"price": None, "terms": False, "added": "", "fixed": 0, "offer": []},
+                                  {"terms": {"Marcus T.": None}}])
+def test_an_empty_part_means_no_change(idea):
+    M = M_BS
+    assert model.evaluate(M, idea)["profit"] == model.evaluate(M)["profit"] == bridge(M, None, idea)["to"]
+
+
+@pytest.mark.parametrize("idea", [{"price": "x"}, {"once": "x"}, {"added": [{"name": {"first": "A"}}]}, ["price"], "raise"])
+def test_evaluate_and_bridge_refuse_the_same_shapes(idea):
+    with pytest.raises(ValueError):
+        model.evaluate(M_BS, idea)
+    with pytest.raises(ValueError):
+        bridge(M_BS, None, idea)
+    with pytest.raises(ValueError):
+        bridge(M_BS, idea, None)
+
+
 def test_every_refused_idea_is_in_the_fixture():
     ideas = fixture("barbershop", "ideas")["runs"]["base"]["ideas"]
     assert set(REFUSED) <= set(ideas)
@@ -83,6 +157,7 @@ def test_a_bridge_from_a_non_blank_starting_point_matches():
 
 @pytest.mark.parametrize("idea, reason", [
     ("raise prices", "object of changes"),
+    ({"added": [{"name": 7}]}, "name must be text"),
     ({"price": ["Adult haircut", 50]}, "price"),
     ({"rate": 4}, "rate"),
     ({"once": {"amt": 5}}, "once"),
@@ -99,6 +174,7 @@ def test_check_idea_accepts_none_a_blank_idea_and_loose_values():
     check_idea(None)
     check_idea(blank_idea(M))
     check_idea({"price": {"Adult haircut": "50"}, "keep": "30", "shock": "abc", "added": [{"mo": "2600"}]})
+    check_idea({"terms": {"Marcus T.": None}, "price": False, "added": "", "fixed": []})
 
 
 def test_norm_idea_keeps_extra_keys_and_levers_ignore_a_bad_switch_list():
@@ -108,10 +184,6 @@ def test_norm_idea_keeps_extra_keys_and_levers_ignore_a_bad_switch_list():
 
 
 # --- the skeleton's contract tests (test/engine.test.js) ---------------------------------------
-
-HS, BS = load("home-services"), load("barbershop")
-M_HS, M_BS = model.build(HS[1], HS[0]), model.build(BS[1], BS[0])
-
 
 def near(a, b, tol=0.01, msg=""):
     assert abs(a - b) <= tol, f"{msg} expected {b} got {a}"

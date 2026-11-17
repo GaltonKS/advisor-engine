@@ -24,7 +24,7 @@ from .business_config import ASSUMPTION_DEFAULTS, METHOD_STATUS, METHOD_VERSION
 from .company import term_types, vocab
 from .facts import resolve
 from .levers import check_idea, norm_idea
-from .jsmath import NAN, add_days, clamp, fin, finite, get, js_max, js_or, js_string, month_label, n2, or_zero, to_number, total
+from .jsmath import NAN, add_days, as_float, clamp, fin, finite, get, js_max, js_or, js_string, month_label, n2, or_zero, to_number, total
 from .sales import coverage, fit, tie_to_books, units_and_offerings, weekly, window
 
 
@@ -55,7 +55,7 @@ _MONTH_KEY = re.compile(r"[0-9]{4}-[0-9]{2}", re.ASCII)
 
 def _is_num(v) -> bool:
     """A finite number (Python's json loads NaN and Infinity; JavaScript's JSON.parse does not)."""
-    return isinstance(v, _NUMBER) and not isinstance(v, bool) and math.isfinite(v)
+    return isinstance(v, _NUMBER) and not isinstance(v, bool) and math.isfinite(as_float(v))
 
 
 def check_snapshot(data: dict) -> None:
@@ -168,7 +168,11 @@ def term_defaults(M: dict) -> dict:
     d = get(get(M["BRAIN"], "terms"), "default")
     d = d if isinstance(d, dict) else {}
     first = next(iter(ty))
-    return {"on": True, "type": d.get("type") if d.get("type") in ty else first,
+    # Deliberate difference: JavaScript's `ty[d.type]` is also true for names every object
+    # inherits ("toString", "constructor") and for ["share"] (read as "share"), which then
+    # leaves every unit on no pay at all. Here only a pay kind the brain offers counts.
+    kind = d.get("type")
+    return {"on": True, "type": kind if isinstance(kind, str) and kind in ty else first,
             "rate": d["rate"] if fin(d.get("rate")) else (ty["share"]["def"] if "share" in ty else 50),
             "rent": d["rent"] if fin(d.get("rent")) else (ty["fixedIn"]["def"] if "fixedIn" in ty else 250),
             "wage": d["wage"] if fin(d.get("wage")) else (ty["wage"]["def"] if "wage" in ty else 4000)}
