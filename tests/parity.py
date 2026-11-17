@@ -49,10 +49,14 @@ CENT = 0.005
 
 
 def _cent_figure(path: str, cents: tuple[str, ...]) -> bool:
-    """A percentile of a simulated week: the last key is one of `cents` and the week is 1 or
-    later (week 0 is today's cash, which is exact)."""
+    """A simulated percentile: a cash range's week 1 or later (week 0 is today's cash, which is
+    exact), or a tax range's percentile for a year."""
     m = re.search(r"\.(\w+)\[(\d+)\]$", path)
-    return bool(m and m.group(1) in cents and int(m.group(2)) > 0)
+    if m:
+        return m.group(1) in cents and int(m.group(2)) > 0
+    # the tax range: one simulated percentile per year (range.cur.taxable.p50, ...)
+    m = re.search(r"\.range\.\w+\.\w+\.(\w+)$", path)
+    return bool(m and m.group(1) in cents)
 
 
 def same(py, js, path: str = "", loose: tuple[str, ...] = (), cents: tuple[str, ...] = (),

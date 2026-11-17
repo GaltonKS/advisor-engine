@@ -142,3 +142,9 @@ def test_an_integer_too_big_for_a_double_is_infinite_as_json_parse_makes_it():
     assert as_float(big) == math.inf and as_float(-big) == -math.inf and as_float(7) == 7.0
     assert not fin(big) and math.isnan(n2(big)) and to_number(big) == math.inf
     assert js_string(big) == "Infinity" and js_string(-big) == "-Infinity"
+
+
+@pytest.mark.parametrize("case", FIX["join"], ids=lambda c: repr(c["xs"]))
+def test_js_join_writes_null_as_nothing(case):
+    from advisor_engine.jsmath import js_join
+    assert js_join(case["xs"], ", ") == case["out"]

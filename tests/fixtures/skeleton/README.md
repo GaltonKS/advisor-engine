@@ -13,6 +13,7 @@ than against what we expect them to be. Never edit the JSON by hand: recapture.
 | `<example>/cash.json` | `capture_cash.js` | `FIS.cash` for ideas that move cash, a path-count override and synthetic tax payments, as shipped and corrected; on the barbershop, brain and data variants (11 to 70 weeks, a closed month, a 26-week horizon, the brain's path count, a floor above cash) | `test_cash.py` |
 | `<example>/overview.json` | `capture_overview.js` | every measure (label, text, small line, tone), the pick-list, ready-made views and the four numbers for saved choices; the panel list, layouts and four panels; cost lines; `chartFor`; the brain check; each example built five ways (the tax example with taxes off) | `test_overview.py` |
 | `check_cases.json` | `capture_overview.js` | the brain check on broken and odd brains, each stored with its brain and data | `test_overview.py` |
+| `home-services-tax/tax.json` | `capture_tax.js` | `FIS.tax` and the cash range with its payments for ideas that move tax, the Overview with taxes on, and 28 tax-profile variants stored as overrides of `data.json` | `test_tax_parity.py` |
 
 Every file records the sha256 of the skeleton's `app/engine.js` it came from.
 
@@ -25,6 +26,7 @@ node capture_build.js /path/to/fis-pilot-skeleton .
 node capture_ideas.js /path/to/fis-pilot-skeleton .     # reads the brain.json / data.json written above
 node capture_cash.js /path/to/fis-pilot-skeleton .
 node capture_overview.js /path/to/fis-pilot-skeleton .
+node capture_tax.js /path/to/fis-pilot-skeleton .
 ```
 
 The skeleton builds dates as local calendar days; the capture gives the same output in UTC

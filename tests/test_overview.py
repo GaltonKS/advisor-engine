@@ -177,15 +177,14 @@ def test_odd_brain_shapes_are_reported_not_crashed_on(brain_patch):
     assert isinstance(out, list) and all(c["level"] in ("fix", "note") for c in out)
 
 
-def test_tax_measures_and_panel_with_taxes_on_say_the_estimate_is_not_here_yet():
+def test_with_taxes_on_the_tax_measures_and_panel_are_worked_out():
     brain, data = load("home-services-tax")
     M = model.build(data, brain)
     T = model.evaluate(M)
     m = measures.measure(M, "tax_liability_year", T, None)
-    assert not m["available"] and "not in this version" in m["note"]
-    assert "tax" not in [p["key"] for p in panels.panel_list(M)]
-    fixes = [render(c["msg"], c["vars"]) for c in brain_check.check(brain, data) if c["level"] == "fix"]
-    assert any("not in this version" in f for f in fixes)
+    assert m["available"] and m["unit"] == "usd" and "Federal estimate" in m["note"]
+    assert "tax" in [p["key"] for p in panels.panel_list(M)]
+    assert [c for c in brain_check.check(brain, data) if c["level"] == "fix"] == []
 
 
 def test_every_measure_value_is_a_number_never_text():

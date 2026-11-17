@@ -56,6 +56,8 @@ const FV = [0, -0, 0.5, 1.5, 2.5, -2.5, 1.005, 1.45, 4.35, 2.675, 0.285, 0.995, 
 out.formats = FV.map(v => ({ v: num(v), usd: FIS.usd(v), usdk: FIS.usdk(v), num0: FIS.num(v), num1: FIS.num(v, 1), num2: FIS.num(v, 2),
   pct0: FIS.pct(v / 100), pct1: FIS.pct(v / 100, 1), grp2: FIS.grp(v, 2), signed1: FIS.signed(v / 100, x => FIS.pct(x, 1)) }));
 
+out.join = [[["a", null, "b"]], [[undefined, 6100, true, 2.5]], [[[1, 2], "x"]], [[]]].map(([xs]) => ({ xs: xs.map(x => x === undefined ? null : x), out: xs.join(", ") }));
+
 /* dates: local calendar days (the skeleton builds every date with new Date(y, m, d)) */
 const day = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 /* the Python port refuses everything after "2026-1-5" on purpose (see jsmath.parse_day); recorded to show what JS does */

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from . import __version__, cash, measures, model, panels
+from . import __version__, cash, measures, model, panels, tax
 from .bridge import bridge
 from .data import as_of as returns_as_of
 from .data import get_market_data
@@ -120,13 +120,17 @@ def apply_idea(data: dict, brain: dict, idea: dict, *, facts: dict | None = None
                basis: int = 12) -> dict:
     """One idea against today's setup: both evaluated, both cash ranges (on the same draws),
     the bridge from today's monthly bottom line to the idea's, and the chart that answers each
-    kind of question. Differences come from `bridge`, never from a caller."""
+    kind of question. With taxes on, both tax pictures too, and each cash range carries its
+    tax payments. Differences come from `bridge`, never from a caller."""
     M = model.build(data, brain, facts=facts, confirmed=confirmed, basis=basis)
     T = model.evaluate(M)
     E = model.evaluate(M, idea)
+    XT = tax_of(M, T)
+    XE = tax.tax(M, E, base=T) if XT is not None and XT.get("ok") else XT
     return plain({
         "engine_version": __version__, "method_version": M["method_version"], "method_status": M["method_status"],
         "today": T, "idea": E, "bridge": bridge(M, T["idea"], E["idea"]),
-        "cash_today": cash.cash_range(M, T), "cash_idea": cash.cash_range(M, E),
+        "cash_today": cash.cash_range(M, T, tax=XT), "cash_idea": cash.cash_range(M, E, tax=XE),
+        "tax_today": XT, "tax_idea": XE,
         "chart_for": {f: panels.chart_for(M, f, T, E) for f in FOCUS},
     })
