@@ -6,8 +6,10 @@ itself.
 
 ## Status
 
-v0.9.0, a working pilot for advisers, now **parked** while the repo is extended into a
-small-business product (see `docs/phase-1.md`). What exists: the risk engine below plus
+v0.10.0. The advisor product, a working pilot, is **parked** while the repo is extended
+into a small-business product (see `docs/phase-1.md`). The small-business engine is in,
+ported from the FIS pilot skeleton and matching it to the cent on its worked examples, with
+no screens or routes yet (`docs/phase-2.md`). What exists on the advisor side: the risk engine below plus
 CFP tools (what-if, compare, stress scenarios, risk questionnaire, household risk
 profile); Galton AI, an assistant that explains engine output and whose every figure is
 number-checked against the engine before an adviser sees it; a FastAPI backend on Render
