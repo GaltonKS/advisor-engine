@@ -10,7 +10,8 @@ does not make a number right: the price response, the tone thresholds and the ca
 simulation's settings are placeholders until a company's own history or a reviewer
 replaces them.
 
-Each step of the port adds the numbers it reads: this holds what `model.build` uses.
+Each step of the port adds the numbers it reads: this holds what `model.build`,
+`model.evaluate` and `bridge.bridge` use.
 """
 
 from __future__ import annotations
@@ -24,6 +25,18 @@ ASSUMPTION_DEFAULTS = {
     "horizonWeeks": 13,   # DRAFT: weeks the cash range looks ahead
     "paths": 2000,        # DRAFT: simulated paths in the cash range
     "keepPct": 0,         # DRAFT: share of a removed unit's sales that stays (not read by the engine yet)
+}
+
+# --- levers: what an idea may change, unless the brain switches it off (leversOn) ----
+LEVER_DEFAULTS = {
+    "units": True,         # DRAFT
+    "unitPay": True,       # DRAFT
+    "prices": True,        # DRAFT
+    "volume": True,        # DRAFT
+    "monthlyBills": True,  # DRAFT
+    "costRates": True,     # DRAFT
+    "oneTimeCash": True,   # DRAFT
+    "taxes": False,        # DRAFT: off unless a brain switches it on
 }
 
 # --- pay terms: the starting figure offered for each kind (TYPE_DEFAULTS) ------------
@@ -47,3 +60,6 @@ ACTIVE_WEEKS = 13               # DRAFT: a unit with sales in the last 13 weeks 
 
 # --- does the detail tie to the books? (PLAYBOOK "Does it tie?") ----------------------
 TIE_TOLERANCE = 0.05  # DRAFT: detail within 5% of Profit and Loss income ties
+
+# --- the bridge: steps that move the monthly bottom line by less than this are not listed --
+BRIDGE_MIN_STEP = 1  # DRAFT: dollars a month
