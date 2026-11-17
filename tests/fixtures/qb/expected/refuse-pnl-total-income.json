@@ -1,0 +1,1 @@
+{"kind":"pnl","report":"Profit and Loss","ok":false,"error":"The accounts do not add up to the report's own Total Income in Nov 2025: they add to $73,639 and the report says $1. The file may use a layout this page cannot read. Export it again with columns by Month and no filters.","warnings":[],"lines":[],"data":null,"name":"b.csv","rows":28,"detail":""}

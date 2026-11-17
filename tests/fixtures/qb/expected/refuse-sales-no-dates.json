@@ -1,0 +1,1 @@
+{"kind":"sales","report":"Sales detail","ok":false,"error":"No dated sales lines were found under the Date column (dates like 03/05/2025 are read).","warnings":[],"lines":[],"data":null,"name":"s3.csv","rows":5,"detail":""}
