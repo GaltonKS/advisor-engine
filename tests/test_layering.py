@@ -16,7 +16,13 @@ import pytest
 PKG = Path(__file__).resolve().parents[1] / "src" / "advisor_engine"
 
 ENGINE = ["risk", "stress", "questionnaire", "compare", "holdings", "synthetic", "charts",
-          "profile", "profile_config"]
+          "profile", "profile_config", "books"] + [
+          # the small-business engine (Phase 2 port of the FIS skeleton)
+          "rand", "jsmath", "business_config", "company", "facts", "sales", "model", "levers", "cash",
+          "measures", "tax", "brain_check"]
+# Modules that must also be pure: no I/O, no clock, no environment, no unseeded randomness.
+PURE = ["rand", "jsmath", "business_config", "company", "facts", "sales", "model", "levers", "cash",
+        "measures", "tax", "brain_check", "books"]
 SHARED = ["analysis", "paths", "config", "_env", "data"]
 
 
@@ -82,3 +88,31 @@ def test_import_parser_resolves_relative_imports():
     found = imports_of(PKG / "api" / "routers" / "assistant.py")
     assert "advisor_engine.assistant.chat" in found
     assert "advisor_engine.api.deps" in found
+
+
+FORBIDDEN_IMPORTS = {"os", "sys", "io", "time", "random", "pathlib", "socket", "subprocess", "shutil",
+                     "tempfile", "httpx", "requests", "urllib", "psycopg", "logging"}
+FORBIDDEN_CALLS = {"open", "now", "today", "utcnow", "time", "getenv", "input", "print"}
+
+
+@pytest.mark.parametrize("name", PURE)
+def test_small_business_engine_is_pure(name):
+    """No I/O, no network, no clock, no os.environ, no unseeded randomness: the same
+    snapshot and brain always give the same figures."""
+    path = PKG / f"{name}.py"
+    tree = ast.parse(path.read_text())
+    bad = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            bad += [a.name for a in node.names if a.name.split(".")[0] in FORBIDDEN_IMPORTS]
+        elif isinstance(node, ast.ImportFrom) and not node.level and node.module:
+            if node.module.split(".")[0] in FORBIDDEN_IMPORTS:
+                bad.append(node.module)
+        elif isinstance(node, ast.Call):
+            f = node.func
+            fname = f.attr if isinstance(f, ast.Attribute) else f.id if isinstance(f, ast.Name) else ""
+            if fname in FORBIDDEN_CALLS:
+                bad.append(f"{fname}() at line {node.lineno}")
+        elif isinstance(node, ast.Attribute) and node.attr == "environ":
+            bad.append("environ")
+    assert bad == [], f"{name}: {bad}"
