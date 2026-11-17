@@ -27,7 +27,7 @@ Views: an owner can choose which four measures lead (`view_keys`), from ready-ma
 from __future__ import annotations
 
 from .business_config import TONE
-from .jsmath import NAN, finite, fin, mean, parse_day, total
+from .jsmath import NAN, finite, fin, get, mean, parse_day, to_number, total, truthy
 from .tax import tax_of
 
 GROUP = {
@@ -70,6 +70,11 @@ def fig(value, unit: str, decimals: int = 0, signed: bool = False) -> dict:
     return out
 
 
+def plain_count(n) -> dict:
+    """A count the skeleton writes straight into the text (String(n), no thousands separators)."""
+    return {**fig(n, "count"), "plain": True}
+
+
 def text(value: str) -> dict:
     return {"text": str(value)}
 
@@ -90,7 +95,7 @@ def _na(note="", tone="") -> dict:
 # --- the library -------------------------------------------------------------------------
 
 def _revenue_month(M, T, C):
-    return _m(T["sales"], "usd", "Average of the last {weeks} weeks", {"weeks": fig(M["win"]["nWin"], "count")})
+    return _m(T["sales"], "usd", "Average of the last {weeks} weeks", {"weeks": plain_count(M["win"]["nWin"])})
 
 
 def _revenue_trend(M, T, C):
@@ -118,13 +123,13 @@ def _avg_ticket(M, T, C):
 
 
 def _tickets_week(M, T, C):
-    return _m(M["fit"]["qtyWk"], "count", "Average of the last {weeks} weeks", {"weeks": fig(M["win"]["nWin"], "count")})
+    return _m(M["fit"]["qtyWk"], "count", "Average of the last {weeks} weeks", {"weeks": plain_count(M["win"]["nWin"])})
 
 
 def _revenue_per_unit(M, T, C):
     n = sum(1 for r in T["rows"] if r["on"] and r["sales"] > 0)
     word = M["V"]["unit"] if n == 1 else M["V"]["units"]
-    return _m(T["sales"] / n if n else NAN, "usd", "{n} " + esc(word) + " with sales", {"n": fig(n, "count")})
+    return _m(T["sales"] / n if n else NAN, "usd", "{n} " + esc(word) + " with sales", {"n": plain_count(n)})
 
 
 def _on_by_sales(T):
@@ -144,16 +149,24 @@ def _top_unit_share(M, T, C):
 
 def _top_customers(M, T, C):
     c = M["customers"]
-    if c and fin(c.get("top20")):
+    if truthy(c) and fin(get(c, "top20")):
+        # num(count) in the skeleton: isFinite() coerces, so "12" is 12 and null is 0; a missing count is n/a
+        count = to_number(c["count"]) if "count" in c else NAN
         return _m(c["top20"], "share", "Of sales, from {count} " + esc(M["V"]["customers"]),
-                  {"count": fig(c.get("count"), "count")}, tone="warn" if c["top20"] > TONE["top_customers_warn"] else "")
+                  {"count": fig(count, "count")}, tone="warn" if c["top20"] > TONE["top_customers_warn"] else "")
     return _na(esc("Needs sales by " + M["V"]["customer"]))
 
 
 def _cash_on_hand(M, T, C):
     b = M["balance"]
-    if b and b.get("asOf"):
-        return _m(M["F"]["cash0"], "usd", "Balance sheet, {date}", {"date": {"date": parse_day(b["asOf"])}})
+    if truthy(b) and truthy(get(b, "asOf")):
+        try:
+            return _m(M["F"]["cash0"], "usd", "Balance sheet, {date}", {"date": {"date": parse_day(b["asOf"])}})
+        except ValueError:
+            # Deliberate difference: a date that cannot be read is left out of the note (the
+            # skeleton writes "Jan 1, 2027" for "2026-13-01" or "undefined NaN, NaN"); the cash
+            # figure itself stays.
+            return _m(M["F"]["cash0"], "usd", "Balance sheet")
     return _m(M["F"]["cash0"], "usd", "")
 
 
@@ -171,7 +184,7 @@ def _cash_breach(M, T, C):
     p = C["pBreach"]
     tone = "bad" if p > TONE["breach_bad"] else "warn" if p > TONE["breach_warn"] else "good"
     return _m(p, "share", "Next {weeks} weeks · floor {floor}",
-              {"weeks": fig(C["H"], "count"), "floor": fig(M["F"]["floor"], "usd")}, tone=tone)
+              {"weeks": plain_count(C["H"]), "floor": fig(M["F"]["floor"], "usd")}, tone=tone)
 
 
 def _bills_covered(M, T, C):
@@ -212,7 +225,7 @@ def _net_income(M, T, C):
 
 
 def _ar_open(M, T, C):
-    if not M["ar"]:
+    if not truthy(M["ar"]):
         return _na("Needs A/R Aging")
     b = M["ar"]["buckets"]
     tot, late = total(x[1] for x in b), total(x[1] for x in b[2:])
@@ -221,7 +234,7 @@ def _ar_open(M, T, C):
 
 
 def _ap_open(M, T, C):
-    if not M["ap"]:
+    if not truthy(M["ap"]):
         return _na("Needs A/P Aging")
     return _m(total(x[1] for x in M["ap"]["buckets"]), "usd", "A/P Aging")
 
@@ -308,13 +321,19 @@ def _top_n_share(M, T, C, p):
 PARAMETERISED = {"top_n_share": _top_n_share}
 
 
+def _own(M: dict) -> dict:
+    """The brain's own measures, `{}` unless the brain gives an object of them."""
+    own = M["BRAIN"].get("metrics")
+    return own if isinstance(own, dict) else {}
+
+
 def measure(M: dict, key: str, T: dict, C: dict | None) -> dict:
     """One measure for today's setup. A brain's own entry wins over the library's.
 
     A measure that fails comes back unavailable with a warning note, as in the skeleton,
     so one bad number never blanks the page.
     """
-    own = (M["BRAIN"].get("metrics") or {}).get(key)
+    own = _own(M).get(key) if isinstance(key, str) else None
     V = M["V"]
     try:
         if own is not None:
@@ -334,14 +353,15 @@ def measure(M: dict, key: str, T: dict, C: dict | None) -> dict:
 def view_measures(M: dict, T: dict, C: dict | None) -> list[dict]:
     """The pick-list: every measure that works on this data, library first, then the
     brain's own, each with its group."""
-    own = M["BRAIN"].get("metrics") or {}
+    own = _own(M)
     keys = list(LIBRARY) + [k for k in own if k not in LIBRARY]
     out = []
     for k in keys:
         m = measure(M, k, T, C)
         if not m["available"]:
             continue
-        group = GROUP.get(k) or (own.get(k) or {}).get("group") or "Specific to this " + M["V"]["business"]
+        entry = own.get(k)
+        group = GROUP.get(k) or (entry.get("group") if isinstance(entry, dict) else None) or "Specific to this " + M["V"]["business"]
         out.append({**m, "group": group})
     return out
 
@@ -353,7 +373,7 @@ def view_presets(M: dict, T: dict, C: dict | None) -> list[dict]:
 
     def ok(p):
         return (isinstance(p, dict) and isinstance(p.get("id"), str) and p["id"] and p.get("name")
-                and isinstance(p.get("keys"), list) and len(p["keys"]) > 0 and all(k in have for k in p["keys"]))
+                and isinstance(p.get("keys"), list) and len(p["keys"]) > 0 and all(isinstance(k, str) and k in have for k in p["keys"]))
 
     mine = [{"id": p["id"], "name": p["name"], "keys": p["keys"][:4], "own": True}
             for p in (M["BRAIN"].get("views") or []) if ok(p)]
@@ -375,7 +395,7 @@ def view_keys(M: dict, sel, T: dict, C: dict | None) -> list[str]:
     if sel.get("preset") == "custom":
         have = [x["key"] for x in view_measures(M, T, C)]
         chosen = sel.get("keys") if isinstance(sel.get("keys"), list) else []
-        ks = [k for i, k in enumerate(chosen) if k in have and chosen.index(k) == i][:4]
+        ks = [k for i, k in enumerate(chosen) if isinstance(k, str) and k in have and chosen.index(k) == i][:4]
         if not ks:
             return dflt
         for k in have:

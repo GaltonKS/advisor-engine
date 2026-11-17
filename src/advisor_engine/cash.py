@@ -24,26 +24,49 @@ the result.
 Caveats: the swing and carry-over come from one history of weekly sales; bills, rent and
 wages are taken as certain; collections timing (A/R) is not modelled; nothing beyond the
 horizon is said.
+
+Known skeleton bug, matched for parity and pinned by a test: when the sales window holds a
+calendar month with no sales at all, the de-seasoned level is 0/0 = NaN, and so is every
+figure of the range. To be fixed in both once the parity gate has passed.
 """
 
 from __future__ import annotations
 
 import math
 
-from .business_config import CASH_SEED, METHOD_STATUS, METHOD_VERSION
+from .business_config import CASH_SEED, MAX_HORIZON_WEEKS, MAX_PATHS, METHOD_STATUS, METHOD_VERSION
 from .jsmath import add_days, clamp, finite, js_or, js_round, n2, quant, total
 from .rand import gauss, rng
 from .sales import season_factor
 
 
+def _whole(v, what: str, top: int) -> int:
+    """A count from the brain or the caller: a whole number from 1 to `top`, or a plain refusal.
+    (The skeleton would take "13" and build a one-element array from it.)"""
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not finite(v) or v != int(v) or not 1 <= v <= top:
+        raise ValueError(f"{what} must be a whole number from 1 to {top}; got {v!r}.")
+    return int(v)
+
+
+def _exp(x: float) -> float:
+    """`Math.exp`: an infinity where Python's math.exp would raise OverflowError."""
+    try:
+        return math.exp(x)
+    except OverflowError:
+        return math.inf
+
+
 def cash_range(M: dict, E: dict, *, paths: int | None = None, tax: dict | None = None) -> dict | None:
     """The cash range for an evaluated idea `E` on model `M`, or None without enough
-    weekly sales to measure the swing. See the module docstring."""
+    weekly sales to measure the swing. See the module docstring.
+
+    `paths` overrides the brain's path count (falsy means the brain's, as in the skeleton);
+    `tax` is the tax picture, whose payments then leave the bank in the week they fall due."""
     f = M["fit"]
     if not finite(f["vol"]) or not M["weeks"]:
         return None
-    H = M["A"]["horizonWeeks"]
-    N = paths or M["A"]["paths"]
+    H = _whole(M["A"]["horizonWeeks"], "The brain's assumptions.horizonWeeks", MAX_HORIZON_WEEKS)
+    N = _whole(js_or(paths, M["A"]["paths"]), "The number of simulated paths", MAX_PATHS)
     g = gauss(rng(CASH_SEED))
     F = M["F"]
     last = M["weeks"][-1]["dt"]
@@ -55,7 +78,7 @@ def cash_range(M: dict, E: dict, *, paths: int | None = None, tax: dict | None =
     draw_wk = F["draw"] * 12 / 52
     ph = f["phi"] or 0
     sg = f["vol"]
-    once = [0] * H
+    once = [0.0] * H
     idea = E.get("idea") or {}
     for o in idea.get("once") or []:
         w = int(clamp(js_round(js_or(n2(o.get("wk")), 1)), 1, H))
@@ -67,7 +90,7 @@ def cash_range(M: dict, E: dict, *, paths: int | None = None, tax: dict | None =
         a = n2(o.get("cost"))
         if finite(a) and a > 0:
             once[w - 1] -= a
-    tax_out = [0] * H
+    tax_out = [0.0] * H
     if tax and tax.get("ok"):
         for p in tax.get("payments") or []:
             for w, s in enumerate(starts):
@@ -80,12 +103,12 @@ def cash_range(M: dict, E: dict, *, paths: int | None = None, tax: dict | None =
     breach = 0
     for p in range(N):
         z = g()
-        c = F["cash0"]
+        c = float(F["cash0"])
         mn = c
         cols[0][p] = c
         for w in range(H):
             z = ph * z + root * g()
-            c += V * fac[w] * math.exp(sg * z - half) + steady - bills[w] - draw_wk + once[w]
+            c += V * fac[w] * _exp(sg * z - half) + steady - bills[w] - draw_wk + once[w]
             cols[w + 1][p] = c
             if c < mn:
                 mn = c

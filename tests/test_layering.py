@@ -16,13 +16,14 @@ import pytest
 PKG = Path(__file__).resolve().parents[1] / "src" / "advisor_engine"
 
 ENGINE = ["risk", "stress", "questionnaire", "compare", "holdings", "synthetic", "charts",
-          "profile", "profile_config", "books"] + [
+          "profile", "profile_config",
           # the small-business engine (Phase 2 port of the FIS skeleton)
-          "rand", "jsmath", "business_config", "company", "facts", "sales", "model", "levers", "cash",
-          "measures", "tax", "brain_check"]
-# Modules that must also be pure: no I/O, no clock, no environment, no unseeded randomness.
-PURE = ["rand", "jsmath", "business_config", "company", "facts", "sales", "model", "levers", "cash",
-        "measures", "tax", "brain_check", "books"]
+          "rand", "jsmath", "business_config", "company", "facts", "sales", "model", "levers", "bridge", "cash", "books",
+          "tax", "measures", "panels", "brain_check"]
+# Small-business engine modules, which must also be pure: no I/O, no clock, no environment,
+# no unseeded randomness. The same snapshot and brain must always give the same figures.
+PURE = ["rand", "jsmath", "business_config", "company", "facts", "sales", "model", "levers", "bridge", "cash", "books",
+          "tax", "measures", "panels", "brain_check"]
 SHARED = ["analysis", "paths", "config", "_env", "data"]
 
 
@@ -90,19 +91,25 @@ def test_import_parser_resolves_relative_imports():
     assert "advisor_engine.api.deps" in found
 
 
-FORBIDDEN_IMPORTS = {"os", "sys", "io", "time", "random", "pathlib", "socket", "subprocess", "shutil",
-                     "tempfile", "httpx", "requests", "urllib", "psycopg", "logging"}
+FORBIDDEN_IMPORTS = {"os", "sys", "io", "time", "random", "secrets", "uuid", "pathlib", "socket", "subprocess",
+                     "shutil", "tempfile", "logging", "httpx", "requests", "urllib", "psycopg", "importlib"}
 FORBIDDEN_CALLS = {"open", "now", "today", "utcnow", "time", "getenv", "input", "print"}
+# built-ins that are only a problem called bare (re.compile is fine)
+FORBIDDEN_BUILTINS = {"__import__", "eval", "exec", "compile"}
 
 
-@pytest.mark.parametrize("name", PURE)
-def test_small_business_engine_is_pure(name):
-    """No I/O, no network, no clock, no os.environ, no unseeded randomness: the same
-    snapshot and brain always give the same figures."""
-    path = PKG / f"{name}.py"
-    tree = ast.parse(path.read_text())
+def impurities(source: str) -> list[str]:
+    """Every I/O, clock, environment or randomness use in `source`, as a short description.
+
+    Also: any `.random` attribute (numpy.random and the like), dynamic imports and eval,
+    and a relative import of anything that is not itself in PURE (so a pure module cannot
+    reach I/O through a sibling)."""
     bad = []
-    for node in ast.walk(tree):
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.ImportFrom) and node.level:
+            targets = [node.module] if node.module else [a.name for a in node.names]
+            bad += [f"relative import of {t}" for t in targets if t.split(".")[0] not in PURE]
+            continue
         if isinstance(node, ast.Import):
             bad += [a.name for a in node.names if a.name.split(".")[0] in FORBIDDEN_IMPORTS]
         elif isinstance(node, ast.ImportFrom) and not node.level and node.module:
@@ -110,9 +117,33 @@ def test_small_business_engine_is_pure(name):
                 bad.append(node.module)
         elif isinstance(node, ast.Call):
             f = node.func
-            fname = f.attr if isinstance(f, ast.Attribute) else f.id if isinstance(f, ast.Name) else ""
-            if fname in FORBIDDEN_CALLS:
-                bad.append(f"{fname}() at line {node.lineno}")
-        elif isinstance(node, ast.Attribute) and node.attr == "environ":
-            bad.append("environ")
-    assert bad == [], f"{name}: {bad}"
+            name = f.attr if isinstance(f, ast.Attribute) else f.id if isinstance(f, ast.Name) else ""
+            if name in FORBIDDEN_CALLS or (isinstance(f, ast.Name) and name in FORBIDDEN_BUILTINS):
+                bad.append(f"{name}() at line {node.lineno}")
+        elif isinstance(node, ast.Attribute) and node.attr in ("environ", "random"):
+            bad.append(f"{node.attr} at line {node.lineno}")
+    return bad
+
+
+@pytest.mark.parametrize("name", PURE)
+def test_small_business_engine_is_pure(name):
+    path = PKG / f"{name}.py"
+    assert path.is_file(), path
+    assert impurities(path.read_text()) == []
+
+
+@pytest.mark.parametrize("src", [
+    "import os", "from os import path", "import random", "from datetime import datetime\ndatetime.now()",
+    "date.today()", "open('x')", "x = os.environ['K']", "import httpx", "print(1)",
+    "import numpy as np\nnp.random.rand()", "import uuid", "import importlib", "__import__('os')", "eval('1')",
+    "exec('x=1')", "from . import config", "from .data import cache", "from .api.store import LocalStore",
+])
+def test_purity_check_catches_each_kind(src):
+    # Guards the guard.
+    assert impurities(src)
+
+
+def test_purity_check_allows_the_standard_pure_imports():
+    assert impurities("import math\nimport re\nfrom datetime import date, timedelta\nfrom typing import Callable") == []
+    assert impurities("from .jsmath import total\nfrom . import rand") == []
+    assert impurities("import re\n_X = re.compile('a')") == []
