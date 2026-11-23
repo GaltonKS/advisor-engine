@@ -34,7 +34,8 @@ export const ANALYTICS_TABS = [
 
 /** The page type reported for an address inside the signed-in app. */
 export function pageType(pathname: string, search = ""): string {
-  if (pathname === "/" || pathname === "") return "/clients";
+  if (pathname === "/" || pathname === "") return "/forecast";
+  if (pathname === "/clients" || pathname === "/clients/") return "/clients";
   if (pathname === "/operator") return "/operator";
   if (pathname === "/security") return "/security";
   if (/^\/clients\/[^/]+\/?$/.test(pathname)) {

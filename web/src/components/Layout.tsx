@@ -70,7 +70,8 @@ export default function Layout() {
         <div className="mx-auto flex max-w-[1240px] flex-wrap items-center gap-6 px-4 py-3">
           <Brand />
           <nav className="flex gap-5 text-sm">
-            <NavLink to="/" end className={navClass}>Clients</NavLink>
+            <NavLink to="/" end className={navClass}>Forecast</NavLink>
+            <NavLink to="/clients" className={navClass}>Clients</NavLink>
             <NavLink to="/security" className={navClass}>Security</NavLink>
             {me.data?.operator && <NavLink to="/operator" className={navClass}>Pilot metrics</NavLink>}
           </nav>

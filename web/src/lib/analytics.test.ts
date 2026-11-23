@@ -4,7 +4,8 @@ import { ANALYTICS_TABS, pageType } from "./analytics";
 
 describe("analytics page types never carry client data", () => {
   it("reduces every app address to a page type", () => {
-    expect(pageType("/")).toBe("/clients");
+    expect(pageType("/")).toBe("/forecast");
+    expect(pageType("/clients")).toBe("/clients");
     expect(pageType("/clients/7672ec7083bc4d1b941e99a192dde7a5")).toBe("/clients/:client/overview");
     expect(pageType("/clients/7672ec70/", "?p=cf74&tab=stress")).toBe("/clients/:client/stress");
     // Audit-trail links carry ids and question text in the query: none of it survives.

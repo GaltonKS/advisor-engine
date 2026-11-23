@@ -25,8 +25,9 @@ from fastapi.responses import JSONResponse
 
 from .. import __version__
 from .auth_admin import MemoryAuthAdmin, SupabaseAuthAdmin
-from .routers import (account, assistant, audit, clients, household_profile, operator,
-                      portfolios, profiling, stress)
+from .forecast_client import ForecastClient
+from .routers import (account, assistant, audit, clients, forecast, household_profile,
+                      operator, portfolios, profiling, stress)
 from .settings import Settings, load_settings
 from .store import LocalStore
 from .store_base import Store
@@ -36,7 +37,7 @@ log_ = logging.getLogger("advisor_engine.api")
 
 # Included in this order (the order routes were declared before the split).
 ROUTERS = (account, operator, clients, portfolios, stress, profiling, household_profile,
-           assistant, audit)
+           assistant, audit, forecast)
 
 
 def make_store(settings: Settings) -> Store:
@@ -54,15 +55,18 @@ def make_auth_admin(settings: Settings):
 
 
 def create_app(settings: Settings | None = None, store: Store | None = None,
-               auth_admin=None) -> FastAPI:
+               auth_admin=None, forecast: ForecastClient | None = None) -> FastAPI:
     settings = settings or load_settings()
     store = store or make_store(settings)
     auth_admin = auth_admin or make_auth_admin(settings)
     app = FastAPI(title="Advisor Engine API", version=__version__)
-    # Read by the providers in deps.py (get_settings, get_store, get_auth_admin).
+    # Read by the providers in deps.py (get_settings, get_store, get_auth_admin) and
+    # routers/forecast.py (get_forecast).
     app.state.settings = settings
     app.state.store = store
     app.state.auth_admin = auth_admin
+    app.state.forecast = forecast or ForecastClient(settings.forecast_api_url,
+                                                    settings.forecast_api_key)
 
     @app.middleware("http")
     async def server_errors_as_json(request: Request, call_next):

@@ -157,6 +157,8 @@ never in git and never in a `VITE_*` variable.
 | `ADVISOR_OPERATORS` | | comma-separated operator emails (Pilot metrics page) |
 | `ADVISOR_REQUIRE_MFA` | `off` | `off`, `enrol` or `required` (always `off` with dev auth) |
 | `ADVISOR_MFA_DEADLINE` | | ISO date two-step sign-in becomes required, shown during `enrol` |
+| `FORECAST_API_URL` | | base URL of the forecast engine service (the Forecast home page); unset means the page says it isn't connected |
+| `FORECAST_API_KEY` | | that service's `API_KEY` (secret, server-side only) |
 | `RENDER` | | set by Render itself; turns on the deploy checks above |
 
 The operator command (`python -m advisor_engine.api.admin`) reads `SUPABASE_DB_URL`,

@@ -421,3 +421,42 @@ export interface ProfileSnapshot {
   result: HouseholdProfile;
   created_at: string;
 }
+
+// --- Forecast (from the forecast engine service, via GET/POST /forecast/...) ----------
+
+export interface ForecastStatus { configured: boolean; reachable: boolean; engine_version: string | null }
+
+export interface ForecastUpload {
+  rows_received: number; accounts: number; new_accounts: number; months_in_history: number;
+  history_start: string; history_end: string; gaps: string[];
+}
+
+export interface ForecastMonth {
+  period: string; revenue: number; cogs: number; gross_profit: number; opex: number;
+  operating_income: number; other_net: number; net_income: number;
+}
+
+export interface ForecastModelScore {
+  method: string; status: string; wape: number | null; bias: number | null; folds: number; note: string | null;
+}
+
+export interface ForecastSeriesModel {
+  method: string; label: string; selected_by: string; reason: string;
+  seasonality: { detected: boolean; note: string };
+  scores: ForecastModelScore[];
+}
+
+export interface ForecastResult {
+  id: string; created_at: string; engine_version: string; last_actual_period: string;
+  history_months: number;
+  drivers: Record<string, { value: number; method: string; overridden: boolean }>;
+  formulas: Record<string, string>;
+  months: ForecastMonth[];
+  models: Record<string, ForecastSeriesModel>;
+  warnings: string[];
+}
+
+export interface ForecastSummary {
+  id: string; created_at: string; engine_version: string; horizon_months: number;
+  last_actual: string; overrides: Record<string, number>; methods: Record<string, string>;
+}

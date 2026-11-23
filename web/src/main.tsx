@@ -11,6 +11,7 @@ import { trackPageview } from "./lib/analytics";
 import { AuthProvider, useAuth } from "./lib/auth";
 import ClientWorkspace from "./pages/ClientWorkspace";
 import Clients from "./pages/Clients";
+import Forecast from "./pages/Forecast";
 import PilotMetrics from "./pages/PilotMetrics";
 import Privacy from "./pages/Privacy";
 import Security from "./pages/Security";
@@ -31,7 +32,8 @@ function App() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route index element={<Clients />} />
+        <Route index element={<Forecast />} />
+        <Route path="clients" element={<Clients />} />
         <Route path="clients/:clientId" element={<ClientWorkspace />} />
         <Route path="operator" element={<PilotMetrics />} />
         <Route path="security" element={<Security />} />

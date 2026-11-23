@@ -47,6 +47,10 @@ class Settings:
         return bool(email) and email.strip().lower() in self.operator_emails
     require_mfa: str = "off"  # one of MFA_MODES
     mfa_deadline: str = ""    # ISO date MFA becomes required, shown during `enrol`
+    # The forecast engine (GaltonKS/forecast-engine), a separate service the API calls on
+    # the firm's behalf. The key stays here: the browser never talks to it directly.
+    forecast_api_url: str = ""
+    forecast_api_key: str = ""
 
     @property
     def store(self) -> str:
@@ -107,4 +111,6 @@ def load_settings() -> Settings:
                               os.environ.get("ADVISOR_OPERATORS", "").split(",") if e.strip()),
         require_mfa=mfa,
         mfa_deadline=deadline,
+        forecast_api_url=os.environ.get("FORECAST_API_URL", "").strip().rstrip("/"),
+        forecast_api_key=os.environ.get("FORECAST_API_KEY", "").strip(),
     )

@@ -146,7 +146,10 @@ src/advisor_engine/
                           /clients/{id}/profile/snapshots[/{snapshot_id}] (household risk profile)
             assistant.py  /portfolios/{id}/drafts|messages|turns, /drafts/{id}/approve
             audit.py      /audit
+            forecast.py   /forecast, /forecast/actuals[/monthly], /forecast/runs[/{id}] (the home page)
         admin.py       operator commands: pending sign-ups, approve, mfa-mode, reset-mfa (`python -m advisor_engine.api.admin`)
+        forecast_client.py calls the forecast engine service (GaltonKS/forecast-engine) for a firm:
+                       one tenant per firm (uuid5 of the firm id), key server-side, figures passed through
         metrics.py     pilot metrics definitions (weekly active, feature use, funnel) for the operator page
 web/                   React app (see web/README.md); formats engine output, computes nothing
 desktop/               Electron shell that loads the web app (see desktop/README.md); no figures, no Node in the page
